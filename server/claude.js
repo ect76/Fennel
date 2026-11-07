@@ -25,7 +25,7 @@ export async function callClaude({ model, system, prompt, maxTokens = 800, webSe
       res = await fetch(config.apiBase + '/v1/messages', {
         method: 'POST',
         signal: ctl.signal,
-        headers: { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' },
+        headers: { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': process.env.ANTHROPIC_VERSION || '2026-10-21' },
         body: JSON.stringify({ model, max_tokens: maxTokens, system, messages, ...(tools ? { tools } : {}) }),
       });
       data = await res.json().catch(() => null);
