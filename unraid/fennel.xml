@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>fennel</Name>
+  <Repository>ghcr.io/ect76/fennel:latest</Repository>
+  <Registry>https://github.com/ect76/Fennel/pkgs/container/fennel</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/ect76/Fennel</Support>
+  <Project>https://github.com/ect76/Fennel</Project>
+  <Overview>Fennel is a small autonomous frog living in a floating island town, day and night. His thoughts and choices are written by Claude; he keeps a diary, draws, writes pages, researches on the web, and reflects on each day. Visitors can watch him in 3D and leave notes.</Overview>
+  <Category>Other:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/ect76/Fennel/main/unraid/fennel.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/ect76/Fennel/main/unraid/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Web port" Target="3000" Default="3000" Mode="tcp" Description="Port for the 3D town page." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Fennel's memories" Target="/data" Default="/mnt/user/appdata/fennel" Mode="rw" Description="Where his world, diary and memories are saved, with daily backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/fennel</Config>
+  <Config Name="Claude API key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Your key from the Claude Console. Without it he runs on simple rules." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Keeper key" Target="KEEPER_KEY" Default="" Mode="" Description="A password you choose, for adding things and books to his town from the web page." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Time scale" Target="TIME_SCALE" Default="4" Mode="" Description="Town minutes per real minute. 4 = a town day every 6 real hours." Type="Variable" Display="advanced" Required="false" Mask="false">4</Config>
+  <Config Name="Max Claude calls per day" Target="MAX_CALLS_PER_DAY" Default="250" Mode="" Description="Hard daily cap. After it, he runs on simple rules until midnight UTC." Type="Variable" Display="advanced" Required="false" Mask="false">250</Config>
+  <Config Name="Max web searches per day" Target="MAX_SEARCHES_PER_DAY" Default="12" Mode="" Description="Daily cap on web searches during library research." Type="Variable" Display="advanced" Required="false" Mask="false">12</Config>
+  <Config Name="Everyday model" Target="MODEL_THINK" Default="claude-haiku-5-5" Mode="" Description="Model for moment-to-moment thoughts and choices." Type="Variable" Display="advanced" Required="false" Mask="false">claude-haiku-5-5</Config>
+  <Config Name="Reflection model" Target="MODEL_REFLECT" Default="claude-sonnet-5-5" Mode="" Description="Model for bedtime reflection and the pages he writes." Type="Variable" Display="advanced" Required="false" Mask="false">claude-sonnet-5-5</Config>
+  <Config Name="Research model" Target="MODEL_RESEARCH" Default="claude-sonnet-5-5" Mode="" Description="Model for library research with web search." Type="Variable" Display="advanced" Required="false" Mask="false">claude-sonnet-5-5</Config>
+</Container>

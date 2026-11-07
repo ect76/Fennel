@@ -32,7 +32,15 @@ The image is then at `ghcr.io/ect76/fennel:latest`.
 
 ### 3. Add the container in Unraid
 
-On the **Docker** tab, click **Add Container** and fill in:
+**Easy way (template):** open Unraid's terminal (the `>_` icon at the top right of the web interface) and paste:
+
+```
+mkdir -p /boot/config/plugins/dockerMan/templates-user && curl -fsSL -o /boot/config/plugins/dockerMan/templates-user/my-fennel.xml https://raw.githubusercontent.com/ect76/Fennel/main/unraid/fennel.xml && echo "Fennel template installed"
+```
+
+Then on the **Docker** tab, click **Add Container**, choose **fennel** from the **Template** dropdown, fill in your Claude API key and a keeper password, and click **Apply**. Open `http://<your-unraid-ip>:3000` and he's there.
+
+**Manual way:** on the **Docker** tab, click **Add Container** and fill in:
 
 | Field | Value |
 |---|---|
