@@ -1,0 +1,9 @@
+{
+  "name": "fennel",
+  "version": "1.0.0",
+  "description": "Fennel, a small autonomous frog living in a 3D island town",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server/index.js" }
+}
