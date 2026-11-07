@@ -22,7 +22,7 @@ Every push to this repository builds a Docker image automatically.
 1. Open the repository's **Actions** tab and wait for "Build Fennel" to show a green tick (a few minutes).
 2. Make the image public so Unraid can download it: on your GitHub profile, open **Packages → fennel → Package settings**, then under "Danger zone" choose **Change visibility → Public**. This is safe: the image contains only code, never your keys.
 
-The image is then at `ghcr.io/<your-github-name-in-lowercase>/fennel:latest`.
+The image is then at `ghcr.io/ect76/fennel:latest`.
 
 ### 2. Get a Claude API key
 
@@ -37,7 +37,7 @@ On the **Docker** tab, click **Add Container** and fill in:
 | Field | Value |
 |---|---|
 | Name | `fennel` |
-| Repository | `ghcr.io/<your-github-name-in-lowercase>/fennel:latest` |
+| Repository | `ghcr.io/ect76/fennel:latest` |
 | Network Type | `bridge` |
 | WebUI | `http://[IP]:[PORT:3000]/` |
 
