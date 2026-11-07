@@ -11,6 +11,11 @@ permissions:
   contents: read
   packages: write
 
+# one build at a time, so two quick changes don't fight over saving the image
+concurrency:
+  group: build-image
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
