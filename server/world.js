@@ -102,7 +102,7 @@ export function newWorld() {
     dayMood: { score: 0.1, label: 'an ordinary day', causes: ['first morning in the cottage'], day: 1 }, moodCarry: 0, wishes: [], percyNotes: [], interests: [], lastContact: 1,
     knowledge: [], researchQueue: [], memories: [],
     diary: [], drawings: [], pages: [], webPages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
-    commissions: [], shop: [], post: [], payments: [], vanished: [], saving: null, advert: '', shopPage: null, earned: { work: 0, real: 0, stall: 0 }, wishLog: [],
+    commissions: [], shop: [], post: [], payments: [], vanished: [], roadsWalked: null, saving: null, advert: '', shopPage: null, earned: { work: 0, real: 0, stall: 0 }, wishLog: [],
     dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
     weather: { kind: 'clear', until: 12 * 60 }, events: [],
     lastSeenReal: Date.now(),
@@ -372,8 +372,38 @@ export function ruleDecision({ avoid = '' } = {}) {
 }
 
 /* ---------- carrying out decisions ---------- */
+// remember which roads he has actually set foot on (sampled along the way he just walked)
+function noteRoadsWalked(path) {
+  if (!Array.isArray(path) || path.length < 2) return;
+  const first = !S.roadsWalked;
+  // an older world: he must already have walked the roads beside the places he knows
+  const got = new Set(S.roadsWalked || S.town.places.filter(p => p.known).map(p => Town.roadNameAt(S.town, p.door.x, p.door.z)).filter(Boolean));
+  for (let i = 1; i < path.length; i++) { const A = path[i - 1], B = path[i], n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.z - A.z) / 2)); for (let k = 0; k <= n; k++) { const r = Town.roadNameAt(S.town, A.x + (B.x - A.x) * k / n, A.z + (B.z - A.z) * k / n); if (r && !got.has(r)) { got.add(r); if (!first) log('walked ' + r + ' for the first time'); } } }
+  S.roadsWalked = [...got];
+}
+// The roads of town by name, and whether he has walked them.
+export function roadList() { const seen = new Set(); return S.town.edges.filter(e => !e.path && e.name && !seen.has(e.name) && seen.add(e.name)).map(e => ({ name: e.name, walked: (S.roadsWalked || []).includes(e.name) })); }
+// Somewhere he named: a road ("Church Lane") or a place he knows. Returns where to walk to, or null.
+function namedDestination(target) {
+  const q = String(target || '').toLowerCase().replace(/^(the|up|down|along)\s+/g, '').trim(); if (!q) return null;
+  const roads = S.town.edges.filter(e => !e.path && e.name && (e.name.toLowerCase() === q || e.name.toLowerCase().includes(q) || q.includes(e.name.toLowerCase())));
+  if (roads.length) {
+    // walk it to its far end: the end of that road furthest from where he is now
+    let best = null;
+    for (const e of roads) for (const [id, other] of [[e.a, e.b], [e.b, e.a]]) { const n = S.town.nodes[id], o = S.town.nodes[other], d = Math.hypot(n.x - S.pos.x, n.z - S.pos.z); if (!best || d > best.d) best = { d, n, o, name: e.name }; }
+    return { road: best.name, x: best.n.x + (best.o.x - best.n.x) * 0.08, z: best.n.z + (best.o.z - best.n.z) * 0.08 };
+  }
+  const bare = n => n.toLowerCase().replace(/^the\s+/, '');
+  const known = S.town.places.filter(x => x.known);
+  const p = known.find(x => x.id === target) || known.find(x => bare(x.name) === q) || known.find(x => x.type === q && x.type !== 'house') || known.find(x => q.length > 3 && bare(x.name).includes(q));
+  return p ? { place: p, x: p.door.x, z: p.door.z } : null;
+}
 function chooseTarget(a, dec) {
   const A = ACTIONS[a.id];
+  if (a.id === 'explore' || a.id === 'wander') { // he said where: go there
+    const d = namedDestination(dec.target);
+    if (d) { if (d.road) { a.road = d.road; if (!a.doing) a.doing = 'walking ' + d.road; } else { a.dest = d.place.name; if (!a.doing) a.doing = 'wandering over to ' + d.place.name; } return { x: d.x, z: d.z }; }
+  }
   if (A.at) { const p = placeOfType(A.at); a.place = p.id; return p.door; }
   if (a.id === 'visit') {
     let p = placeById(dec.target);
@@ -448,6 +478,7 @@ export const setHooks = h => { hooks = { ...hooks, ...h }; };
 const INDOOR = new Set(['visit', 'read', 'eat', 'draw', 'write', 'web', 'tidy', 'nap', 'sleep', 'buy', 'post', 'job', 'shopfront']);
 function arrive(a) {
   const h = hourOf(S.t), p = a.place ? placeById(a.place) : null;
+  noteRoadsWalked(a.path);
   if (p && !p.known) discover(p);
   if (p && TYPES[p.type].open && !isOpen(p, h)) {
     S.stats.closed++;
@@ -530,7 +561,8 @@ function finish(a) {
     case 'pond': log('sat by the pond'); break;
     case 'stargaze': log('watched the stars from the lookout hill'); break;
     case 'wander': log('wandered ' + whereIs()); break;
-    case 'explore': log('explored ' + whereIs()); break;
+    case 'explore': log('explored ' + (a.road || whereIs())); break;
+    case 'wander': if (a.road || a.dest) log('walked ' + (a.road ? a.road : 'over to ' + a.dest)); break;
     case 'visit': { const p = placeById(a.place); if (p) { log('spent time inside ' + p.name); a.examined = examineNext(p); } break; }
     case 'tidy': log('tidied the cottage'); break;
     case 'buy': { const it = S.items.find(i => i.id === a.item); if (it && !it.sold && S.coins >= it.price) { S.coins -= it.price; it.sold = true; it.boughtDay = dayOf(S.t); S.inventory.push({ id: it.id, name: it.name, desc: it.desc, price: it.price, day: dayOf(S.t), img: it.img || '', model: it.model || null }); log('bought ' + it.name + ' for ' + it.price + ' coins'); remember('day ' + dayOf(S.t) + ': bought ' + it.name + ' for ' + it.price + ' coins', 4); a.bought = it; } break; }

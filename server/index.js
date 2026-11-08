@@ -282,7 +282,16 @@ W.setHooks({
     if (canCall()) M.wakeUp(mood).then(t => done(t, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
   },
   onGrow(g, by) {
+    // several pull-backs close together make one diary entry, not five
+    const last = S.diary[S.diary.length - 1];
+    if (last && last.kind === 'event' && last.fog && S.t - last.t < 120) {
+      last.fog = last.fog.concat(g.road ? [g.road] : []); last.fogN = (last.fogN || 1) + 1;
+      const roads = [...new Set(last.fog)];
+      last.text = 'the fog has pulled back in ' + last.fogN + ' places' + (roads.length ? ' (' + roads.join(', ') + ')' : '') + '. there\'s a lot more town out there than there was.';
+      W.bump(); return;
+    }
     W.addDiary('event', 'the fog has pulled back' + (g.road ? ' along ' + g.road : '') + '. there\'s more town out there than there was.');
+    const e = S.diary[S.diary.length - 1]; if (e) { e.fog = g.road ? [g.road] : []; e.fogN = 1; e.t = S.t; }
   },
   onPost(envs, letters, coins) {
     const claude = canCall();

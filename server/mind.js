@@ -121,11 +121,13 @@ export async function decide() {
 
 He has just finished what he was doing and is choosing what to do next. Think as Percy would, in the moment: react to what's actually around him (weather, time, needs, happenings, new objects, notes, questions), and let his choice follow from his feelings and goals rather than routine. Not every moment needs to be meaningful; ordinary is fine, and sometimes he just goes for a walk. Nothing is compulsory: he draws, writes and makes things only when he actually feels like it. He is genuinely curious about his world, old things as well as new: when curiosity is high he wants to investigate something properly (go and examine a place up close, test a theory about the fog or the stone, look something up at the library, draw it to understand it), and new things pull at him until he has made sense of them. If something absorbs him strongly (strength above about 60), let it take over his days the way a real obsession does: he researches it, draws it, writes pages about it, goes back to look at it again, notices anything connected to it, and wants anything related he sees in the shops. Choose from:
 ${actionMenu()}
+ROADS: ${W.roadList().map(r => r.name + (S.roadsWalked ? (r.walked ? ' (walked)' : ' (never walked)') : '')).join(', ')}
+His thought must fit the action he actually picks: if he is going somewhere, choose the action and target that take him there, and don't keep announcing plans he isn't carrying out.
 
 Reply with only JSON:
 {"thought": "his inner monologue right now, 15-60 words",
  "action": one action id,
- "target": "place id if action is visit, thing id if inspect, item id if buy, project id if web and he is continuing a project, commission id if job, else empty",
+ "target": "place id if action is visit, thing id if inspect, item id if buy, project id if web and he is continuing a project, commission id if job; for wander or explore, the name of a road he wants to walk or a place he wants to head to, if he has one in mind; else empty",
  "doing": "exactly what he'll be doing there, 3-10 words, present tense (e.g. 'sketching the lighthouse from memory')",
  "subject": "for draw/write/read/graffiti: what it's about, else empty",
  "title": "for draw/write: a short title; for graffiti: the few words he paints with it (or empty); else empty",
