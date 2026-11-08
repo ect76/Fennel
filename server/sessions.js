@@ -3,7 +3,7 @@
 import { config } from './config.js';
 import * as W from './world.js';
 import * as Mem from './memory.js';
-import { chat, canCall, canSearch, searchesLeft, modelFor, webTools, retrieved, ask } from './claude.js';
+import { chat, canCall, canSearch, searchesLeft, modelFor, webTools, retrieved, ask, budget } from './claude.js';
 import { uid, str, clamp } from './util.js';
 import * as Search from './search.js';
 
@@ -19,7 +19,7 @@ export function freeWebTools(how, log) {
 
 // Run a sitting: the model works with client tools (handled here) and server tools (web search/fetch).
 // Returns { finished, steps, cost, seen } where seen lists every search and page actually retrieved.
-export async function sitting({ purpose, system, opening, tools: clientTools, web = {}, maxSteps = config.sessionSteps, onRetrieved = () => {} }) {
+export async function sitting({ purpose, system, opening, tools: clientTools, web = {}, maxSteps = budget().sessionSteps, onRetrieved = () => {} }) {
   const tools = [...webTools(web), ...clientTools.map(t => t.def)];
   const messages = [{ role: 'user', content: opening }];
   const seen = { searches: [], pages: [] };
@@ -76,7 +76,7 @@ WHAT HE ALREADY KNOWS OR BELIEVES:
 ${prior.semantic.map(s => '- ' + s.text + ' [' + s.provenance + (s.sources && s.sources[0] ? ': ' + s.sources[0].url : '') + ']').join('\n') || '- nothing relevant yet'}
 ${prior.questions.length ? 'RELATED OPEN QUESTIONS: ' + prior.questions.map(x => x.text).join('; ') : ''}
 ${prev ? 'CONTINUING AN EARLIER SITTING (day ' + prev.day + '): ' + (prev.summary || 'no summary') + '\nPages he read then: ' + prev.pages.filter(p => p.via === 'opened').map(p => p.title + ' <' + p.url + '>').slice(-10).join('; ') + '\nLeads he noted: ' + (prev.leads || []).map(l => l.what + (l.url ? ' <' + l.url + '>' : '')).join('; ') : ''}
-This sitting has up to ${config.sessionSteps} steps${free ? '' : ' and ' + Math.min(3, searchesLeft()) + ' web searches'}.`;
+This sitting has up to ${budget().sessionSteps} steps${free ? '' : ' and ' + Math.min(3, searchesLeft()) + ' web searches'}.`;
   const tools = [
     { def: { name: 'record_finding', description: 'Keep one finding. support: "source" (a page states it), "inference" (you reasoned it from sources), "speculation" (a guess).', input_schema: { type: 'object', properties: { claim: { type: 'string' }, support: { type: 'string', enum: ['source', 'inference', 'speculation'] }, url: { type: 'string' }, confidence: { type: 'number' } }, required: ['claim', 'support'] } },
       handler: (inp) => {
@@ -93,7 +93,7 @@ This sitting has up to ${config.sessionSteps} steps${free ? '' : ' and ' + Math.
       handler: (inp) => { const l = { what: str(inp.what, 240), url: str(inp.url, 500), why: str(inp.why, 240) }; if (!l.what) return { error: 'empty' }; log.leads.push(l); const q = Mem.question({ text: l.what, origin: 'came across it while researching "' + question.slice(0, 80) + '"' + (l.url ? ' on ' + l.url : '') }); return { noted: true, question: q && q.id }; } },
     { def: { name: 'finish', description: 'End this sitting.', input_schema: { type: 'object', properties: { summary: { type: 'string', description: 'what was found, plainly' }, status: { type: 'string', enum: ['answered', 'partly answered', 'unanswered', 'gave up'] }, why_stopped: { type: 'string' }, new_questions: { type: 'array', items: { type: 'string' } } }, required: ['summary', 'status'] } }, handler: () => ({ ok: true }) },
   ];
-  const r = await sitting({ purpose: 'research', system: RESEARCH_SYSTEM, opening, tools, web: free ? {} : { searches: Math.min(3, searchesLeft()), fetches: 3 }, maxSteps: config.sessionSteps,
+  const r = await sitting({ purpose: 'research', system: RESEARCH_SYSTEM, opening, tools, web: free ? {} : { searches: Math.min(3, searchesLeft()), fetches: 3 }, maxSteps: budget().sessionSteps,
     onRetrieved: got => { log.queries.push(...got.searches.filter(Boolean)); for (const p of got.pages) if (!log.pages.some(x => x.url === p.url && x.via === p.via)) log.pages.push(p); } });
   log.steps = r.steps; log.cost = Math.round(r.cost * 10000) / 10000;
   const fin = r.finished || {};

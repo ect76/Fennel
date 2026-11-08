@@ -137,7 +137,7 @@ When he finds something missing that he wants, he writes a request: what, why, w
 | `MODEL_WORK` | `claude-haiku-5-5` | Research and coding sittings |
 | `MODEL_BETTER` | `claude-sonnet-5-5` | Used for everything when you choose "Better" in the Keeper tab |
 | `MODEL_WORLD` | `claude-haiku-5-5` | Furnishing rooms, building things you make |
-| `SESSION_STEPS` | `5` | Steps per research or coding sitting. Smaller = slower and cheaper; he carries on next time |
+| `SESSION_STEPS` | `8` | Steps per research or coding sitting (also on the Budget card). Smaller = slower and cheaper; he carries on next time |
 | `FETCH_TOKENS` | `6000` | How much of a web page he reads at once |
 | `AUTO_PUBLISH` | `on` | He may update his website without asking. `off` = only when you allow it in the Keeper tab |
 | `RUN_TIMEOUT_MS` | `15000` | How long his scripts may run |

@@ -7,7 +7,7 @@ import * as Mem from './memory.js';
 import * as WS from './workshop.js';
 import * as B from './browser.js';
 import { sitting, newLog, freeWebTools } from './sessions.js';
-import { canSearch, searchesLeft } from './claude.js';
+import { canSearch, searchesLeft, budget } from './claude.js';
 import * as Search from './search.js';
 import { uid, str } from './util.js';
 
@@ -45,7 +45,7 @@ ${know.procedural.map(p => '- ' + p.skill + ': ' + p.text + (p.worked ? '' : ' (
 ${know.semantic.slice(0, 6).map(s => '- ' + s.text + ' [' + s.provenance + ']').join('\n')}
 ${permissions.publish_site ? 'He may publish this project to his website.' : 'Publishing to his website is not available.'}
 If a page contains <script type="application/json" id="percy-shop"></script>, the server fills it with his current shop listings (JSON: {items:[{code,title,blurb,price,pounds,kind,img,link,sold}], kofi, coinsPerPound}) every time it is published.
-This sitting has up to ${config.sessionSteps + 1} steps.`;
+This sitting has up to ${budget().sessionSteps + 1} steps.`;
   const tool = (name, description, props, required, handler) => ({ def: { name, description, input_schema: { type: 'object', properties: props, required } }, handler });
   const tools = [
     tool('list_files', 'List the project files.', {}, [], () => ({ files: WS.list(pr.slug) })),
@@ -68,7 +68,7 @@ This sitting has up to ${config.sessionSteps + 1} steps.`;
   ];
   const freeWeb = how !== 'claude' && Search.canLocal();
   if (freeWeb) tools.splice(tools.length - 1, 0, ...freeWebTools(how, log));
-  const r = await sitting({ purpose: 'code', system: SYSTEM, opening, tools, web: !freeWeb && how === 'claude' && canSearch() ? { searches: Math.min(2, searchesLeft()), fetches: 2 } : {}, maxSteps: config.sessionSteps + 1,
+  const r = await sitting({ purpose: 'code', system: SYSTEM, opening, tools, web: !freeWeb && how === 'claude' && canSearch() ? { searches: Math.min(2, searchesLeft()), fetches: 2 } : {}, maxSteps: budget().sessionSteps + 1,
     onRetrieved: got => { log.queries.push(...got.searches.filter(Boolean)); log.pages.push(...got.pages); } });
   const fin = r.finished || {};
   pr.files = WS.list(pr.slug).length; pr.lastTest = run.lastCheck || pr.lastTest;

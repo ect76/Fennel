@@ -260,6 +260,7 @@ async function keeper(req, res, what) {
       if ('searchesPerDay' in b) s.searchesPerDay = n(b.searchesPerDay, 0, 500);
       if ('spendPerDay' in b) s.spendPerDay = n(b.spendPerDay, 0, 200);
       if ('paused' in b) s.paused = !!b.paused;
+      if ('sessionSteps' in b) s.sessionSteps = n(b.sessionSteps, 2, 20);
       if ('quality' in b) s.quality = b.quality === 'better' ? 'better' : 'economy';
       if ('searchVia' in b) s.searchVia = ['auto', 'searxng', 'browser', 'claude'].includes(b.searchVia) ? b.searchVia : 'auto';
       if ('publishApproved' in b) s.publishApproved = !!b.publishApproved;

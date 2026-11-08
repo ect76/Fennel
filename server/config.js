@@ -26,7 +26,7 @@ export const config = {
   maxCallsPerDay: num(env.MAX_CALLS_PER_DAY, 300),     // Claude calls per real day
   maxSearchesPerDay: num(env.MAX_SEARCHES_PER_DAY, 10),// web searches per real day ($0.01 each)
   maxSpendPerDay: numZ(env.MAX_SPEND_PER_DAY, 2),      // estimated US dollars per real day (0 = no spending cap)
-  sessionSteps: num(env.SESSION_STEPS, 5),             // steps per coding/research sitting: small sittings, carried on later
+  sessionSteps: num(env.SESSION_STEPS, 8),             // steps per coding/research sitting: small sittings, carried on later
   fetchTokens: num(env.FETCH_TOKENS, 6000),            // how much of a web page he reads at once
   growEveryDays: numZ(env.GROW_EVERY_DAYS, 0),         // the fog pulls back every N town days (0 = only when the keeper says: the default)
   webResearch: onOff(env.WEB_RESEARCH, true),

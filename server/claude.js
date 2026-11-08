@@ -19,6 +19,7 @@ export function budget() {
     searchesPerDay: Number.isFinite(b.searchesPerDay) ? b.searchesPerDay : config.maxSearchesPerDay,
     spendPerDay: Number.isFinite(b.spendPerDay) ? b.spendPerDay : config.maxSpendPerDay,
     paused: !!b.paused, quality: b.quality === 'better' ? 'better' : 'economy',
+    sessionSteps: Number.isFinite(b.sessionSteps) ? b.sessionSteps : config.sessionSteps,
   };
 }
 export function modelFor(kind) {
