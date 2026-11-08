@@ -9,6 +9,7 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"><rect
 const PLAN = ['look', 'go', 'enter', 'look', 'research', 'code', 'write', 'draw', 'request', 'code', 'research', 'wait', 'eat', 'think'];
 
 function decide(prompt) {
+  const tr = String(prompt).split('\n').find(l => l.startsWith('How his recent efforts')); if (tr) console.log('[mock] saw: ' + tr);
   const places = ids(prompt, /place (\w+): /g), things = ids(prompt, /thing (\w+): /g), projects = ids(prompt, /project (pr\w+) /g), inv = ids(prompt, /(R\w+) "/g);
   const step = PLAN[plan++ % PLAN.length];
   const base = { intention: { op: 'new', text: 'see what this place is', why: 'everything is unfamiliar', horizon: 'today' }, expectation: 'something will happen', thought: 'a small thought.', caption: '' };
