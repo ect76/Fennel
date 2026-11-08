@@ -191,7 +191,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, publicState());
     if (req.method === 'GET' && p === '/api/live') return send(res, 200, live());
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...claudeStatus(), freeSearch: { via: searchVia(), health: Search.searchHealth(), ...Search.local }, browser: B.available(), git: await WS.hasGit(), website: Pub.pubStatus, kofi: { on: !!config.kofiToken } });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, build: (process.env.BUILD_REF || 'dev').slice(0, 7), day: W.dayOf(S.t), time: W.hhmm(S.t), ...claudeStatus(), freeSearch: { via: searchVia(), health: Search.searchHealth(), ...Search.local }, browser: B.available(), git: await WS.hasGit(), website: Pub.pubStatus, kofi: { on: !!config.kofiToken } });
     if (req.method === 'GET' && p === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write('retry: 3000\n\n'); streams.add(res); req.on('close', () => streams.delete(res)); return;
@@ -252,7 +252,7 @@ async function keeper(req, res, what) {
   switch (what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
-      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
+      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), build: (process.env.BUILD_REF || 'dev').slice(0, 7), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
         journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
