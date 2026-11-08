@@ -110,7 +110,7 @@ function renderAll() {
     const em = $('#emos'); em.textContent = '';
     const EC = { loneliness: '#6f7fa6', curiosity: 'var(--c-wonder)', sadness: '#5a6f8a', contentment: 'var(--c-energy)', frustration: 'var(--danger)', anxiety: 'var(--c-full)', excitement: 'var(--c-joy)' };
     for (const k in ST.emotions || {}) { const r = el('div', 'emo'); r.append(el('span', null, k)); const bar = el('div', 'bar'); const i = el('i'); i.style.width = Math.round(ST.emotions[k]) + '%'; i.style.background = EC[k] || 'var(--accent)'; bar.append(i); r.append(bar); em.append(r); }
-    $('#absorbed').textContent = ST.interests && ST.interests.length ? 'Absorbed by: ' + ST.interests.map(i => i.topic).join(', ') : '';
+    $('#absorbed').textContent = ST.interests && ST.interests.length ? 'Absorbed by: ' + ST.interests.map(i => i.topic + ' (' + (i.depth || 'curious') + ')').join(', ') : '';
   }
   $('#selfDesc').textContent = ST.self.description;
   const tr = $('#traits'); tr.textContent = '';

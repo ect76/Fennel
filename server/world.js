@@ -13,7 +13,7 @@ export const ACTIONS = {
   sleep: { at: 'home', label: 'sleeping', gain: { energy: 100, calm: 10 }, desc: 'go home to bed for the night' },
   nap: { at: 'home', label: 'napping', dur: 80, gain: { energy: 30 }, desc: 'a short nap at home' },
   draw: { at: 'home', label: 'drawing', dur: 90, gain: { joy: 12, energy: -6, wonder: -4 }, desc: 'draw something at his desk (say what in "subject")' },
-  web: { at: 'home', label: 'making a web page', dur: 120, gain: { joy: 12, wonder: 4, energy: -8 }, desc: 'build a real web page for his website about something that interests him: a guide, a map, a log, a timetable, or a little interactive toy, game or experiment (what in "subject", its title in "title")' },
+  web: { at: 'home', label: 'making a web page', dur: 120, gain: { joy: 12, wonder: 4, energy: -8 }, desc: 'work on his website: start a new web page or project about something that interests him (a guide, a map, a log, a timetable, or an interactive toy, game, simulator or experiment; what in "subject", title in "title"), or keep improving one of his existing projects (give its id as "target")' },
   write: { at: 'home', label: 'writing a page', dur: 80, gain: { joy: 8, energy: -4, wonder: -3 }, desc: 'write a page to pin up for visitors: a guide, a list, a log, an observation (say what in "subject")' },
   tidy: { at: 'home', label: 'tidying the cottage', dur: 40, gain: { calm: 12 }, desc: 'tidy the cottage' },
   eat: { at: 'bakery', label: 'eating bread', dur: 30, gain: { fullness: 45, joy: 6 }, desc: 'buy and eat bread at the bakery (2 coins)' },
@@ -249,6 +249,7 @@ export function newDayMood() {
 }
 export function contact(amount, what) { emo('loneliness', -amount); S.lastContact = dayOf(S.t); if (what) log(what); }
 // interests: when something new grabs him, he follows it for days
+export const depthOf = i => { const n = i.sessions || 0; return n >= 10 ? 'an expert' : n >= 6 ? 'devoted' : n >= 3 ? 'keen' : 'curious'; };
 export function interest(topic, strength = 60) {
   topic = str(topic, 60); if (!topic) return;
   const ex = S.interests.find(i => i.topic.toLowerCase() === topic.toLowerCase());
@@ -407,7 +408,7 @@ export function startAct(dec) {
   let id = ACTIONS[dec.action] ? dec.action : 'wander';
   if (id === 'inspect' && !thingById(dec.target)) { const b = bestThing(); if (b) dec.target = b.thing; else id = 'wander'; }
   if (ACTIONS[id].at && !placeOfType(ACTIONS[id].at)) id = 'wander';
-  const a = { id, phase: 'walk', thing: id === 'inspect' ? dec.target : null, doing: str(dec.doing, 80), subject: str(dec.subject, 80), title: str(dec.title, 50), src: dec.src || 'rules' };
+  const a = { id, phase: 'walk', target: str(dec.target, 20), thing: id === 'inspect' ? dec.target : null, doing: str(dec.doing, 80), subject: str(dec.subject, 80), title: str(dec.title, 50), src: dec.src || 'rules' };
   const tg = chooseTarget(a, dec);
   a.tx = tg.x; a.tz = tg.z; a.path = Town.route(S.town, S.pos, tg); a.wp = 0;
   S.act = a; S.recent.push(id); if (S.recent.length > 10) S.recent.shift();
@@ -565,7 +566,7 @@ export function addBuilding({ kind, name, desc, x, z }) {
 }
 function newDay(d) {
   S.lastDay = d; S.dayLog[d] = S.dayLog[d] || [];
-  for (const i of S.interests) i.strength -= 7; S.interests = S.interests.filter(i => i.strength > 5); // interests fade unless fed
+  for (const i of S.interests) i.strength -= 7 * (1 - Math.min(i.sessions || 0, 12) / 15); S.interests = S.interests.filter(i => i.strength > 5); // interests fade unless fed; deep ones fade slowly
   const keys = Object.keys(S.dayLog).map(Number).sort((a, b) => a - b);
   while (keys.length > 6) delete S.dayLog[keys.shift()];
   S.events = S.events.filter(e => e.id === 'echo' ? d - e.day < 2 : e.id.startsWith('grow-') ? d - e.day < 2 : e.day >= d);
@@ -689,7 +690,7 @@ export function publicState(extra = {}) {
     notebook: S.notebook || null, inventory: S.inventory || [],
     items: S.items.map(i => ({ id: i.id, shop: i.shop, name: i.name, desc: i.desc, price: i.price, seen: i.seen, sold: i.sold, img: i.img || '', model: i.model || null, status: i.status || 'ready' })),
     wishes: S.wishes || [], percyNotes: (S.percyNotes || []).slice(-20),
-    emotions: S.emotions, dayMood: S.dayMood, interests: S.interests, webPages: S.webPages || [],
+    emotions: S.emotions, dayMood: S.dayMood, interests: S.interests.map(i => ({ ...i, depth: depthOf(i) })), webPages: S.webPages || [],
     town: publicTown(), fogTests: S.fogTests, memoryCount: S.memories.length,
     ...extra,
   };

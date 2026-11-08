@@ -61,7 +61,7 @@ PLACES HE KNOWS:
 ${places}${unknown ? `\nThere ${unknown === 1 ? 'is somewhere' : 'are ' + unknown + ' places'} in town he hasn't found yet (exploring would find ${unknown === 1 ? 'it' : 'them'}).` : ''}
 NOW: day ${d}, ${W.hhmm(S.t)}, ${W.seasonOf(d)}, weather ${S.weather.kind}. He is ${W.whereIs()}, ${W.doingText()}.
 TODAY: ${S.dayMood.label}${S.dayMood.causes.length ? ' (' + S.dayMood.causes.join('; ') + ')' : ''}.
-FEELINGS (0-100): ${W.EMOTIONS.map(k => k + ' ' + Math.round(S.emotions[k])).join(', ')}.${S.interests.length ? '\nCURRENTLY ABSORBED BY: ' + S.interests.map(i => i.topic + ' (' + Math.round(i.strength) + ')').join(', ') : ''}
+FEELINGS (0-100): ${W.EMOTIONS.map(k => k + ' ' + Math.round(S.emotions[k])).join(', ')}.${S.interests.length ? '\nCURRENTLY ABSORBED BY: ' + S.interests.map(i => i.topic + ' (strength ' + Math.round(i.strength) + ', ' + W.depthOf(i) + ', ' + (i.sessions || 0) + ' research sessions since day ' + i.since + ')').join(', ') + '\n(The deeper an interest, the more he knows and the more it shows: an expert has favourites, strong opinions, the right jargon and pet theories; a newcomer has wide-eyed questions.)' : ''}
 NEEDS (0-100): fullness ${Math.round(n.fullness)}, energy ${Math.round(n.energy)}, wonder ${Math.round(n.wonder)}, joy ${Math.round(n.joy)}, calm ${Math.round(n.calm)}. Mood: ${W.moodWord()}. Coins: ${S.coins}. Drawings at home: ${W.unsold().filter(d => !d.onStall).length}.
 WATCHING: ${watchers} outside visitor${watchers === 1 ? ' is' : 's are'} watching the town right now. He can't see them, but the Humming Stone hums louder the more there are.
 HAPPENING TODAY: ${S.events.map(e => e.text).join(' ') || 'nothing unusual'}
@@ -69,6 +69,7 @@ HOW HE SEES HIMSELF: ${S.self.description}
 LIKES: ${S.self.likes.join('; ') || '-'} | FEARS: ${S.self.fears.join('; ') || '-'} | OBSESSION: ${S.self.obsession || '-'}
 BELIEFS: ${S.beliefs.join(' / ') || '-'}
 GOALS: ${S.goals.map(g => g.text).join(' / ') || '-'}
+WEB PROJECTS HE HAS MADE: ${(S.webPages || []).map(p => 'id ' + p.id + ': "' + p.title + '" (' + (p.versions || 1) + ' version' + ((p.versions || 1) > 1 ? 's' : '') + ', last worked on day ' + (p.lastDay || p.day) + ')').join(' / ') || 'none yet'}
 WISHES (things he wishes were in his world): ${(S.wishes || []).filter(w => !w.granted).map(w => w.text).join(' / ') || '-'}
 QUESTIONS HE HAS: ${S.questions.join(' / ') || '-'}
 HAS LEARNED ABOUT: ${S.knowledge.slice(-15).map(k => k.topic).join(', ') || 'nothing yet'}${S.researchQueue.length ? '\nWANTS TO RESEARCH: ' + S.researchQueue.map(r => r.topic).join(', ') : ''}
@@ -115,7 +116,7 @@ ${actionMenu()}
 Reply with only JSON:
 {"thought": "his inner monologue right now, 15-60 words",
  "action": one action id,
- "target": "place id if action is visit, thing id if inspect, item id if buy, else empty",
+ "target": "place id if action is visit, thing id if inspect, item id if buy, project id if web and he is continuing a project, else empty",
  "doing": "exactly what he'll be doing there, 3-10 words, present tense (e.g. 'sketching the lighthouse from memory')",
  "subject": "for draw/write/read/graffiti: what it's about, else empty",
  "title": "for draw/write: a short title; for graffiti: the few words he paints with it (or empty); else empty",
@@ -166,21 +167,40 @@ Reply with only JSON: {"topic": "short topic name", "facts": ["3-5 facts, each o
 
 /* ---------- pages he writes for visitors ---------- */
 // A real web page for his website: self-contained HTML, CSS and JavaScript, made the way he would make it.
-export async function makeWebPage(subject, title) {
+export async function makeWebPage(subject, title, existing) {
   const S = W.S;
   const absorbed = S.interests.length ? S.interests.map(i => i.topic).join(', ') : '';
+  if (existing) return improveWebPage(existing, subject);
   const prompt = `${context({ focus: subject + ' ' + absorbed })}
 
 At his desk, Percy is making a real web page for his website${subject ? ' about: ' + subject : ''}${title ? ' (title: "' + title + '")' : ''}. ${absorbed ? 'He is currently absorbed by ' + absorbed + ', and it should show.' : ''} Things he has learned are listed above; use them, accurately.
-Make it something a curious, slightly odd penguin would genuinely make: a guide, a log, a map, a timetable, a catalogue, or a small interactive toy, game, simulator or experiment, built with plain HTML, CSS and JavaScript. It should be specific to his life and interests, made with care, and charmingly personal rather than slick. Written in his voice (lowercase, plain, a bit odd).
+Make it something a curious, slightly odd penguin would genuinely make, and surprising: not the obvious page. Ambitious is good. Ideas: a guide, a log, a map, a timetable, a catalogue, or a small interactive toy, game, simulator or experiment, built with plain HTML, CSS and JavaScript. It should be specific to his life and interests, made with care, and charmingly personal rather than slick. Written in his voice (lowercase, plain, a bit odd).
 Rules: one complete, self-contained HTML document (inline CSS and JS only; no external scripts, fonts, images or network requests); under about 40 KB; works on phones; ends with this line in a footer: "i am percy, a small autonomous penguin. i made this page myself." Reply with only the HTML document.`;
   const { text } = await run('slow', () => callClaude({ model: config.modelReflect, system: 'You are a creative web developer. You reply with a single complete HTML document only.', prompt, maxTokens: 16000, timeoutMs: 300000 }));
   const m = String(text || '').match(/<!doctype html[\s\S]*<\/html>|<html[\s\S]*<\/html>/i); if (!m) throw new Error('no usable web page');
   let html = m[0].replace(/<script[^>]+src=[^>]*>\s*<\/script>/gi, '').replace(/<link[^>]+href=["']https?:[^>]*>/gi, '').replace(/<meta[^>]+http-equiv=["']?refresh[^>]*>/gi, '');
   if (!/^<!doctype/i.test(html)) html = '<!doctype html>\n' + html;
-  if (html.length > 120000) throw new Error('web page too large');
+  if (html.length > 160000) throw new Error('web page too large');
   const t = (html.match(/<title>([^<]*)<\/title>/i) || [])[1];
   return { title: str(t || title || subject || 'a page', 70), html };
+}
+
+// Going back to a project: Claude gets the current page and makes the next version of it.
+async function improveWebPage({ page, html: current }, focus) {
+  const prompt = `${context({ focus: page.title + ' ' + (focus || '') })}
+
+Percy is back at his desk working on one of his own web projects: "${page.title}" (version ${page.versions || 1}). ${focus ? 'Today he wants to: ' + focus + '.' : 'He decides what to improve.'}
+Here is the current page:
+"""
+${current.slice(0, 60000)}
+"""
+Make the next version. Keep what works and make it genuinely better: add a feature, deepen it with what he has learned since, fix what bugged him, make it more ambitious or more delightful. Add a short changelog entry in his voice near the bottom ("version ${(page.versions || 1) + 1}: ..."). Same rules: one complete self-contained HTML document (inline CSS and JS only, no external scripts, fonts, images or requests), under about 60 KB, works on phones, keeps the footer line "i am percy, a small autonomous penguin. i made this page myself." Reply with only the HTML document.`;
+  const { text } = await run('slow', () => callClaude({ model: config.modelReflect, system: 'You are a creative web developer. You reply with a single complete HTML document only.', prompt, maxTokens: 20000, timeoutMs: 360000 }));
+  const m = String(text || '').match(/<!doctype html[\s\S]*<\/html>|<html[\s\S]*<\/html>/i); if (!m) throw new Error('no usable web page');
+  let html = m[0].replace(/<script[^>]+src=[^>]*>\s*<\/script>/gi, '').replace(/<link[^>]+href=["']https?:[^>]*>/gi, '').replace(/<meta[^>]+http-equiv=["']?refresh[^>]*>/gi, '');
+  if (!/^<!doctype/i.test(html)) html = '<!doctype html>\n' + html;
+  if (html.length > 160000) throw new Error('web page too large');
+  return { title: page.title, html, improves: page.id };
 }
 
 export async function writePage(subject, title) {

@@ -89,11 +89,13 @@ function publish(a) {
   } else if (j.kind === 'web') {
     const r = j.result;
     if (r) {
-      let sl = Pub.slug(r.title); if ((S.webPages || []).some(p => p.slug === sl)) sl += '-' + W.dayOf(S.t);
-      const page = { id: W.uid(), slug: sl, title: r.title, subject: a.subject || '', day: W.dayOf(S.t) };
-      S.webPages.push(page); if (S.webPages.length > 80) S.webPages.shift();
+      const prev = r.improves ? S.webPages.find(p => p.id === r.improves) : null;
+      let sl = prev ? prev.slug : Pub.slug(r.title); if (!prev && (S.webPages || []).some(p => p.slug === sl)) sl += '-' + W.dayOf(S.t);
+      const page = prev || { id: W.uid(), slug: sl, title: r.title, subject: a.subject || '', day: W.dayOf(S.t), versions: 0 };
+      page.versions = (page.versions || 1) + (prev ? 1 : 0) || 1; page.lastDay = W.dayOf(S.t);
+      if (!prev) { S.webPages.push(page); if (S.webPages.length > 80) S.webPages.shift(); }
       writeMedia('web/' + sl + '.html', r.html);
-      W.addDiary('page', 'made a web page: "' + r.title + '". ' + (Pub.enabled() ? 'it\'s up on my site now.' : 'it\'s sitting on my desk. nowhere to put it.'), 'claude', { web: sl });
+      W.addDiary('page', prev ? 'worked on "' + r.title + '" again. version ' + page.versions + ' now.' : 'made a web page: "' + r.title + '". ' + (Pub.enabled() ? 'it\'s up on my site now.' : 'it\'s sitting on my desk. nowhere to put it.'), 'claude', { web: sl });
       W.remember('made a web page called "' + r.title + '"', 3); W.log('made a web page: ' + r.title);
       siteUpdate([['made/' + sl + '.html', r.html]], 'percy made a page: ' + r.title);
     } else W.log('tried to make a web page but it wouldn\'t come together');
@@ -146,7 +148,11 @@ W.setHooks({
       if (claude && topic) { a.subject = topic; later(a, 'research', M.research(topic, book ? book.question : '', book && book.text)); W.setThought(book && book.text ? 'someone left a book about ' + topic + '. reading it.' : 'looking up ' + topic + '.'); }
     }
     if (a.id === 'write' && claude) later(a, 'page', M.writePage(a.subject, a.title));
-    if (a.id === 'web' && claude) later(a, 'web', M.makeWebPage(a.subject, a.title));
+    if (a.id === 'web' && claude) {
+      const prev = (S.webPages || []).find(p => p.id === a.target || (a.subject && p.title.toLowerCase() === a.subject.toLowerCase()));
+      let existing = null; if (prev) { try { existing = { page: prev, html: fs.readFileSync(path.join(MEDIA, 'web', prev.slug + '.html'), 'utf8') }; } catch {} }
+      later(a, 'web', M.makeWebPage(a.subject, a.title, existing));
+    }
     if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
     if (a.id === 'graffiti' && claude && a.wall) later(a, 'graffiti', M.paintGraffiti({ subject: a.subject, tag: a.title }));
     if (a.id === 'shrine') readNotes(claude);
