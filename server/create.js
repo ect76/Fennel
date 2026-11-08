@@ -63,7 +63,7 @@ export async function appearance(name, desc) {
 // What is inside a building nobody has been in for a long time. World content, not Percy's feelings.
 export async function furnish(p) {
   const T = W.TYPES[p.type];
-  const prompt = `A building in a small, empty village: ${p.name} (a ${T.label})${p.desc ? ': ' + p.desc : ''}. Nobody has been inside for a long time, but things were left behind. List what is inside, plainly and specifically, fitting the place. Mix the ordinary with the occasional odd thing; do not make everything significant.
+  const prompt = `A building in a small, empty village called Mossbrook: ${p.name} (a ${T.label})${p.desc ? ': ' + p.desc : ''}. Nobody has been inside for a long time, but things were left behind. List what is inside, plainly and specifically, fitting the place. Mix the ordinary with the occasional odd thing; do not make everything significant.\nIf anything written mentions the village, it is Mossbrook. Do not invent other place names, people's histories or mysteries about where anyone came from; keep any writing ordinary (labels, prices, notices, recipes, receipts, ordinary books on general subjects).
 For each item give: "name" (what it actually is), "look" (how it appears to someone who doesn't know what it is: shape, colour, material, size; do not name it), "text" (exact words of any writing on it, or empty), "can_take" (small enough to carry home).
 Also "feel": one plain sentence on what the room is like (light, smell, sound, dust), with no opinions.
 Reply with only JSON: {"feel": "", "items": [{"name": "", "look": "", "text": "", "can_take": false}]} with 4 to 7 items.`;

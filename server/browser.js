@@ -121,9 +121,14 @@ export async function searchBing(q) {
   return withPage('https://www.bing.com/search?q=' + encodeURIComponent(q), async ({ evalJS }) => {
     const out = await evalJS(`JSON.stringify([...document.querySelectorAll('li.b_algo')].slice(0, 8).map(li => { const a = li.querySelector('h2 a'); return a ? { title: (a.innerText || a.textContent || '').trim(), url: a.href, snippet: (li.querySelector('.b_caption p, p') || {}).innerText || '' } : null; }).filter(Boolean))`);
     const list = JSON.parse(out || '[]');
+    if (!list.length) { // tell "no results" apart from a consent page or a bot check
+      const info = JSON.parse(await evalJS(`JSON.stringify({ title: document.title, text: (document.body && document.body.innerText || '').slice(0, 600), none: !!document.querySelector('.b_no, #b_results .b_no'), url: location.href })`) || '{}');
+      const why = /captcha|unusual traffic|verify|robot|challenge/i.test(info.text + info.title) ? 'a check for robots' : /consent|cookies|privacy|accept all/i.test(info.text) && !info.none ? 'a cookie consent page' : !info.none && !/no results/i.test(info.text) ? 'an unexpected page: "' + String(info.title || info.url).slice(0, 80) + '"' : '';
+      if (why) return { list, blocked: why };
+    }
     for (const r of list) { // Bing wraps links in a redirect; the real address is base64 in "u"
       try { const u = new URL(r.url); const enc = u.searchParams.get('u'); if (u.hostname.endsWith('bing.com') && enc && enc.startsWith('a1')) r.url = Buffer.from(enc.slice(2).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch {}
     }
-    return list;
+    return { list };
   }, { waitMs: 800 });
 }

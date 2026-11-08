@@ -24,13 +24,13 @@ export async function search(q, how) {
     if (how === 'searxng') {
       const u = config.searxngUrl.replace(/\/$/, '') + '/search?format=json&safesearch=1&q=' + encodeURIComponent(q);
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
-      const res = await fetch(u, { signal: ctl.signal, headers: { accept: 'application/json' } }).finally(() => clearTimeout(t));
+      const res = await fetch(u, { signal: ctl.signal, headers: { accept: 'application/json', 'accept-language': 'en-GB,en;q=0.8', 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) Percy/1.0' } }).finally(() => clearTimeout(t));
       if (res.status === 403) throw new Error('SearXNG refused JSON: turn on the json format in its settings.yml');
       if (!res.ok) throw new Error('SearXNG answered ' + res.status);
       const j = await res.json();
       return (j.results || []).slice(0, 8).map(r => ({ title: str(r.title, 160), url: r.url, snippet: str(r.content, 300), source: (r.engines || [r.engine]).filter(Boolean).join(', '), date: r.publishedDate || '' }));
     }
-    if (how === 'browser') return await B.searchBing(q);
+    if (how === 'browser') { const r = await B.searchBing(q); if (r.blocked) throw new Error('the search page did not show results (' + r.blocked + '); it may be blocking automated browsers. Setting up SearXNG avoids this.'); return r.list; }
     throw new Error('no free search available');
   } catch (e) { local.lastError = e.message; throw e; }
 }

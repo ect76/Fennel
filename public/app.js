@@ -296,7 +296,7 @@ async function loadPrivate() { if (!KEY) return; try { PRIV = await kpost('priva
 function renderPrivate() {
   if (!PRIV) return;
   const b = PRIV.budget, u = PRIV.usage;
-  $('#usageLine').textContent = 'Today: ' + u.calls + ' of ' + b.callsPerDay + ' calls · about $' + u.cost.toFixed(3) + (b.spendPerDay ? ' of $' + b.spendPerDay : '') + ' · ' + u.searches + ' paid searches · ' + PRIV.freeSearch.searches + ' free searches (' + PRIV.searchVia + ') · ' + (u.mode === 'paused' ? 'paused' : 'pace: ' + u.pace) + (u.errors ? ' · ' + u.errors + ' errors (last: ' + u.lastError + ')' : '');
+  $('#usageLine').textContent = 'Today: ' + u.calls + ' of ' + b.callsPerDay + ' calls · about $' + u.cost.toFixed(3) + (b.spendPerDay ? ' of $' + b.spendPerDay : '') + ' · ' + u.searches + ' paid searches · ' + PRIV.freeSearch.searches + ' free searches (' + PRIV.searchVia + ')' + (PRIV.freeSearch.lastError ? ' · last search problem: ' + PRIV.freeSearch.lastError : '') + ' · ' + (u.mode === 'paused' ? 'paused' : 'pace: ' + u.pace) + (u.errors ? ' · ' + u.errors + ' errors (last: ' + u.lastError + ')' : '');
   if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#budgetForm')) return;
   $('#bCalls').value = b.callsPerDay; $('#bSpend').value = b.spendPerDay; $('#bSearch').value = b.searchesPerDay; $('#bVia').value = PRIV.settings.searchVia || 'auto'; $('#bQuality').value = b.quality; $('#bPublish').value = PRIV.settings.publishApproved ? '1' : '0'; $('#bPublishWrap').hidden = !PRIV.publishing; $('#bPublishWrap').title = PRIV.permissions.publish_site ? 'He can publish right now.' : 'He can\'t publish right now.';
   $('#bPause').textContent = b.paused ? 'Resume his thinking' : 'Pause his thinking';
