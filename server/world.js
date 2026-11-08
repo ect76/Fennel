@@ -738,14 +738,17 @@ function examineNext(p) {
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function newCode() { let c; do { c = 'PCY-' + Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join(''); } while ((S.shop || []).some(x => x.code === c) || (S.commissions || []).some(x => x.code === c)); return c; }
 export const COMMISSION_KINDS = { drawing: 'a drawing', page: 'something written', web: 'a web page' };
+// is the lamp already lit (anything waiting he hasn't collected)? checked before adding the new post
+function postLamp() { return S.post.some(p => !p.collected) || S.commissions.some(c => c.status === 'posted'); }
 export function postWaiting() { const d = dayOf(S.t); return S.post.some(p => !p.collected) || S.commissions.some(c => c.status === 'posted' && c.waitDay !== d); }
 export function postCommission({ text, kind, from, offer }) {
   text = str(text, 500); if (!text) return { error: 'Say what you would like him to make.' };
   if (!COMMISSION_KINDS[kind]) kind = 'drawing';
   if (S.commissions.filter(c => c.status === 'posted').length >= 10) return { error: 'There is already a pile of letters waiting for him. Try again after he has been to the post office.' };
   const c = { id: uid(), code: newCode(), text, kind, from: str(from, 30), offer: clamp(Math.round(Number(offer) || 5), 1, 20), paidReal: 0, day: dayOf(S.t), status: 'posted', reply: '' };
+  const lit = postLamp();
   S.commissions.unshift(c); if (S.commissions.length > 60) S.commissions.length = 60;
-  log('a letter arrived at the post office'); bump();
+  if (!lit) log('the lamp came on in the post office window'); bump();
   return { commission: c };
 }
 // Money from the outside world (a Ko-fi payment, or the keeper). It waits at the post office as an envelope.
@@ -758,9 +761,10 @@ export function receivePayment({ coins, from = '', message = '', code = '', amou
   const env = { id: uid(), coins, from: str(from, 40), message: str(message, 500), day: dayOf(S.t), collected: false, source, forShop: listing ? listing.id : '', forJob: job ? job.id : '', public: isPublic !== false };
   if (listing && !listing.sold) { listing.sold = true; listing.soldDay = dayOf(S.t); listing.buyer = env.from; env.forTitle = listing.title; markSoldThing(listing); }
   if (job) { job.paidReal = (job.paidReal || 0) + coins; env.forTitle = 'the commission: ' + job.text.slice(0, 60); }
+  const lit = postLamp();
   S.post.push(env); if (S.post.length > 80) S.post.shift();
   S.payments.push({ ref: str(ref, 80), day: dayOf(S.t), coins, amount: str(amount, 20), source, code, from: env.from }); if (S.payments.length > 200) S.payments.shift();
-  S.earned.real += coins; log('an envelope arrived at the post office'); bump();
+  if (!lit) log('the lamp came on in the post office window'); bump(); // he only knows what's in it once he opens it
   return { envelope: env, listing, job };
 }
 function markSoldThing(l) {
@@ -772,7 +776,7 @@ function collectPost() {
   const envs = S.post.filter(p => !p.collected), letters = S.commissions.filter(c => c.status === 'posted');
   let coins = 0;
   for (const e of envs) { e.collected = true; e.collectedDay = dayOf(S.t); coins += e.coins; }
-  S.coins += coins;
+  S.coins += coins; S.earned.real += coins;
   for (const c of letters) c.status = 'read';
   if (envs.length) {
     contact(14 + envs.length * 6); emo('excitement', 18); emo('contentment', 12); feel('joy', 8);
