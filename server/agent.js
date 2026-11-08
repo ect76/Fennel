@@ -92,6 +92,13 @@ const DECIDE_TOOL = {
 let lastPerceiveT = 0, lastTrigger = 'waking', lastOutcome = null, retryAfter = 0, badStreak = 0;
 export const setTrigger = t => { lastTrigger = t; };
 export async function decide() {
+  // the body has the last word: at the point of collapse he falls asleep wherever he is
+  if (S.body.energy <= 2 && !(S.act && S.act.phase === 'do' && ['sleep', 'nap'].includes(S.act.type))) {
+    const j = { id: 'j' + uid(), t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), trigger: 'exhaustion', src: 'body', choice: { type: 'nap', args: {} }, intent: { op: 'none' }, expectation: '', thought: '' };
+    W.begin({ type: 'nap', minutes: W.isNight(W.hourOf(S.t)) ? 420 : 180, caption: 'fallen asleep where he was', decision: j });
+    W.life('nap', 'Too exhausted to stay awake, he fell asleep ' + W.whereWords() + '.');
+    S.journal.push(j); if (S.journal.length > 300) S.journal.shift(); return j;
+  }
   const percept = P.perceive({ sinceT: lastPerceiveT, watchers: hooks.watchers() });
   lastPerceiveT = S.t;
   const pdesc = P.describe(percept);

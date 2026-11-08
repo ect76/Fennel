@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { config } from './config.js';
 
@@ -17,13 +18,16 @@ async function start() {
   if (ws && ws.readyState === 1) return;
   if (starting) return starting;
   starting = (async () => {
-    const prof = path.join(config.dataDir, '.browser-profile'); fs.mkdirSync(prof, { recursive: true });
+    // a fresh, throwaway profile each time: a profile kept in /data stays locked to the previous container
+    // (Chromium refuses a profile 'in use on another computer'), and he has nothing to keep in it anyway
+    const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'percy-browser-')); profileDir = prof;
+    try { fs.rmSync(path.join(config.dataDir, '.browser-profile'), { recursive: true, force: true }); } catch {}
     const proxy = process.env.BROWSER_PROXY || '';
     const args = ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-first-run', '--mute-audio', '--disable-extensions', '--disable-background-networking',
       '--remote-debugging-port=0', '--user-data-dir=' + prof, '--window-size=1000,750', ...(proxy ? ['--proxy-server=' + proxy, '--ignore-certificate-errors'] : []), 'about:blank'];
     proc = spawn(config.chromiumPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    proc.on('exit', () => { proc = null; ws = null; });
-    const url = await new Promise((res, rej) => { let b = ''; const t = setTimeout(() => rej(new Error('the browser did not start')), 20000); proc.stderr.on('data', d => { b += d; const m = b.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(t); res(m[1]); } }); proc.on('exit', () => rej(new Error('the browser exited'))); });
+    proc.on('exit', () => { proc = null; ws = null; cleanProfile(prof); });
+    const url = await new Promise((res, rej) => { let b = ''; const t = setTimeout(() => rej(new Error('the browser did not start')), 20000); proc.stderr.on('data', d => { b += d; const m = b.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(t); res(m[1]); } }); proc.on('exit', code => rej(new Error('the browser exited (' + code + ')' + (b.trim() ? ': ' + b.trim().split('\n').filter(l => !/^\s*$/.test(l)).slice(-1)[0].slice(0, 200) : '')))); });
     ws = new WebSocket(url);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('could not connect to the browser')); });
     ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pending.has(d.id)) { const p = pending.get(d.id); pending.delete(d.id); d.error ? p.rej(new Error(d.error.message)) : p.res(d.result); } else for (const l of listeners) l(d); };
@@ -32,6 +36,8 @@ async function start() {
 }
 function call(method, params = {}, sessionId) { return new Promise((res, rej) => { const id = ++nextId; pending.set(id, { res, rej }); ws.send(JSON.stringify({ id, method, params, sessionId })); setTimeout(() => { if (pending.has(id)) { pending.delete(id); rej(new Error(method + ' timed out')); } }, 30000); }); }
 function keepAlive() { clearTimeout(idleTimer); idleTimer = setTimeout(stop, 120000); }
+let profileDir = '';
+function cleanProfile(dir) { if (dir) setTimeout(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} }, 500); }
 export function stop() { try { proc && proc.kill(); } catch {} proc = null; ws = null; }
 
 // is this host somewhere on a private/local network? (checked again after DNS, so names can't sneak in)
