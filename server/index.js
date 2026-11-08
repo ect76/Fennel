@@ -75,6 +75,8 @@ function publish(a) {
       W.remember('learned about ' + r.topic + ': ' + r.facts[0], 3);
       W.log('researched ' + r.topic);
     } else bookFallback();
+  } else if (j.kind === 'drawing') { finishDrawing(a, j.result);
+  } else if (j.kind === 'graffiti') { if (a.made) finishGraffiti(a, j.result);
   } else if (j.kind === 'page') {
     const r = j.result;
     if (r) {
@@ -87,6 +89,20 @@ function publish(a) {
     } else W.log('tried to write but nothing came');
   }
   W.bump();
+}
+function finishDrawing(a, art) {
+  const dr = M.makeDrawing(a.subject, a.title, a.scrap);
+  if (art) dr.art = 'claude';
+  const svg = art || drawingSVG(dr); writeMedia('drawings/' + dr.id + '.svg', svg);
+  W.addDiary('drawing', 'drew "' + dr.title + '"' + (a.scrap ? ' on the back of an old envelope. no money for paper.' : '. ' + pick(['pinned it on the board on the high street.', 'it came out wobbly. i like it anyway.', 'not sure about the left side.', 'it looks like how it felt.'])), 'rules', { drawing: dr.id });
+  W.log('drew "' + dr.title + '"');
+  siteUpdate([['drawings/' + dr.id + '.svg', svg]], 'percy drew ' + dr.title);
+}
+function finishGraffiti(a, art) {
+  const g = a.made; const svg = art || graffitiSVG({ key: keyFor(g.subject), seed: g.seed, tag: g.tag });
+  writeMedia('graffiti/' + g.id + '.svg', svg); g.img = '/media/graffiti/' + g.id + '.svg'; if (art) { g.h = g.w * 840 / 800; }
+  W.addDiary('graffiti', 'painted ' + (g.subject || 'something') + ' ' + g.where + (g.tag ? '. it says "' + g.tag + '".' : '.'), a.src === 'claude' ? 'claude' : 'rules');
+  siteUpdate([['graffiti/' + g.id + '.svg', svg]], 'percy painted on a wall'); W.bump();
 }
 function bookFallback() {
   const b = W.builtinBook();
@@ -103,6 +119,8 @@ W.setHooks({
       if (claude && topic) { a.subject = topic; later(a, 'research', M.research(topic, q && q.topic === topic ? q.question : '')); W.setThought('looking up ' + topic + '.'); }
     }
     if (a.id === 'write' && claude) later(a, 'page', M.writePage(a.subject, a.title));
+    if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
+    if (a.id === 'graffiti' && claude && a.wall) later(a, 'graffiti', M.paintGraffiti({ subject: a.subject, tag: a.title }));
     if (a.id === 'shrine') readNotes(claude);
     if (a.id === 'inspect') { const th = W.thingById(a.thing); if (th && !th.seen) firstLook(th, claude); }
     if (claude && a.total >= 60 && Math.random() < 0.65) a.museAt = a.total * (0.35 + Math.random() * 0.3);
@@ -111,19 +129,8 @@ W.setHooks({
   onFinish(a) {
     if (a.job) { a.job.ended = true; if (a.job.done) publish(a); }
     else if (a.id === 'read') bookFallback();
-    if (a.id === 'draw') {
-      const dr = M.makeDrawing(a.subject, a.title, a.scrap);
-      const svg = drawingSVG(dr); writeMedia('drawings/' + dr.id + '.svg', svg);
-      W.addDiary('drawing', 'drew "' + dr.title + '"' + (a.scrap ? ' on the back of an old envelope. no money for paper.' : '. ') + (a.scrap ? '' : pick(['it came out wobbly. i like it anyway.', 'not sure about the left side.', 'pinned it on the board on the high street.', 'it looks like how it felt.'])), 'rules', { drawing: dr.id });
-      W.log('drew "' + dr.title + '"');
-      siteUpdate([['drawings/' + dr.id + '.svg', svg]], 'percy drew ' + dr.title);
-    }
-    if (a.id === 'graffiti' && a.made) {
-      const g = a.made, svg = graffitiSVG({ key: keyFor(g.subject), seed: g.seed, tag: g.tag });
-      writeMedia('graffiti/' + g.id + '.svg', svg); g.img = '/media/graffiti/' + g.id + '.svg';
-      W.addDiary('graffiti', 'painted ' + (g.subject || 'something') + ' ' + g.where + (g.tag ? '. it says "' + g.tag + '".' : '.'), a.src === 'claude' ? 'claude' : 'rules');
-      siteUpdate([['graffiti/' + g.id + '.svg', svg]], 'percy painted on a wall');
-    }
+    if (a.id === 'draw' && !(a.job && a.job.kind === 'drawing')) finishDrawing(a, null);
+    if (a.id === 'graffiti' && a.made && !(a.job && a.job.kind === 'graffiti')) finishGraffiti(a, null);
     if (a.id === 'buy' && a.bought) {
       W.addDiary('bought', 'bought ' + a.bought.name + ' for ' + a.bought.price + ' coins. ' + pick(['carried it home very carefully.', 'counted the coins out one at a time.', 'it\'s mine now. that feels strange.']));
     }
@@ -340,7 +347,7 @@ const server = http.createServer(async (req, res) => {
       if (!file.startsWith(MEDIA)) return send(res, 403, 'no', 'text/plain');
       fs.readFile(file, (err, data) => {
         if (err) return send(res, 404, 'not found', 'text/plain');
-        res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'public, max-age=86400' });
+        res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'public, max-age=86400', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:", 'x-content-type-options': 'nosniff' });
         res.end(req.method === 'HEAD' ? undefined : data);
       });
       return;

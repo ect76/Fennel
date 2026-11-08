@@ -30,6 +30,9 @@ export const config = {
   printShopUrl: (env.PRINT_SHOP_URL || '').trim(),
   printCoins: num(env.PRINT_COINS, 10), // coins Percy finds in his tin when you record a real print sale
 
+  // Only used for testing: the town time a brand-new world starts at (minutes after midnight)
+  startTime: Number.isFinite(Number(env.START_TIME)) && env.START_TIME ? Number(env.START_TIME) : 7 * 60,
+
   // Password for adding things to town from the web page. Leave empty to turn those tools off.
   keeperKey: (env.KEEPER_KEY || '').trim(),
 };

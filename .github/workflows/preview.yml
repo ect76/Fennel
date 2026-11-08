@@ -1,0 +1,51 @@
+# Takes screenshots of the town (day and night, desktop and phone) with a stand-in for Claude,
+# so changes to the 3D world can be checked before they reach main.
+name: Preview screenshots
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+jobs:
+  shoot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the browser
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright@1.48.2 >/dev/null
+          npx playwright install --with-deps chromium
+      - name: Start a stand-in for Claude and two towns (day and night)
+        run: |
+          node .github/preview/mock-claude.mjs &
+          DATA_DIR=/tmp/day PORT=3001 START_TIME=660 TIME_SCALE=1 ANTHROPIC_API_KEY=x ANTHROPIC_BASE_URL=http://localhost:3099 KEEPER_KEY=k node server/index.js > /tmp/day.log 2>&1 &
+          DATA_DIR=/tmp/night PORT=3002 START_TIME=1350 TIME_SCALE=1 ANTHROPIC_API_KEY=x ANTHROPIC_BASE_URL=http://localhost:3099 KEEPER_KEY=k node server/index.js > /tmp/night.log 2>&1 &
+          sleep 3
+          for port in 3001 3002; do
+            for xz in "-14 10" "-6 9" "6 7" "-12 3" "12 4" "-5 14" "16 9" "-18 -6" "8 -14" "20 -10"; do
+              set -- $xz
+              r=$(curl -s -X POST localhost:$port/api/keeper/make -H 'content-type: application/json' -d "{\"key\":\"k\",\"description\":\"a statue of a cat\",\"x\":$1,\"z\":$2,\"size\":2.5}")
+              echo "$r"; case "$r" in *'"ok":true'*) break;; esac
+            done
+            curl -s -X POST localhost:$port/api/notes -H 'content-type: application/json' -d '{"text":"hello percy"}'
+          done
+          sleep 8
+      - name: Take screenshots
+        run: |
+          mkdir -p shots
+          cp .github/preview/shoot.mjs /tmp/pw/ && cd /tmp/pw
+          node shoot.mjs http://localhost:3001/ $GITHUB_WORKSPACE/shots day
+          node shoot.mjs http://localhost:3002/ $GITHUB_WORKSPACE/shots night
+      - name: Server logs
+        if: always()
+        run: tail -n 30 /tmp/day.log /tmp/night.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots/

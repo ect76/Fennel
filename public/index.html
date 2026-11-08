@@ -3,25 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Fennel of Mossbrook</title>
-<meta name="description" content="Fennel is a small autonomous frog living in a floating island town. He makes his own decisions, keeps a diary, and remembers the people who visit.">
+<title>Percy of Mossbrook</title>
+<meta name="description" content="Percy is a small autonomous penguin living alone in a village surrounded by fog. He makes his own decisions, keeps a diary, draws, and remembers the people who visit.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Gaegu:wght@400;700&display=swap">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
-/* Layout: scene-first. The live 3D island on top (left on wide screens); his mind, diary and pages beside it. */
+/* Layout: scene-first. The live 3D village on top (left on wide screens); his mind, diary and pages beside it. */
 :root{
-  --bg:#edf1ea; --surface:#fbfcf9; --surface-2:#e2e9de; --ink:#1d2a22; --muted:#56665c; --line:#cfd9cb;
-  --moss:#3f6e2e; --pond:#20666e; --plum:#5d4c86; --danger:#a8432f; --on-accent:#ffffff; --claude-tint:#ece7f6;
-  --hud-bg:rgba(10,16,22,.6); --hud-ink:#f2f6f0; --bubble-bg:#fffdf6; --bubble-ink:#1d2a22;
+  --bg:#eef0ec; --surface:#fbfcfa; --surface-2:#e3e7e1; --ink:#1c2420; --muted:#56635b; --line:#d0d7cf;
+  --accent:#1f6470; --plum:#5d4c86; --danger:#a8432f; --on-accent:#ffffff; --tint:#ebe7f5;
+  --hud-bg:rgba(12,16,22,.6); --hud-ink:#f2f5f0; --bubble-bg:#fffdf6; --bubble-ink:#1c2420;
   --c-full:#c98a1e; --c-energy:#4f8a3a; --c-wonder:#6f5aa6; --c-joy:#c9506f; --c-calm:#2a8a92;
   --f-voice:"Gaegu","Comic Neue","Segoe Print",cursive;
   --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#10161a; --surface:#182026; --surface-2:#212b31; --ink:#e5ece6; --muted:#9aaaa1; --line:#2c373d;
-  --moss:#8cc46a; --pond:#62c2c9; --plum:#ad9ade; --danger:#e88a74; --on-accent:#0d1418; --claude-tint:#262238;
+  --bg:#10151a; --surface:#182027; --surface-2:#212a31; --ink:#e5ebe6; --muted:#9ba9a1; --line:#2c373e;
+  --accent:#6cc4cc; --plum:#ad9ade; --danger:#e88a74; --on-accent:#0d1418; --tint:#262238;
   --c-full:#e3a640; --c-energy:#7fbf63; --c-wonder:#a28ee0; --c-joy:#e67d98; --c-calm:#5cc0c7;
   color-scheme:dark}}
 *{box-sizing:border-box}
@@ -29,43 +30,48 @@ html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px}
 [hidden]{display:none!important}
-.app{max-width:1260px;margin:0 auto;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
-@media (min-width:920px){.app{grid-template-columns:minmax(0,1.3fr) minmax(340px,1fr);align-items:start}
-  .stage{position:sticky;top:14px;height:min(84vh,800px)!important}}
-button,input,textarea{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--pond);outline-offset:2px}
-a{color:var(--pond)}
+.app{max-width:1320px;margin:0 auto;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:940px){.app{grid-template-columns:minmax(0,1.45fr) minmax(340px,1fr);align-items:start}.stage{position:sticky;top:14px;height:min(86vh,820px)!important}}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
 
-.stage{position:relative;height:clamp(320px,58vh,580px);border-radius:14px;overflow:hidden;background:#9fcde4}
+.stage{position:relative;height:clamp(340px,60vh,600px);border-radius:14px;overflow:hidden;background:#b9cdd8;user-select:none;-webkit-user-select:none}
+.stage.full{position:fixed!important;inset:0;height:100%!important;border-radius:0;z-index:50;top:0!important}
 #world{display:block;width:100%;height:100%;touch-action:pan-y}
-.stage.placing #world{touch-action:none;cursor:crosshair}
-.hud{position:absolute;left:10px;right:10px;display:flex;gap:8px;align-items:center;justify-content:space-between;pointer-events:none}
-.hud.top{top:10px}.hud.bottom{bottom:10px;align-items:flex-end}
-.chip{pointer-events:auto;background:var(--hud-bg);color:var(--hud-ink);border-radius:999px;padding:6px 12px;font-size:13px;
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;gap:8px;align-items:center}
+.stage.explore #world,.stage.placing #world,.stage.full #world{touch-action:none}
+.stage.placing #world{cursor:crosshair}
+.hud{position:absolute;left:10px;right:10px;display:flex;gap:8px;align-items:center;justify-content:space-between;pointer-events:none;z-index:3}
+.hud.top{top:calc(10px + env(safe-area-inset-top,0px))}.hud.bottom{bottom:calc(10px + env(safe-area-inset-bottom,0px));align-items:flex-end}
+.stage:not(.full) .hud.top{top:10px}.stage:not(.full) .hud.bottom{bottom:10px}
+.cluster{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.chip{pointer-events:auto;background:var(--hud-bg);color:var(--hud-ink);border-radius:999px;padding:6px 12px;font-size:13px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;gap:8px;align-items:center;border:0}
 .clock b{font-variant-numeric:tabular-nums;font-size:15px}
-.doing{max-width:70%;line-height:1.3;border-radius:12px}
-.hud button.chip{border:0;cursor:pointer;font-size:12.5px}
-.zoom{padding:3px;gap:2px}
-.zoom button{border:0;background:transparent;color:var(--hud-ink);width:30px;height:28px;border-radius:999px;font-size:18px;line-height:1;cursor:pointer}
-.zoom button:hover{background:rgba(255,255,255,.15)}
-.bubble{position:absolute;left:0;top:0;max-width:240px;background:var(--bubble-bg);color:var(--bubble-ink);
-  font-family:var(--f-voice);font-size:17px;line-height:1.15;padding:7px 11px 8px;border-radius:14px;
-  transform:translate(-50%,calc(-100% - 10px));pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.18);transition:opacity .3s}
+.doing{max-width:62%;line-height:1.3;border-radius:12px}
+.seg{padding:3px;gap:2px}
+.seg button,.iconbtn{border:0;background:transparent;color:var(--hud-ink);border-radius:999px;padding:4px 11px;font-size:12.5px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--hud-ink);color:#10161a;font-weight:700}
+.iconbtn{width:32px;height:30px;padding:0;font-size:17px;line-height:1}
+.iconbtn:hover,.seg button:hover{background:rgba(255,255,255,.14)}
+.bubble{position:absolute;left:0;top:0;max-width:250px;background:var(--bubble-bg);color:var(--bubble-ink);font-family:var(--f-voice);font-size:17px;line-height:1.15;padding:7px 11px 8px;border-radius:14px;transform:translate(-50%,calc(-100% - 10px));pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.2);transition:opacity .3s;z-index:2}
 .bubble::after{content:"";position:absolute;left:50%;bottom:-7px;width:12px;height:12px;background:var(--bubble-bg);transform:translateX(-50%) rotate(45deg);border-radius:2px}
-.banner{position:absolute;left:50%;top:54px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 20px);
-  background:var(--hud-bg);color:var(--hud-ink);border-radius:12px;padding:8px 10px 8px 14px;display:flex;gap:10px;align-items:center;font-size:14px;backdrop-filter:blur(6px)}
+.label{position:absolute;left:0;top:0;transform:translate(-50%,-100%);pointer-events:none;background:rgba(12,16,22,.55);color:#f2f5f0;font-size:11.5px;padding:2px 8px;border-radius:999px;white-space:nowrap;z-index:1;transition:opacity .25s}
+.banner{position:absolute;left:50%;top:58px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 20px);background:var(--hud-bg);color:var(--hud-ink);border-radius:12px;padding:8px 10px 8px 14px;display:flex;gap:10px;align-items:center;font-size:14px;backdrop-filter:blur(8px);z-index:4}
 .banner button{border:0;border-radius:999px;padding:4px 12px;background:var(--hud-ink);color:#10161a;font-weight:700;cursor:pointer}
+.dpad{position:absolute;right:calc(14px + env(safe-area-inset-right,0px));bottom:70px;display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:4px;z-index:3}
+.dpad button{border:0;border-radius:12px;background:var(--hud-bg);color:var(--hud-ink);font-size:20px;touch-action:none;backdrop-filter:blur(8px)}
+.dpad .up{grid-column:2;grid-row:1}.dpad .left{grid-column:1;grid-row:2}.dpad .right{grid-column:3;grid-row:2}.dpad .down{grid-column:2;grid-row:3}
+.hint-explore{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);background:var(--hud-bg);color:var(--hud-ink);font-size:12.5px;padding:5px 12px;border-radius:999px;z-index:3;pointer-events:none;white-space:nowrap}
 .nogl{position:absolute;inset:0;display:grid;place-items:center;color:#10161a;padding:20px;text-align:center}
 
 .panel{min-width:0;display:grid;gap:14px}
 .who{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
-.who h1{font-family:var(--f-voice);font-weight:700;font-size:40px;line-height:1;margin:0;letter-spacing:.5px}
+.who h1{font-family:var(--f-voice);font-weight:700;font-size:42px;line-height:1;margin:0}
 .who p{margin:0;color:var(--muted);font-size:14px}
 .tag{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:700}
 .status{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
-.status .on::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c-energy);margin-right:6px;vertical-align:1px}
-.status .off::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c-full);margin-right:6px;vertical-align:1px}
+.status .dot::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--c-energy)}
+.status .dot.off::before{background:var(--c-full)}
 .meters{display:grid;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .meter{display:grid;grid-template-columns:76px minmax(0,1fr) 30px;gap:10px;align-items:center;font-size:13px}
 .meter span:first-child{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11.5px}
@@ -74,19 +80,19 @@ a{color:var(--pond)}
 .meter b{font-variant-numeric:tabular-nums;text-align:right;font-weight:700}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .tabs button{border:0;background:none;padding:9px 11px;cursor:pointer;color:var(--muted);font-weight:700;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
-.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--pond)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 .tabpanel{display:grid;gap:16px;min-width:0}
 h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
 .voice{font-family:var(--f-voice);font-size:19px;line-height:1.25}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 14px;cursor:pointer;font-weight:700}
-.btn.primary{background:var(--pond);border-color:var(--pond);color:var(--on-accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn:disabled{opacity:.5;cursor:default}
 .btn.small{padding:5px 10px;font-size:13px;font-weight:400}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .hint{font-size:13px;color:var(--muted);margin:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .pill{border-radius:999px;padding:3px 10px;font-size:13px;background:var(--surface-2)}
-.pill.like{background:color-mix(in srgb,var(--moss) 18%,transparent)}
+.pill.like{background:color-mix(in srgb,var(--c-energy) 18%,transparent)}
 .pill.fear{background:color-mix(in srgb,var(--danger) 16%,transparent)}
 .pill.obs{background:color-mix(in srgb,var(--plum) 20%,transparent)}
 ul.plain{list-style:none;margin:0;padding:0;display:grid;gap:6px}
@@ -94,39 +100,36 @@ ul.plain li{font-family:var(--f-voice);font-size:18px;line-height:1.2}
 ul.plain li small{font-family:var(--f-body);font-size:12px;color:var(--muted);margin-left:6px}
 details.know{border-bottom:1px solid var(--line);padding:6px 0}
 details.know summary{cursor:pointer;font-weight:700}
-details.know p{font-family:var(--f-voice);font-size:18px;line-height:1.2;margin:6px 0 2px;white-space:pre-line}
+details.know p,.notebook p{font-family:var(--f-voice);font-size:18px;line-height:1.2;margin:6px 0 2px;white-space:pre-line}
 .srcs{font-size:12.5px;display:flex;flex-direction:column;gap:2px;margin-top:4px}
 .srcs a{overflow-wrap:anywhere}
 .diary{list-style:none;margin:0;padding:0;display:grid;gap:12px}
 .entry{display:grid;gap:2px;padding-bottom:12px;border-bottom:1px dashed var(--line)}
-.entry .when{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.entry .when{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .entry .txt{font-family:var(--f-voice);font-size:19px;line-height:1.22;white-space:pre-line;overflow-wrap:anywhere}
-.entry.big{background:var(--claude-tint);border-radius:12px;padding:10px 12px;border-bottom:0}
+.entry.big{background:var(--tint);border-radius:12px;padding:10px 12px;border-bottom:0}
+.entry img{max-width:180px;border-radius:6px;margin-top:6px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .page{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:16px 18px;box-shadow:0 2px 8px rgba(0,0,0,.06);display:grid;gap:6px}
 .page h3{font-family:var(--f-voice);font-size:26px;line-height:1.05;margin:0}
 .page .txt{font-family:var(--f-voice);font-size:19px;line-height:1.25;white-space:pre-line;overflow-wrap:anywhere}
-.page small{color:var(--muted)}
-.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}
 .gallery figure{margin:0;display:grid;gap:4px}
-.gallery canvas{width:100%;aspect-ratio:1;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15);max-width:100%}
+.gallery img{width:100%;aspect-ratio:1;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15);background:#f5f2e7;max-width:100%}
 .gallery figcaption{font-family:var(--f-voice);font-size:17px;line-height:1.1}
 .gallery small{color:var(--muted);font-size:12px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px}
 label.fld{display:grid;gap:4px;font-size:13px;color:var(--muted)}
-input[type=text],input[type=password],textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;color:var(--ink)}
+input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;color:var(--ink)}
 textarea{resize:vertical;min-height:64px}
-.kinds{display:flex;flex-wrap:wrap;gap:6px}
-.kinds label{cursor:pointer;position:relative}
-.kinds input{position:absolute;opacity:0;pointer-events:none}
-.kinds span{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:13.5px;background:var(--bg)}
-.kinds input:checked+span{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.kinds input:focus-visible+span{outline:2px solid var(--pond);outline-offset:2px}
-.things{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.things li{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:8px}
-.things li div{min-width:0}.things b{display:block;overflow-wrap:anywhere}.things small{color:var(--muted)}
+.pad{width:100%;max-width:420px;aspect-ratio:2/1;background:repeating-linear-gradient(0deg,#cdbca6 0 22px,#c4b29a 22px 24px);border-radius:8px;touch-action:none;cursor:crosshair}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.swatches button{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
+.swatches button[aria-pressed="true"]{border-color:var(--ink);transform:scale(1.12)}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.list li{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:8px}
+.list li div{min-width:0}.list b{display:block;overflow-wrap:anywhere}.list small{color:var(--muted)}
 .note{border-radius:12px;background:var(--surface);border:1px solid var(--line);padding:10px 12px;display:grid;gap:4px}
 .note q{font-style:italic;overflow-wrap:anywhere}
-.note .voice{font-size:18px}
 .note small{color:var(--muted)}
 footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 @media (prefers-reduced-motion:reduce){.bar i,.bubble{transition:none}}
@@ -134,36 +137,50 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 </head>
 <body>
 <div class="app">
-  <section class="stage" id="stage" aria-label="Mossbrook, a small floating island town">
+  <section class="stage" id="stage" aria-label="Mossbrook, a small village surrounded by fog">
     <canvas id="world"></canvas>
-    <div class="hud top">
-      <div class="chip clock"><span id="clockDay">Day 1</span><b id="clockTime">--:--</b></div>
-      <div class="chip" id="weatherChip">clear</div>
-    </div>
+    <div id="labels"></div>
     <div class="bubble" id="bubble" style="opacity:0"></div>
-    <div class="banner" id="banner" hidden><span id="bannerText">Tap the island to place it</span><button type="button" id="cancelPlace">Cancel</button></div>
+    <div class="hud top">
+      <div class="chip clock"><span id="clockDay">Day 1</span><b id="clockTime">--:--</b><span id="weatherWord"></span></div>
+      <div class="cluster">
+        <div class="chip seg" role="group" aria-label="View">
+          <button type="button" data-mode="follow" aria-pressed="true">Percy</button>
+          <button type="button" data-mode="explore" aria-pressed="false">Explore</button>
+          <button type="button" data-mode="overview" aria-pressed="false">Town</button>
+        </div>
+      </div>
+    </div>
+    <div class="banner" id="banner" hidden><span id="bannerText"></span><button type="button" id="cancelPlace">Cancel</button></div>
+    <div class="hint-explore" id="exploreHint" hidden>WASD or arrows to walk · drag to look · Shift to run</div>
+    <div class="dpad" id="dpad" hidden>
+      <button type="button" class="up" data-k="f" aria-label="Walk forward">▲</button>
+      <button type="button" class="left" data-k="l" aria-label="Walk left">◀</button>
+      <button type="button" class="right" data-k="r" aria-label="Walk right">▶</button>
+      <button type="button" class="down" data-k="b" aria-label="Walk back">▼</button>
+    </div>
     <div class="hud bottom">
       <div class="chip doing" id="doing">connecting to Mossbrook…</div>
-      <div class="row" style="gap:6px;pointer-events:none">
-        <div class="chip zoom" role="group" aria-label="Zoom"><button type="button" id="zoomIn" aria-label="Zoom in">+</button><button type="button" id="zoomOut" aria-label="Zoom out">−</button></div>
-        <button type="button" class="chip" id="camBtn">Whole island</button>
+      <div class="cluster">
+        <div class="chip seg"><button type="button" class="iconbtn" id="zoomIn" aria-label="Zoom in">+</button><button type="button" class="iconbtn" id="zoomOut" aria-label="Zoom out">−</button></div>
+        <button type="button" class="chip iconbtn" id="fullBtn" aria-label="Full screen" title="Full screen" style="width:auto;padding:6px 12px">⛶</button>
       </div>
     </div>
   </section>
 
   <section class="panel">
     <header class="who">
-      <h1>Fennel</h1>
-      <p>a small frog in Mossbrook · feeling <span class="tag" id="mood">…</span> · <span class="tag" id="coins">0</span> coins</p>
+      <h1>Percy</h1>
+      <p>a small penguin in Mossbrook · feeling <span class="tag" id="mood">…</span> · <span class="tag" id="coins">0</span> coins</p>
     </header>
-    <div class="status"><span id="mindStatus" class="on">…</span><span id="watching"></span><span id="season"></span></div>
+    <div class="status"><span id="mindStatus" class="dot">…</span><span id="watching"></span><span id="season"></span></div>
     <div class="meters" id="meters"></div>
 
-    <nav class="tabs" role="tablist" aria-label="Fennel">
+    <nav class="tabs" role="tablist" aria-label="Percy">
       <button role="tab" aria-selected="true" data-tab="mind">Mind</button>
       <button role="tab" aria-selected="false" data-tab="diary">Diary</button>
-      <button role="tab" aria-selected="false" data-tab="pages">Pages</button>
       <button role="tab" aria-selected="false" data-tab="drawings">Drawings</button>
+      <button role="tab" aria-selected="false" data-tab="pages">Pages</button>
       <button role="tab" aria-selected="false" data-tab="stone">The Stone</button>
       <button role="tab" aria-selected="false" data-tab="keeper" id="keeperTab" hidden>Keeper</button>
     </nav>
@@ -175,17 +192,22 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
       <div><h2>Wondering about</h2><ul class="plain" id="questions"></ul></div>
       <div><h2>Beliefs</h2><ul class="plain" id="beliefs"></ul></div>
       <div><h2>Goals</h2><ul class="plain" id="goals"></ul></div>
+      <div><h2>His things</h2><ul class="plain" id="inventory"></ul></div>
       <div><h2>Leanings</h2><p class="hint" id="leanings"></p></div>
       <div><h2>Wants to look up</h2><ul class="plain" id="queue"></ul></div>
       <div><h2>What he has learned</h2><div id="knowledge"></div></div>
+      <details class="know notebook" id="notebookWrap" hidden><summary>Fennel's notebook</summary><p class="hint" style="font-family:var(--f-body);font-size:13px">Found under a loose floorboard in Percy's cottage. Fennel, a frog, lived there before him.</p><div id="notebook"></div></details>
     </div>
     <div class="tabpanel" id="p-diary" hidden><ol class="diary" id="diary"></ol></div>
-    <div class="tabpanel" id="p-pages" hidden><p class="hint">Pages he has written and pinned up for visitors.</p><div id="pages" style="display:grid;gap:14px"></div></div>
-    <div class="tabpanel" id="p-drawings" hidden><p class="hint">He draws most days and sells some at the market stall.</p><div class="gallery" id="gallery"></div></div>
+    <div class="tabpanel" id="p-drawings" hidden>
+      <p class="hint">He leaves his drawings out on the market stall. If you take one, it vanishes from the stall and he finds coins in his honesty tin. He'll never know who it was.</p>
+      <div class="gallery" id="gallery"></div>
+    </div>
+    <div class="tabpanel" id="p-pages" hidden><p class="hint">Pages he has written and pinned up.</p><div id="pages" style="display:grid;gap:14px"></div></div>
     <div class="tabpanel" id="p-stone" hidden>
       <form class="card" id="noteForm">
         <h2 style="margin:0">Leave a note at the Humming Stone</h2>
-        <p class="hint">He finds notes when he visits the stone. He'll remember them.</p>
+        <p class="hint">He finds notes when he visits the stone, and he remembers them.</p>
         <label class="fld">Your note<textarea id="noteText" maxlength="280" required></textarea></label>
         <label class="fld">Sign it (optional)<input type="text" id="noteFrom" maxlength="30"></label>
         <div class="row"><button type="submit" class="btn primary">Leave note</button><span class="hint" id="noteStatus" role="status"></span></div>
@@ -200,350 +222,56 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <span class="hint" id="keyStatus" role="status"></span>
       </form>
       <div id="keeperTools" hidden style="display:grid;gap:14px">
-        <form class="card" id="placeForm">
-          <h2 style="margin:0">Add something to the town</h2>
-          <div class="kinds" id="kinds" role="radiogroup" aria-label="Shape"></div>
-          <label class="fld">What is it called?<input type="text" id="thingName" maxlength="40" required></label>
-          <label class="fld">Anything he'd notice about it? (optional)<textarea id="thingDesc" maxlength="240"></textarea></label>
-          <div class="row"><button type="submit" class="btn primary">Choose a spot</button><span class="hint" id="placeStatus" role="status"></span></div>
+        <form class="card" id="makeForm">
+          <h2 style="margin:0">Make something</h2>
+          <p class="hint">Describe it, add a picture, or both. Claude builds a 3D version and you choose where it goes.</p>
+          <label class="fld">What is it?<input type="text" id="makeDesc" maxlength="200" placeholder="a statue of a cat sitting on a plinth"></label>
+          <label class="fld">Picture (optional)<input type="file" id="makeImg" accept="image/*"></label>
+          <label class="fld">Size<select id="makeSize"><option value="1.4">Small, like a bench</option><option value="3" selected>Medium, like a statue</option><option value="5.5">Large, like a car or a tree</option><option value="8">Huge, like a spaceship</option></select></label>
+          <div class="row"><button type="submit" class="btn primary">Choose a spot</button><span class="hint" id="makeStatus" role="status"></span></div>
+        </form>
+        <form class="card" id="graffitiForm">
+          <h2 style="margin:0">Paint graffiti</h2>
+          <p class="hint">Draw with your finger or mouse, or upload a picture. Then tap a wall.</p>
+          <canvas class="pad" id="pad" width="840" height="420"></canvas>
+          <div class="row"><div class="swatches" id="swatches"></div><button type="button" class="btn small" id="padClear">Clear</button></div>
+          <label class="fld">Or a picture<input type="file" id="graffitiImg" accept="image/*"></label>
+          <label class="fld">Size on the wall<select id="graffitiSize"><option value="1.2">Small</option><option value="2.2" selected>Medium</option><option value="3.6">Large</option></select></label>
+          <div class="row"><button type="submit" class="btn primary">Choose a wall</button><span class="hint" id="graffitiStatus" role="status"></span></div>
+        </form>
+        <form class="card" id="buildForm">
+          <h2 style="margin:0">Build</h2>
+          <label class="fld">Kind of building<select id="buildKind"><option value="house">House</option><option value="shop">Shop</option><option value="cafe">Café</option><option value="workshop">Workshop</option><option value="garden">Garden</option><option value="museum">Museum</option><option value="hall">Hall</option><option value="tower">Clock tower</option></select></label>
+          <label class="fld">Name<input type="text" id="buildName" maxlength="50" placeholder="Hattersley's Hats"></label>
+          <label class="fld">Anything about it (optional)<textarea id="buildDesc" maxlength="240"></textarea></label>
+          <div class="row"><button type="submit" class="btn primary">Choose a spot</button><button type="button" class="btn" id="growBtn">Push back the fog</button><span class="hint" id="buildStatus" role="status"></span></div>
+        </form>
+        <form class="card" id="stockForm">
+          <h2 style="margin:0">Stock a shop</h2>
+          <p class="hint">Put something in a shop for him to find. He decides if it's worth saving up for.</p>
+          <label class="fld">Shop<select id="stockShop"></select></label>
+          <label class="fld">Item<input type="text" id="stockName" maxlength="60" placeholder="a brass telescope"></label>
+          <div class="row"><label class="fld" style="flex:1">Price in coins<input type="number" id="stockPrice" min="1" max="999" value="12"></label></div>
+          <label class="fld">Description (optional)<input type="text" id="stockDesc" maxlength="240"></label>
+          <label class="fld">Picture (optional)<input type="file" id="stockImg" accept="image/*"></label>
+          <div class="row"><button type="submit" class="btn primary">Put it in the window</button><span class="hint" id="stockStatus" role="status"></span></div>
         </form>
         <form class="card" id="bookForm">
           <h2 style="margin:0">Leave a book at the library</h2>
-          <p class="hint">He'll research this on the web next time he's at the library.</p>
+          <p class="hint">He'll research it on the web next time he's at the library.</p>
           <label class="fld">Book about<input type="text" id="bookTopic" maxlength="60" required></label>
           <div class="row"><button type="submit" class="btn">Leave the book</button><span class="hint" id="bookStatus" role="status"></span></div>
         </form>
-        <div><h2>Things in town</h2><ul class="things" id="things"></ul></div>
-        <div><h2>Notes</h2><ul class="things" id="keeperNotes"></ul></div>
+        <div class="card"><h2 style="margin:0">Things you've made</h2><ul class="list" id="kThings"></ul></div>
+        <div class="card"><h2 style="margin:0">Graffiti</h2><ul class="list" id="kGraffiti"></ul></div>
+        <div class="card"><h2 style="margin:0">In the shops</h2><ul class="list" id="kItems"></ul></div>
+        <div class="card" id="kPrintsWrap" hidden><h2 style="margin:0">Real print sales</h2><p class="hint">When someone buys a real print through your shop link, record it here so Percy finds coins in his tin.</p><ul class="list" id="kPrints"></ul></div>
+        <div class="card"><h2 style="margin:0">Notes</h2><ul class="list" id="kNotes"></ul></div>
       </div>
     </div>
-    <footer>Fennel lives here day and night. His thoughts are written by Claude; his world runs on its own.</footer>
+    <footer>Percy lives here day and night. His thoughts are written by Claude; his world runs on its own. <span id="siteLink"></span></footer>
   </section>
 </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-(function(){
-"use strict";
-const $=s=>document.querySelector(s);
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const plainName=n=>String(n).replace(/^(a|an|the)\s+/i,'').trim()||'thing';
-const NEEDS=[['fullness','Fullness','--c-full'],['energy','Energy','--c-energy'],['wonder','Wonder','--c-wonder'],['joy','Joy','--c-joy'],['calm','Calm','--c-calm']];
-const KINDS={statue:'Statue',lighthouse:'Lighthouse',telescope:'Telescope',mushrooms:'Mushroom ring',phonebox:'Phone box',crate:'Mystery crate',sign:'Signpost',tree:'Blossom tree',bench:'Bench',train:'Little train'};
-const PLACES={square:{bx:0,bz:0,depth:0},home:{name:'his cottage',bx:-10,bz:8,depth:4.6},bakery:{bx:9,bz:-7,depth:4.2},market:{bx:11,bz:4,depth:2.4},library:{bx:-4,bz:-12.5,depth:5},pond:{bx:3,bz:11.5,depth:8},lookout:{bx:-15,bz:-4,depth:0},shrine:{bx:13,bz:-12,depth:2.6},rim:{bx:20.6,bz:0,depth:0}};
-for(const k in PLACES){const p=PLACES[k];if(p.depth){const L=Math.hypot(p.bx,p.bz),off=p.depth/2+1.4;p.tx=p.bx-p.bx/L*off;p.tz=p.bz-p.bz/L*off}else{p.tx=p.bx;p.tz=p.bz}}
-PLACES.square.tz=2.8;
-const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
-const shorten=t=>{t=String(t||'');return t.length>130?t.slice(0,127).replace(/\s\S*$/,'')+'…':t};
-
-let L=null;      // live snapshot (every second)
-let ST=null;     // full state (when something changes)
-let lastRev=-1, clientT=null, lastLiveAt=0;
-
-/* ---------- data from the server ---------- */
-async function getJSON(u){const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw new Error(r.status);return r.json()}
-async function post(u,body){const r=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Something went wrong.');return j}
-let fetching=false;
-async function refreshState(){if(fetching)return;fetching=true;try{ST=await getJSON('/api/state');lastRev=ST.rev;renderAll()}catch(e){}finally{fetching=false}}
-function onLive(d){L=d;lastLiveAt=Date.now();clientT=d.t;if(d.rev!==lastRev)refreshState();renderHUD()}
-function connect(){
-  try{const es=new EventSource('/api/stream');es.onmessage=e=>{try{onLive(JSON.parse(e.data))}catch(_){}}}catch(e){}
-  setInterval(async()=>{if(Date.now()-lastLiveAt>5000){try{onLive(await getJSON('/api/live'))}catch(e){}}},2500);
-}
-
-/* ---------- panels ---------- */
-const meterEls={};
-(function(){const m=$('#meters');for(const [k,label,c] of NEEDS){const row=el('div','meter');row.append(el('span',null,label));const bar=el('div','bar');const i=el('i');i.style.background='var('+c+')';bar.append(i);row.append(bar);const b=el('b');row.append(b);m.append(row);meterEls[k]={i,b}}})();
-const WEATHER_WORD={clear:'clear',cloudy:'cloudy',rain:'raining',fog:'foggy',wind:'windy',snow:'snowing'};
-function renderHUD(){
-  if(!L)return;
-  $('#clockDay').textContent='Day '+L.day;$('#clockTime').textContent=L.time;
-  $('#weatherChip').textContent=WEATHER_WORD[L.weather]||L.weather;
-  $('#doing').textContent=L.doing;$('#mood').textContent=L.mood;$('#coins').textContent=L.coins;
-  for(const [k] of NEEDS){const v=Math.round(L.needs[k]);meterEls[k].i.style.width=v+'%';meterEls[k].b.textContent=v}
-  $('#watching').textContent=L.watchers+(L.watchers===1?' visitor':' visitors')+' watching';
-  $('#season').textContent=L.season;
-  $('#thoughtNow').textContent=L.thought?L.thought.text:'';
-}
-function list(ul,items,fmt){ul.textContent='';if(!items||!items.length){ul.append(el('li',null,'—'));return}for(const it of items)ul.append(fmt(it))}
-const LEAN={sleep:'sleep',nap:'naps',eat:'the bakery',flies:'catching flies',draw:'drawing',write:'writing',sell:'the market',read:'the library',pond:'the pond',stargaze:'stargazing',shrine:'the Humming Stone',rim:'the rim',wander:'wandering',explore:'exploring',tidy:'tidying',inspect:'new things'};
-const KIND_LABEL={summary:'end of day',thought:'thought',reflection:'reflection',learn:'learned',note:'a note',thing:'something new',drawing:'drawing',rim:'the rim',dream:'dream',page:'page',event:''};
-const tab=()=>document.querySelector('.tabs [aria-selected=true]').dataset.tab;
-function renderAll(){
-  if(!ST)return;
-  const m=ST.mind;const ms=$('#mindStatus');
-  ms.className=m.mode==='claude'?'on':'off';ms.textContent=m.mode==='claude'?'Thinking with Claude':'Simple rules ('+m.reason+')';
-  $('#keeperTab').hidden=!ST.keeper;
-  $('#selfDesc').textContent=ST.self.description;
-  const tr=$('#traits');tr.textContent='';
-  for(const l of ST.self.likes)tr.append(el('span','pill like','likes '+l));
-  for(const f of ST.self.fears)tr.append(el('span','pill fear','afraid of '+f));
-  if(ST.self.obsession)tr.append(el('span','pill obs','fixated on '+ST.self.obsession));
-  list($('#questions'),ST.questions,q=>el('li',null,q));
-  list($('#beliefs'),ST.beliefs,b=>el('li',null,b));
-  list($('#goals'),ST.goals,g=>{const li=el('li',null,g.text);if(g.action)li.append(el('small',null,'→ '+(LEAN[g.action]||g.action)));return li});
-  list($('#queue'),ST.researchQueue,q=>el('li',null,q));
-  const seek=[],avoid=[];for(const k in ST.leanings){(ST.leanings[k]>0?seek:avoid).push(LEAN[k]||k)}
-  $('#leanings').textContent=(seek.length||avoid.length)?[(seek.length?'Seeks out '+seek.join(', ')+'.':''),(avoid.length?'Avoids '+avoid.join(', ')+'.':'')].filter(Boolean).join(' '):'None yet. His nightly reflections shape what he leans toward.';
-  const kn=$('#knowledge');kn.textContent='';
-  if(!ST.knowledge.length)kn.append(el('p','hint','Nothing yet. He learns at the library.'));
-  for(const k of ST.knowledge.slice().reverse()){const d=el('details','know');d.append(el('summary',null,k.topic+' · day '+k.day));d.append(el('p',null,k.facts.map(f=>'· '+f).join('\n')));
-    if(k.sources&&k.sources.length){const s=el('div','srcs');for(const src of k.sources){const a=el('a',null,src.title||src.url);a.href=src.url;a.target='_blank';a.rel='noopener';s.append(a)}d.append(s)}kn.append(d)}
-  // diary
-  const ol=$('#diary');ol.textContent='';
-  for(const e of ST.diary.slice().reverse()){
-    const li=el('li','entry'+(['reflection','note','thing'].includes(e.kind)?' big':''));
-    li.append(el('div','when','Day '+e.day+' · '+e.time+(KIND_LABEL[e.kind]?' · '+KIND_LABEL[e.kind]:'')),el('div','txt',e.text));
-    if(e.sources&&e.sources.length){const s=el('div','srcs');for(const src of e.sources){const a=el('a',null,src.title||src.url);a.href=src.url;a.target='_blank';a.rel='noopener';s.append(a)}li.append(s)}
-    ol.append(li)}
-  // pages
-  const pg=$('#pages');pg.textContent='';
-  if(!ST.pages.length)pg.append(el('p','hint','He hasn\'t written any pages yet.'));
-  for(const p of ST.pages.slice().reverse()){const a=el('article','page');a.append(el('h3',null,p.title),el('small',null,'Day '+p.day),el('div','txt',p.body));pg.append(a)}
-  // drawings
-  const g=$('#gallery');g.textContent='';
-  for(const dr of ST.drawings.slice().reverse()){const f=el('figure');const cv=document.createElement('canvas');cv.setAttribute('role','img');cv.setAttribute('aria-label','Fennel\'s drawing: '+dr.title);doodle(cv,dr);f.append(cv,el('figcaption',null,dr.title),el('small',null,'Day '+dr.day+(dr.sold?' · sold':'')));g.append(f)}
-  // notes
-  const nw=$('#notes');nw.textContent='';
-  for(const n of ST.notes){const d=el('div','note');d.append(el('q',null,n.text));d.append(el('small',null,(n.from?'from '+n.from+' · ':'')+'left day '+n.day+(n.read?' · he found it on day '+n.readDay:' · still under the stone')));if(n.reaction)d.append(el('div','voice',n.reaction));nw.append(d)}
-  renderKeeperLists();
-  if(G)G.syncThings(ST.things);
-}
-document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b?'true':'false'));
-  for(const t of ['mind','diary','pages','drawings','stone','keeper'])$('#p-'+t).hidden=t!==b.dataset.tab;
-}));
-
-/* ---------- notes ---------- */
-$('#noteForm').addEventListener('submit',async e=>{
-  e.preventDefault();const st=$('#noteStatus');
-  try{await post('/api/notes',{text:$('#noteText').value,from:$('#noteFrom').value});$('#noteText').value='';st.textContent='Left under the stone. He\'ll find it next time he visits.';refreshState()}
-  catch(err){st.textContent=err.message}
-});
-
-/* ---------- keeper ---------- */
-let KEY='';try{KEY=localStorage.getItem('fennel-keeper')||''}catch(e){}
-async function unlock(k,quiet){
-  try{await post('/api/keeper/check',{key:k});KEY=k;try{localStorage.setItem('fennel-keeper',k)}catch(e){}$('#keeperTools').hidden=false;$('#keyForm').hidden=true}
-  catch(err){if(!quiet)$('#keyStatus').textContent=err.message}
-}
-$('#keyForm').addEventListener('submit',e=>{e.preventDefault();unlock($('#keeperKey').value.trim())});
-if(KEY)unlock(KEY,true);
-(function(){const w=$('#kinds');let i=0;for(const k in KINDS){const lab=document.createElement('label');const inp=document.createElement('input');inp.type='radio';inp.name='kind';inp.value=k;if(i++===0)inp.checked=true;lab.append(inp,el('span',null,KINDS[k]));w.append(lab)}})();
-let placing=null;
-$('#placeForm').addEventListener('submit',e=>{
-  e.preventDefault();const name=$('#thingName').value.trim();if(!name)return;
-  placing={kind:(document.querySelector('input[name=kind]:checked')||{}).value||'statue',name,desc:$('#thingDesc').value.trim()};
-  setCam(true);$('#stage').classList.add('placing');$('#bannerText').textContent='Tap the island to place the '+plainName(name);$('#banner').hidden=false;
-  $('#stage').scrollIntoView({behavior:'smooth',block:'start'});
-});
-$('#cancelPlace').onclick=()=>endPlacing();
-function endPlacing(){placing=null;$('#banner').hidden=true;$('#stage').classList.remove('placing')}
-async function placeAt(x,z){
-  const p=placing;if(!p)return;
-  try{await post('/api/keeper/thing',{key:KEY,kind:p.kind,name:p.name,desc:p.desc,x,z});endPlacing();$('#thingName').value='';$('#thingDesc').value='';$('#placeStatus').textContent='Placed. Watch for him to notice it.';refreshState()}
-  catch(err){$('#bannerText').textContent=err.message}
-}
-$('#bookForm').addEventListener('submit',async e=>{e.preventDefault();const st=$('#bookStatus');try{await post('/api/keeper/book',{key:KEY,topic:$('#bookTopic').value});$('#bookTopic').value='';st.textContent='On the shelf. He\'ll look into it on his next library visit.';refreshState()}catch(err){st.textContent=err.message}});
-function renderKeeperLists(){
-  const ul=$('#things');ul.textContent='';
-  if(!ST.things.length)ul.append(el('li','hint','Nothing added yet.'));
-  for(const th of ST.things.slice().reverse()){const li=el('li');const d=el('div');d.append(el('b',null,th.name),el('small',null,KINDS[th.kind]+' · '+(th.seen?'looked at '+th.inspections+'×':th.noticed?'noticed':'not noticed yet')));
-    const rm=el('button','btn small','Remove');rm.type='button';rm.onclick=async()=>{try{await post('/api/keeper/remove-thing',{key:KEY,id:th.id});refreshState()}catch(err){}};li.append(d,rm);ul.append(li)}
-  const nl=$('#keeperNotes');nl.textContent='';
-  for(const n of ST.notes){const li=el('li');const d=el('div');d.append(el('b',null,n.text),el('small',null,(n.from||'unsigned')+(n.read?' · read':' · unread')));const rm=el('button','btn small','Remove');rm.type='button';rm.onclick=async()=>{try{await post('/api/keeper/remove-note',{key:KEY,id:n.id});refreshState()}catch(err){}};li.append(d,rm);nl.append(li)}
-}
-
-/* ---------- drawings ---------- */
-function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-function doodle(cv,dr){
-  const c=cv.getContext('2d'),W=200,r=rng(dr.seed);cv.width=W;cv.height=W;
-  c.fillStyle='#f5f2e7';c.fillRect(0,0,W,W);
-  const shake=.6+(100-dr.calm)/100*3.4;
-  const pal=dr.joy>62?['#22727a','#df8a26','#4f8a3a','#c7466c']:dr.joy<36?['#3b4250','#5b5f78','#6c7a6e']:['#2f5f66','#8a6f2e','#4f7a3a','#7b5a8c'];
-  const col=()=>pal[Math.floor(r()*pal.length)];
-  c.lineCap='round';c.lineJoin='round';
-  const line=(pts,cl,w)=>{c.strokeStyle=cl;c.lineWidth=w||3;c.beginPath();pts.forEach((p,i)=>{const x=p[0]+(r()-.5)*shake,y=p[1]+(r()-.5)*shake;i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke()};
-  const ell=(cx,cy,rx,ry,cl,w)=>{const p=[];for(let i=0;i<=28;i++){const a=i/28*Math.PI*2;p.push([cx+Math.cos(a)*rx,cy+Math.sin(a)*ry])}line(p,cl,w)};
-  const star=(cx,cy,s,cl)=>{const p=[];for(let i=0;i<=10;i++){const a=i/10*Math.PI*2-Math.PI/2,rr=i%2?s*.45:s;p.push([cx+Math.cos(a)*rr,cy+Math.sin(a)*rr])}line(p,cl,2.5)};
-  const D={
-    moon:()=>{ell(118,70,32,32,col(),3.5);ell(132,62,26,26,'#f5f2e7',6);for(let i=0;i<5;i++)star(20+r()*80,20+r()*70,4+r()*4,col())},
-    star:()=>{for(let i=0;i<7;i++)star(25+r()*150,25+r()*110,5+r()*10,col());line([[20,170],[180,168]],col(),2)},
-    pond:()=>{ell(100,130,72,24,col(),3.5);for(let i=0;i<3;i++){const y=122+i*8;line([[60,y],[80,y-3],[100,y],[120,y-3],[140,y]],col(),2)}for(let i=0;i<4;i++){const x=30+i*10;line([[x,112],[x+2,70+r()*20]],'#4f7a3a',2)}},
-    fly:()=>{for(let i=0;i<4;i++){const x=40+r()*120,y=40+r()*100;ell(x,y,6,4,'#333',2.5);ell(x-4,y-6,5,3,col(),1.5);ell(x+4,y-6,5,3,col(),1.5)}line([[20,180],[60,150],[90,170],[130,140],[180,160]],col(),1.5)},
-    bread:()=>{const p=[];for(let i=0;i<=20;i++){const a=Math.PI+i/20*Math.PI;p.push([100+Math.cos(a)*62,128+Math.sin(a)*46])}p.push([38,128]);line(p,'#a8691e',4);for(let i=0;i<3;i++)line([[72+i*24,100],[84+i*24,88]],'#a8691e',3);line([[30,150],[170,150]],col(),2)},
-    stone:()=>{line([[80,170],[70,110],[82,52],[100,36],[118,52],[128,110],[120,170],[80,170]],'#555b66',4);for(let i=1;i<=3;i++)ell(100,100,40+i*16,60+i*14,col(),1.2)},
-    edge:()=>{line([[10,110],[190,110]],col(),3);for(let i=0;i<14;i++){const x=20+r()*160,y=118+r()*70;ell(x,y,1.5,1.5,col(),2)}ell(60,98,8,10,'#4f7a3a',3)},
-    book:()=>{line([[40,60],[100,72],[160,60],[160,150],[100,162],[40,150],[40,60]],col(),3.5);line([[100,72],[100,162]],col(),3);for(let i=0;i<4;i++){line([[52,82+i*16],[90,90+i*16]],'#777',1.5);line([[110,90+i*16],[148,82+i*16]],'#777',1.5)}},
-    self:()=>{ell(100,120,62,46,'#4f8a3a',4);ell(70,74,16,16,'#4f8a3a',3.5);ell(130,74,16,16,'#4f8a3a',3.5);ell(70,76,5,6,'#222',4);ell(130,76,5,6,'#222',4);line([[72,130],[100,140],[128,130]],'#222',2.5)},
-    tree:()=>{line([[100,175],[100,110]],'#7a5a3a',5);line([[100,40],[50,120],[150,120],[100,40]],'#4f8a3a',4);line([[30,176],[170,176]],col(),2)},
-    lamp:()=>{line([[100,180],[100,60]],'#555',4);ell(100,50,14,14,'#d9932a',4);for(let i=0;i<8;i++){const a=i/8*Math.PI*2;line([[100+Math.cos(a)*22,50+Math.sin(a)*22],[100+Math.cos(a)*34,50+Math.sin(a)*34]],'#d9932a',2)}},
-    tower:()=>{line([[78,175],[88,60],[112,60],[122,175]],col(),4);line([[82,130],[118,130]],'#c7466c',5);line([[85,95],[115,95]],'#c7466c',5);ell(100,48,12,10,'#d9932a',3.5);line([[112,48],[175,30]],'#d9932a',1.5);line([[112,52],[175,70]],'#d9932a',1.5)},
-    mush:()=>{for(let i=0;i<6;i++){const a=i/6*Math.PI*2,x=100+Math.cos(a)*55,y=120+Math.sin(a)*28;line([[x,y],[x,y-14]],'#ccc0a0',3);const p=[];for(let j=0;j<=10;j++){const b=Math.PI+j/10*Math.PI;p.push([x+Math.cos(b)*12,y-14+Math.sin(b)*10])}line(p,'#c7466c',3)}},
-    box:()=>{line([[50,80],[140,80],[140,165],[50,165],[50,80]],col(),4);line([[50,80],[75,55],[165,55],[140,80]],col(),3);line([[165,55],[165,140],[140,165]],col(),3)},
-    sign:()=>{line([[100,180],[100,70]],'#7a5a3a',5);line([[50,50],[150,50],[160,70],[150,90],[50,90],[50,50]],col(),3.5);line([[64,70],[136,70]],'#777',2)},
-    train:()=>{line([[40,140],[130,140],[130,95],[40,95],[40,140]],col(),4);line([[130,140],[165,140],[165,110],[130,110]],col(),3.5);line([[60,95],[60,70],[75,70],[75,95]],'#555',3);ell(60,148,10,10,'#333',3);ell(110,148,10,10,'#333',3);ell(150,148,10,10,'#333',3);line([[15,162],[190,162]],'#7a5a3a',2);for(let i=0;i<4;i++)ell(66+i*14,52-i*10,6+i*2,4+i,'#999',1.5)},
-    rain:()=>{ell(80,60,36,18,col(),3);ell(120,55,40,22,col(),3);for(let i=0;i<16;i++){const x=40+r()*120,y=90+r()*80;line([[x,y],[x-4,y+12]],'#22727a',2)}}
-  };
-  (D[dr.key]||D.pond)();
-  c.fillStyle='#6a6a6a';c.font='15px Gaegu, cursive';c.fillText('F.',176,192);
-}
-
-/* ---------- 3D town ---------- */
-let G=null,camOverview=false;
-function setCam(over){camOverview=over;$('#camBtn').textContent=over?'Follow Fennel':'Whole island'}
-$('#camBtn').onclick=()=>setCam(!camOverview);
-function initThree(){
-  const TH=window.THREE;if(!TH)return null;
-  const canvas=$('#world'),stage=$('#stage');
-  let renderer;try{renderer=new TH.WebGLRenderer({canvas,antialias:true})}catch(e){return null}
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
-  const scene=new TH.Scene();scene.fog=new TH.Fog(0x9fcde4,70,180);
-  const camera=new TH.PerspectiveCamera(45,1,.1,600);
-  const hemi=new TH.HemisphereLight(0xdff2ff,0x46613a,.7);scene.add(hemi);
-  const sun=new TH.DirectionalLight(0xfff1d6,.9);sun.position.set(30,50,20);scene.add(sun);
-  const M=c=>new TH.MeshPhongMaterial({color:c,flatShading:true,shininess:0,specular:0x000000});
-  const add=(geo,mat,x,y,z,parent)=>{const m=new TH.Mesh(geo,mat);m.position.set(x||0,y||0,z||0);(parent||scene).add(m);return m};
-  const winMat=new TH.MeshPhongMaterial({color:0x3a3326,emissive:0xffc766,emissiveIntensity:.1,flatShading:true});
-  const lampMat=new TH.MeshPhongMaterial({color:0x4a4030,emissive:0xffd27a,emissiveIntensity:.1});
-  const dark=M(0x3b2f28);
-  const grassMat=M(0x7fae5a);
-  add(new TH.CylinderGeometry(22,22,1,44),grassMat,0,-.5,0);
-  const rock=add(new TH.ConeGeometry(21.6,17,13),M(0x6b5b4e),0,-9.5,0);rock.rotation.x=Math.PI;
-  const floaters=[];for(let i=0;i<5;i++){const a=i/5*Math.PI*2+.4,r=28+i%2*6;const f=add(new TH.DodecahedronGeometry(1.2+i%3*.7,0),M(0x7a6a5c),Math.cos(a)*r,-4-i%3*3,Math.sin(a)*r);f.userData.base=f.position.y;floaters.push(f)}
-  const mistMat=new TH.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.08,side:TH.DoubleSide,depthWrite:false});
-  add(new TH.CylinderGeometry(22.3,22.3,4,60,1,true),mistMat,0,1.8,0);
-  const pathMat=M(0xc9b98f);
-  for(const k in PLACES){if(k==='square')continue;const p=PLACES[k];const len=Math.hypot(p.tx,p.tz);if(len<1)continue;const m=add(new TH.BoxGeometry(1.3,.06,len),pathMat,p.tx/2,.03,p.tz/2);m.rotation.y=Math.atan2(p.tx,p.tz)}
-  add(new TH.CylinderGeometry(3.4,3.4,.07,24),pathMat,0,.035,0);
-  add(new TH.CylinderGeometry(1.8,2,.6,12),M(0x9a9a9a),0,.3,0);const fountainWater=add(new TH.CylinderGeometry(1.5,1.5,.1,12),M(0x4aa0ad),0,.62,0);add(new TH.CylinderGeometry(.25,.35,1.6,8),M(0x9a9a9a),0,1.2,0);
-  function house(pk,w,d,h,wall,roof,extra){const p=PLACES[pk],g=new TH.Group();add(new TH.BoxGeometry(w,h,d),M(wall),0,h/2,0,g);const rf=add(new TH.ConeGeometry(Math.max(w,d)*.78,h*.7,4),M(roof),0,h+h*.35,0,g);rf.rotation.y=Math.PI/4;
-    add(new TH.BoxGeometry(.95,1.6,.12),dark,0,.8,d/2+.05,g);add(new TH.BoxGeometry(.75,.75,.1),winMat,-w/4-.15,h*.62,d/2+.05,g);add(new TH.BoxGeometry(.75,.75,.1),winMat,w/4+.15,h*.62,d/2+.05,g);
-    if(extra)extra(g,w,d,h);g.position.set(p.bx,0,p.bz);g.rotation.y=Math.atan2(-p.bx,-p.bz);scene.add(g);return g}
-  house('home',5,4.6,3,0xe8d9bc,0x5a7d4a,(g,w,d,h)=>{add(new TH.BoxGeometry(.6,1.6,.6),M(0x8a6a50),w/3,h+1.1,-d/5,g)});
-  house('bakery',5.2,4.2,3.2,0xe6a9a0,0x8a4b36,(g,w,d,h)=>{add(new TH.BoxGeometry(.7,1.8,.7),M(0x7a6a5c),-w/3,h+1.1,0,g);add(new TH.BoxGeometry(w*.9,.25,.8),M(0xf0e6d0),0,h*.95,d/2+.3,g)});
-  (function(){const p=PLACES.library,g=new TH.Group();add(new TH.BoxGeometry(6.4,4.4,5),M(0x9fb0c4),0,2.2,0,g);add(new TH.BoxGeometry(7,.5,5.6),M(0x6f7f94),0,4.65,0,g);for(let i=-1;i<=1;i++)add(new TH.CylinderGeometry(.28,.28,3.6,8),M(0xeeeeee),i*1.9,1.8,2.9,g);
-    add(new TH.BoxGeometry(1.1,2,.12),dark,0,1,2.55,g);add(new TH.BoxGeometry(.8,.9,.1),winMat,-2.3,2.9,2.55,g);add(new TH.BoxGeometry(.8,.9,.1),winMat,2.3,2.9,2.55,g);g.position.set(p.bx,0,p.bz);g.rotation.y=Math.atan2(-p.bx,-p.bz);scene.add(g)})();
-  (function(){const p=PLACES.market,g=new TH.Group();for(const [x,z] of [[-1.5,-.9],[1.5,-.9],[-1.5,.9],[1.5,.9]])add(new TH.CylinderGeometry(.09,.09,2.6,6),M(0x7a5a3a),x,1.3,z,g);for(let i=0;i<6;i++)add(new TH.BoxGeometry(.55,.12,2.2),M(i%2?0xffffff:0x2a8a92),-1.375+i*.55,2.65,0,g);add(new TH.BoxGeometry(3,.9,1),M(0xb08a5a),0,.45,.5,g);g.position.set(p.bx,0,p.bz);g.rotation.y=Math.atan2(-p.bx,-p.bz);scene.add(g)})();
-  const pondMat=new TH.MeshPhongMaterial({color:0x3f8f9c,shininess:60,specular:0x99ccdd});const pond=add(new TH.CircleGeometry(4,32),pondMat,PLACES.pond.bx,.05,PLACES.pond.bz);pond.rotation.x=-Math.PI/2;
-  for(let i=0;i<4;i++){const a=i*1.7,r=1.5+i%2;add(new TH.CylinderGeometry(.5,.5,.05,10),M(0x5d9a4a),PLACES.pond.bx+Math.cos(a)*r,.09,PLACES.pond.bz+Math.sin(a)*r)}
-  for(let i=0;i<9;i++){const a=Math.PI*.9+i*.12;add(new TH.CylinderGeometry(.05,.05,1.4,4),M(0x6c8f3a),PLACES.pond.bx+Math.cos(a)*4.2,.7,PLACES.pond.bz+Math.sin(a)*4.2)}
-  const hillMat=M(0x86b562);add(new TH.ConeGeometry(5,2.5,10),hillMat,PLACES.lookout.bx,1.25,PLACES.lookout.bz);add(new TH.BoxGeometry(1.6,.15,.5),M(0x7a5a3a),PLACES.lookout.bx-.6,2.3,PLACES.lookout.bz-.6);
-  const sp=PLACES.shrine;const stone=add(new TH.DodecahedronGeometry(1,0),M(0x8d8f9a),sp.bx,1.9,sp.bz);stone.scale.set(.9,2.1,.75);add(new TH.CylinderGeometry(1.6,1.8,.3,10),M(0x777a82),sp.bx,.15,sp.bz);
-  const shrineLight=new TH.PointLight(0x9fd8ff,0,12);shrineLight.position.set(sp.bx,2.5,sp.bz);scene.add(shrineLight);
-  const humMat=new TH.MeshBasicMaterial({color:0xbfe6ff,transparent:true,opacity:.4,depthWrite:false});const hum=add(new TH.TorusGeometry(1.4,.04,6,40),humMat,sp.bx,1.2,sp.bz);hum.rotation.x=Math.PI/2;
-  add(new TH.CylinderGeometry(.08,.08,1.6,6),M(0x7a5a3a),19.6,.8,1.8);add(new TH.BoxGeometry(.1,.6,1.3),M(0xd8c69a),19.6,1.4,1.8);
-  for(let i=0;i<4;i++){const a=i/4*Math.PI*2+Math.PI/4;const x=Math.cos(a)*4.4,z=Math.sin(a)*4.4;add(new TH.CylinderGeometry(.07,.09,2.4,6),M(0x333333),x,1.2,z);add(new TH.SphereGeometry(.28,8,6),lampMat,x,2.5,z)}
-  const tr=rng(42),occ=[];for(const k in PLACES)occ.push([PLACES[k].bx,PLACES[k].bz,k==='pond'||k==='lookout'?6:k==='square'?5:4.5]);
-  const nearPath=(x,z)=>{for(const k in PLACES){const p=PLACES[k];const L2=p.tx*p.tx+p.tz*p.tz;if(L2<1)continue;const t=clamp((x*p.tx+z*p.tz)/L2,0,1);if(Math.hypot(x-p.tx*t,z-p.tz*t)<1.6)return true}return false};
-  const leafMats=[0x4f8a3a,0x5d9a4a,0x3f7a3a,0x6aa04f].map(M);const crowns=[];
-  let placed=0;for(let i=0;i<260&&placed<34;i++){const a=tr()*Math.PI*2,r=5+tr()*15.5;const x=Math.cos(a)*r,z=Math.sin(a)*r;if(occ.some(o=>Math.hypot(o[0]-x,o[1]-z)<o[2])||nearPath(x,z))continue;
-    const s=.8+tr()*.6;add(new TH.CylinderGeometry(.15*s,.2*s,1*s,5),M(0x7a5a3a),x,.5*s,z);const cr=add(new TH.ConeGeometry(1.3*s,3.2*s,6),leafMats[i%4],x,2.4*s,z);cr.userData.ph=tr()*6;crowns.push(cr);occ.push([x,z,1.6]);placed++}
-  const sg=new TH.BufferGeometry(),sv=[];const sr=rng(7);for(let i=0;i<500;i++){const u=sr()*Math.PI*2,v=sr()*.9+.05;const y=Math.sin(v*Math.PI/2);const r=Math.cos(v*Math.PI/2);sv.push(Math.cos(u)*r*240,y*240,Math.sin(u)*r*240)}
-  sg.setAttribute('position',new TH.Float32BufferAttribute(sv,3));
-  const starMat=new TH.PointsMaterial({color:0xffffff,size:2,sizeAttenuation:false,transparent:true,opacity:0,fog:false});scene.add(new TH.Points(sg,starMat));
-  const moonMat=new TH.MeshBasicMaterial({color:0xf3f0dc,transparent:true,opacity:0,fog:false});add(new TH.SphereGeometry(7,16,12),moonMat,-110,95,-140);
-  /* rain and snow */
-  const PN=900,pg=new TH.BufferGeometry(),pv=new Float32Array(PN*3);for(let i=0;i<PN;i++){pv[i*3]=(Math.random()-.5)*50;pv[i*3+1]=Math.random()*30;pv[i*3+2]=(Math.random()-.5)*50}
-  pg.setAttribute('position',new TH.BufferAttribute(pv,3));const precipMat=new TH.PointsMaterial({color:0xcfe3f5,size:.18,transparent:true,opacity:0,depthWrite:false});const precip=new TH.Points(pg,precipMat);scene.add(precip);
-  /* frog */
-  const frog=new TH.Group();const fb=new TH.Group();frog.add(fb);const skin=M(0x6fae4b);
-  const body=add(new TH.SphereGeometry(1,14,10),skin,0,.75,0,fb);body.scale.set(1.1,.75,1);
-  const belly=add(new TH.SphereGeometry(.8,12,8),M(0xd8e8a8),0,.6,.38,fb);belly.scale.set(1,.6,.8);
-  const eyes=[];for(const s of [-1,1]){const eg=new TH.Group();eg.position.set(s*.46,1.32,.22);fb.add(eg);add(new TH.SphereGeometry(.36,10,8),skin,0,0,0,eg);add(new TH.SphereGeometry(.28,10,8),M(0xffffff),0,.06,.14,eg);add(new TH.SphereGeometry(.14,8,6),M(0x111111),0,.08,.36,eg);eyes.push(eg)}
-  for(const s of [-1,1]){const l=add(new TH.SphereGeometry(.42,8,6),skin,s*.8,.28,-.25,fb);l.scale.set(.9,.5,1.4);const f=add(new TH.SphereGeometry(.25,8,6),skin,s*.5,.12,.68,fb);f.scale.set(1,.5,1.2)}
-  frog.scale.setScalar(.85);scene.add(frog);
-  const shadow=add(new TH.CircleGeometry(1,18),new TH.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.22,depthWrite:false}),0,.06,0);shadow.rotation.x=-Math.PI/2;
-  const easel=new TH.Group();add(new TH.BoxGeometry(.08,1.8,.08),M(0x7a5a3a),0,.9,0,easel);add(new TH.BoxGeometry(1.1,.9,.06),M(0xf5f2e7),0,1.3,.08,easel);easel.position.set(PLACES.home.tx+1.3,0,PLACES.home.tz+.4);easel.visible=false;scene.add(easel);
-  /* things visitors add */
-  const thingMeshes={};
-  function signTex(text){const c=document.createElement('canvas');c.width=256;c.height=96;const x=c.getContext('2d');x.fillStyle='#d8c69a';x.fillRect(0,0,256,96);x.fillStyle='#2b2418';x.font='bold 34px Gaegu, cursive';x.textAlign='center';x.textBaseline='middle';let t=plainName(text);if(t.length>14)t=t.slice(0,13)+'…';x.fillText(t,128,50);return new TH.CanvasTexture(c)}
-  const BUILD={
-    statue:g=>{add(new TH.BoxGeometry(1.3,.9,1.3),M(0xb7b3a8),0,.45,0,g);const s=add(new TH.IcosahedronGeometry(.75,0),M(0xc9a14a),0,1.7,0,g);s.scale.y=1.4},
-    lighthouse:g=>{for(let i=0;i<4;i++)add(new TH.CylinderGeometry(.62-i*.07,.68-i*.07,1,10),M(i%2?0xc7466c:0xf4f1ea),0,.5+i,0,g);add(new TH.SphereGeometry(.42,10,8),lampMat,0,4.3,0,g);add(new TH.ConeGeometry(.55,.6,10),M(0x333333),0,4.85,0,g)},
-    telescope:g=>{for(let i=0;i<3;i++){const l=add(new TH.CylinderGeometry(.04,.04,1.6,5),M(0x555555),Math.cos(i*2.1)*.35,.75,Math.sin(i*2.1)*.35,g);l.rotation.z=Math.cos(i*2.1)*.25;l.rotation.x=-Math.sin(i*2.1)*.25}const t=add(new TH.CylinderGeometry(.16,.24,1.6,10),M(0xb08a3a),0,1.7,0,g);t.rotation.x=-.9},
-    mushrooms:g=>{for(let i=0;i<7;i++){const a=i/7*Math.PI*2;const x=Math.cos(a)*1.3,z=Math.sin(a)*1.3,s=.7+(i%3)*.2;add(new TH.CylinderGeometry(.09*s,.12*s,.5*s,6),M(0xece2c8),x,.25*s,z,g);add(new TH.SphereGeometry(.32*s,8,6,0,Math.PI*2,0,Math.PI/2),M(0xc7466c),x,.5*s,z,g)}},
-    phonebox:g=>{add(new TH.BoxGeometry(1,2.3,1),M(0xc8332b),0,1.15,0,g);add(new TH.BoxGeometry(1.15,.2,1.15),M(0xc8332b),0,2.4,0,g);add(new TH.BoxGeometry(.7,1.2,.05),winMat,0,1.35,.51,g)},
-    crate:g=>{add(new TH.BoxGeometry(1.3,1.3,1.3),M(0xa67c4e),0,.65,0,g);for(const y of [.25,1.05])add(new TH.BoxGeometry(1.34,.12,1.34),M(0x7a5a3a),0,y,0,g)},
-    sign:(g,th)=>{add(new TH.CylinderGeometry(.08,.08,2,6),M(0x7a5a3a),0,1,0,g);add(new TH.BoxGeometry(2,.75,.08),new TH.MeshPhongMaterial({map:signTex(th.name),shininess:0}),0,1.75,.06,g)},
-    tree:g=>{add(new TH.CylinderGeometry(.2,.28,1.6,6),M(0x7a5a3a),0,.8,0,g);for(const [x,y,z,r] of [[0,2.2,0,1.1],[.7,1.9,.3,.8],[-.6,2,-.2,.85],[0,2.8,.2,.7]])add(new TH.IcosahedronGeometry(r,0),M(0xf2a7c3),x,y,z,g)},
-    bench:g=>{add(new TH.BoxGeometry(2,.12,.6),M(0x8a6a50),0,.55,0,g);add(new TH.BoxGeometry(2,.5,.1),M(0x8a6a50),0,.9,-.28,g);for(const x of [-.85,.85])add(new TH.BoxGeometry(.1,.55,.55),M(0x333333),x,.27,0,g)},
-    train:g=>{add(new TH.BoxGeometry(3.4,.08,.9),M(0x7a5a3a),0,.04,0,g);add(new TH.CylinderGeometry(.42,.42,1.4,10),M(0x2a8a92),-.2,.75,0,g).rotation.z=Math.PI/2;add(new TH.BoxGeometry(.8,1.2,.9),M(0x2a8a92),.8,.85,0,g);add(new TH.CylinderGeometry(.12,.16,.5,8),M(0x333333),-.6,1.35,0,g);for(const x of [-.6,.1,.8])for(const z of [-.42,.42]){const w=add(new TH.CylinderGeometry(.22,.22,.1,10),M(0x222222),x,.24,z,g);w.rotation.x=Math.PI/2}}
-  };
-  function syncThings(list){const ids=new Set(list.map(t=>t.id));for(const id in thingMeshes)if(!ids.has(id)){scene.remove(thingMeshes[id]);delete thingMeshes[id]}
-    for(const th of list){if(thingMeshes[th.id])continue;const g=new TH.Group();(BUILD[th.kind]||BUILD.statue)(g,th);g.position.set(th.x,0,th.z);g.rotation.y=Math.atan2(-th.x,-th.z);scene.add(g);thingMeshes[th.id]=g}}
-  /* sky, seasons, weather */
-  const SKY=[[0,0x0c1430],[4.5,0x16224a],[6,0xd98c74],[7.5,0xa9d3e6],[17,0x9fcde4],[19,0xe5876a],[20.5,0x3a3768],[22,0x0c1430],[24,0x0c1430]].map(([h,c])=>[h,new TH.Color(c)]);
-  const GRASS={spring:0x7fae5a,summer:0x9ab35a,autumn:0xa79a52,winter:0xc9d3cf};
-  const skyCol=new TH.Color(),grey=new TH.Color(0x8a9399),tmpA=new TH.Color(0x9bb4ff),tmpB=new TH.Color(0xfff1d6),grassTarget=new TH.Color();
-  const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
-  /* camera */
-  let ang=.7,drag=null;const camT=new TH.Vector3(),camP=new TH.Vector3();
-  canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,a:ang,moved:0}});
-  window.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x;drag.moved=Math.max(drag.moved,Math.abs(dx)+Math.abs(e.clientY-drag.y));ang=drag.a-dx*.008});
-  window.addEventListener('pointercancel',()=>{drag=null});
-  window.addEventListener('pointerup',e=>{if(drag&&drag.moved<8&&placing&&e.target===canvas)tapPlace(e);drag=null});
-  const ray=new TH.Raycaster(),plane=new TH.Plane(new TH.Vector3(0,1,0),0),hit=new TH.Vector3(),ndc=new TH.Vector2();
-  function tapPlace(e){const r=canvas.getBoundingClientRect();ndc.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(ndc,camera);if(ray.ray.intersectPlane(plane,hit))placeAt(hit.x,hit.z)}
-  function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
-  new ResizeObserver(resize).observe(stage);resize();
-  const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const groundH=(x,z)=>{const d=Math.hypot(x-PLACES.lookout.bx,z-PLACES.lookout.bz);return d<5?2.5*(1-d/5):0};
-  const v3=new TH.Vector3();const fp={x:PLACES.home.tx,z:PLACES.home.tz,init:false};let faceNow=0;
-  function frame(time,dt){
-    const t=clientT==null?7*60:clientT,h=(t%1440)/60,wx=L?L.weather:'clear',season=L?L.season:'spring';
-    let i=0;while(i<SKY.length-2&&SKY[i+1][0]<=h)i++;const a=SKY[i],b=SKY[i+1];skyCol.copy(a[1]).lerp(b[1],(h-a[0])/(b[0]-a[0]));
-    const overcast=wx==='rain'||wx==='snow'?.55:wx==='cloudy'||wx==='fog'?.35:0;skyCol.lerp(grey,overcast*smooth(5,8,h)*(1-smooth(19,21,h)));
-    renderer.setClearColor(skyCol);scene.fog.color.copy(skyCol);stage.style.background='#'+skyCol.getHexString();
-    const fogNear=wx==='fog'?8:wx==='rain'||wx==='snow'?35:70,fogFar=wx==='fog'?55:wx==='rain'||wx==='snow'?120:180;scene.fog.near+=(fogNear-scene.fog.near)*.02;scene.fog.far+=(fogFar-scene.fog.far)*.02;
-    const dl=smooth(5,7.5,h)*(1-smooth(18.5,20.8,h));
-    sun.intensity=(.22+.78*dl)*(1-overcast*.5);sun.color.copy(tmpA).lerp(tmpB,dl);hemi.intensity=.3+.45*dl;
-    const sa=(h-6)/12*Math.PI;sun.position.set(Math.cos(sa)*50,20+Math.max(0,Math.sin(sa))*40,20);
-    const clearSky=wx==='clear'?1:wx==='wind'?.8:.15;starMat.opacity=(1-dl)*clearSky;moonMat.opacity=(1-dl)*clearSky;
-    winMat.emissiveIntensity=.12+.95*(1-dl);lampMat.emissiveIntensity=.1+1.1*(1-dl);
-    grassTarget.setHex(GRASS[season]||GRASS.spring);grassMat.color.lerp(grassTarget,.01);hillMat.color.lerp(grassTarget,.01);
-    pondMat.color.lerp(grassTarget.setHex(season==='winter'?0xbcd6e0:0x3f8f9c),.01);
-    const watchers=L?L.watchers:0;shrineLight.intensity=(1-dl)*1.1+.15+Math.min(1.2,watchers*.15)+Math.sin(time*.002)*.1;
-    const hp=(time*(.0004+Math.min(.0008,watchers*.0001)))%1;hum.scale.setScalar(1+hp*1.6);humMat.opacity=reduce?.2:.45*(1-hp);
-    mistMat.opacity=(wx==='fog'?.16:.06)+Math.sin(time*.0011)*.03;
-    if(!reduce)for(const f of floaters)f.position.y=f.userData.base+Math.sin(time*.0006+f.position.x)*.4;
-    const windy=wx==='wind'?1:wx==='rain'?.4:.1;if(!reduce)for(const c of crowns)c.rotation.z=Math.sin(time*.002+c.userData.ph)*.05*windy;
-    const wet=wx==='rain'?1:wx==='snow'?.6:0;precipMat.opacity+=((wet?.75:0)-precipMat.opacity)*.05;precipMat.size=wx==='snow'?.32:.16;precipMat.color.setHex(wx==='snow'?0xffffff:0xcfe3f5);
-    if(precipMat.opacity>.01){const arr=pg.attributes.position.array,fall=(wx==='snow'?3:18)*dt;for(let i=0;i<PN;i++){arr[i*3+1]-=fall;if(wx==='snow')arr[i*3]+=Math.sin(time*.001+i)*.01;if(arr[i*3+1]<0)arr[i*3+1]=30}pg.attributes.position.needsUpdate=true;precip.position.set(fp.x,0,fp.z)}
-    /* frog follows the server's position smoothly */
-    if(L){if(!fp.init){fp.x=L.pos.x;fp.z=L.pos.z;fp.init=true}const k=1-Math.exp(-dt*3);fp.x+=(L.pos.x-fp.x)*k;fp.z+=(L.pos.z-fp.z)*k}
-    const act=L&&L.act,walking=act&&act.phase==='walk',asleep=act&&act.phase==='do'&&(act.id==='sleep'||act.id==='nap');
-    frog.visible=!asleep;shadow.visible=!asleep;
-    const tgt=L?L.face:0;const diff=((tgt-faceNow+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;faceNow+=diff*.12;frog.rotation.y=faceNow;
-    const hop=walking&&!reduce?Math.abs(Math.sin(time*.012))*.45:0;const gy=groundH(fp.x,fp.z);
-    frog.position.set(fp.x,gy+hop,fp.z);shadow.position.set(fp.x,gy+.06,fp.z);shadow.scale.setScalar(1-hop*.6);
-    fb.scale.set(1,walking?1+Math.sin(time*.024)*.06:1+Math.sin(time*.003)*.025,1);
-    const blink=(Math.floor(time/3200)%4===0&&(time%3200)<140)?.1:1;for(const e of eyes)e.scale.y=blink;
-    easel.visible=!!(act&&act.phase==='do'&&act.id==='draw');
-    if(camOverview)camT.lerp(v3.set(0,0,0),.05);else camT.lerp(v3.set(fp.x,gy,fp.z),.08);
-    const dist=camOverview?44:15,hgt=camOverview?32:10;camP.set(camT.x+Math.sin(ang)*dist,camT.y+hgt,camT.z+Math.cos(ang)*dist);camera.position.lerp(camP,.1);camera.lookAt(camT.x,camT.y+1,camT.z);
-    renderer.render(scene,camera);
-    if(asleep)v3.set(PLACES.home.bx,6.4,PLACES.home.bz);else v3.set(fp.x,gy+hop+2.2,fp.z);
-    v3.project(camera);
-    return v3.z<1&&Math.abs(v3.x)<1.1&&Math.abs(v3.y)<1.1?{x:(v3.x+1)/2*stage.clientWidth,y:(1-v3.y)/2*stage.clientHeight,asleep}:null;
-  }
-  return {frame,syncThings};
-}
-
-G=initThree();
-if(!G)$('#stage').append(el('div','nogl','The 3D view couldn\'t load in this browser, but Fennel is still living. Follow him below.'));
-setCam(false);
-const bubble=$('#bubble');let bubbleText='',lastFrame=performance.now();
-function loop(now){
-  const dt=Math.min(.1,(now-lastFrame)/1000);lastFrame=now;
-  if(clientT!=null&&L)clientT+=dt*(L.scale||4)/60;
-  if(G){const pos=G.frame(now,dt);
-    let txt=L&&L.thought?L.thought.text:'';if(L&&L.deciding)txt='…';if(pos&&pos.asleep&&!(L&&L.thought&&L.thought.src==='claude'))txt='zzz…';
-    if(pos&&txt){if(txt!==bubbleText){bubbleText=txt;bubble.textContent=shorten(txt)}bubble.style.opacity='1';bubble.style.left=pos.x+'px';bubble.style.top=pos.y+'px'}else bubble.style.opacity='0'}
-  requestAnimationFrame(loop);
-}
-connect();refreshState();requestAnimationFrame(loop);
-})();
-</script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

@@ -251,6 +251,45 @@ export function makeDrawing(subject, title, scrap) {
   return dr;
 }
 
+/* ---------- real artwork: Claude paints Percy's drawings and graffiti as SVG ---------- */
+export function cleanSVG(text, w, h) {
+  const m = String(text || '').match(/<svg[\s\S]*<\/svg>/i); if (!m) return null;
+  let svg = m[0]
+    .replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
+    .replace(/<(image|iframe|embed|object|use)\b[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    .replace(/\s(xlink:)?href\s*=\s*("[^#"][^"]*"|'[^#'][^']*')/gi, '')
+    .replace(/url\(\s*['"]?(?!#)[^)]*\)/gi, 'none');
+  if (!/xmlns=/.test(svg)) svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  svg = svg.replace(/<svg([^>]*)>/i, (all, attrs) => '<svg' + attrs.replace(/\s(width|height)\s*=\s*("[^"]*"|'[^']*')/gi, '') + ` width="${w}" height="${h}">`);
+  return svg.length > 150 && svg.length < 400000 ? svg : null;
+}
+export async function paintDrawing({ subject, title }) {
+  const S = W.S, n = S.needs;
+  const mood = n.calm < 35 ? 'anxious: shakier lines, a greyer, colder palette' : n.joy > 68 ? 'happy: bright, warm colours and loose confident lines' : n.wonder > 70 ? 'full of wonder: dreamy, misty colours with odd little details' : n.joy < 35 ? 'low: muted colours, lots of empty paper' : 'steady: calm natural colours';
+  const prompt = `${context({ focus: subject || '' })}
+
+Percy has just finished a drawing at his desk. Subject: "${subject || 'something from his day'}"${title ? ', titled "' + title + '"' : ''}. His mood: ${mood}.
+Paint it as an SVG illustration. Percy is a self-taught penguin artist: ink pen and watercolour on cream paper, with charm and real observation, not clip art. Requirements:
+- A real composition with a focal point, foreground and background, and plenty of specific detail drawn from his world as described above (the cobbled streets, timber-framed cottages with flower boxes, lamp posts, the fog where roads end, the pond, the clock tower, whatever fits the subject). If he draws himself, he is a small black-and-white penguin with an orange beak and feet and a red scarf.
+- Hand-drawn feel: slightly irregular paths, hatching for shadow, soft watercolour washes using semi-transparent fills; you may use an feTurbulence/feDisplacementMap filter for wobble and a subtle paper texture.
+- viewBox="0 0 800 800", cream paper background, a small handwritten "P." signature in a corner. No other text unless the subject needs a word or two.
+- Self-contained: no scripts, no external images, links or fonts.
+Reply with only the <svg>...</svg> markup.`;
+  const { text } = await run('slow', () => callClaude({ model: config.modelReflect, system: 'You are an illustrator. You reply with SVG markup only.', prompt, maxTokens: 14000, timeoutMs: 240000 }));
+  const svg = cleanSVG(text, 800, 800); if (!svg) throw new Error('no usable drawing');
+  return svg;
+}
+export async function paintGraffiti({ subject, tag }) {
+  const prompt = `${context({ focus: 'graffiti ' + (subject || '') })}
+
+Percy is spray-painting graffiti on a wall in Mossbrook: "${subject || 'something on his mind'}"${tag ? '. He paints the words "' + tag + '" with it' : ''}.
+Paint it as an SVG: a real spray-paint piece by a penguin who has practised a bit. Bold outlines, fills with soft spray edges (use blur filters), highlights, a few drips running down, and a sense of his personality. Transparent background (it will be laid on a stone or plaster wall), viewBox="0 0 800 840". Self-contained: no scripts, no external images or fonts. Reply with only the <svg>...</svg> markup.`;
+  const { text } = await run('slow', () => callClaude({ model: config.modelReflect, system: 'You are a graffiti artist. You reply with SVG markup only.', prompt, maxTokens: 12000, timeoutMs: 240000 }));
+  const svg = cleanSVG(text, 800, 840); if (!svg) throw new Error('no usable graffiti');
+  return svg;
+}
+
 /* ---------- making things: Claude builds a small 3D model from simple shapes ---------- */
 const SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule'];
 export async function buildModel(description, image, size = 3) {

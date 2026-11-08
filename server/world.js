@@ -81,7 +81,7 @@ export function newWorld() {
   const town = Town.initialTown();
   const home = town.places.find(p => p.type === 'home');
   return {
-    v: 2, created: Date.now(), t: 7 * 60, lastDay: 1, lastHour: 7, coins: 6, rev: 1, town,
+    v: 2, created: Date.now(), t: config.startTime, lastDay: 1, lastHour: 7, coins: 6, rev: 1, town,
     needs: { fullness: 72, energy: 85, wonder: 58, joy: 60, calm: 64 },
     pos: { x: home.door.x, z: home.door.z }, face: 0, act: null, recent: [], deciding: false, lastFail: '',
     thought: { text: 'morning. the street is quiet.', src: 'rules' }, recentThoughts: [],
