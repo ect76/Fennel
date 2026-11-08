@@ -73,6 +73,7 @@ function publish(a) {
       if (r.newQuestion) { S.questions.unshift(r.newQuestion); S.questions = S.questions.slice(0, 6); }
       W.addDiary('learn', 'read about ' + r.topic + '.\n' + r.facts.map(f => '· ' + f).join('\n') + (r.feeling ? '\n' + r.feeling : ''), 'claude', { sources: r.sources });
       W.remember('learned about ' + r.topic + ': ' + r.facts[0], 3);
+      { const it = S.interests.find(i => r.topic.toLowerCase().includes(i.topic.toLowerCase()) || i.topic.toLowerCase().includes(r.topic.toLowerCase())); if (it) { it.sessions++; it.strength = Math.min(100, it.strength + 8); } W.emo('curiosity', 6); W.emo('contentment', 6); }
       W.log('researched ' + r.topic);
     } else bookFallback();
   } else if (j.kind === 'drawing') { finishDrawing(a, j.result);
@@ -104,6 +105,12 @@ function finishGraffiti(a, art) {
   W.addDiary('graffiti', 'painted ' + (g.subject || 'something') + ' ' + g.where + (g.tag ? '. it says "' + g.tag + '".' : '.'), a.src === 'claude' ? 'claude' : 'rules');
   siteUpdate([['graffiti/' + g.id + '.svg', svg]], 'percy painted on a wall'); W.bump();
 }
+// something grabbed him: line up several things to look up, and let it absorb him for a while
+function takeInterests(r, about) {
+  const topics = Array.isArray(r && r.interests) ? r.interests.map(t => str(t, 60)).filter(Boolean).slice(0, 3) : [];
+  topics.forEach((t, i) => { W.interest(t, 70 - i * 15); if (!S.researchQueue.some(q => q.topic.toLowerCase() === t.toLowerCase())) S.researchQueue.push({ topic: t, question: about ? 'because of ' + about : '' }); });
+  if (S.researchQueue.length > 8) S.researchQueue.splice(0, S.researchQueue.length - 8);
+}
 function bookFallback() {
   const b = W.builtinBook();
   if (b) { S.knowledge.push({ topic: b.topic, facts: b.facts, sources: [], day: W.dayOf(S.t), src: 'book' }); W.addDiary('learn', 'read about ' + b.topic + '.\n' + b.facts.map(f => '· ' + f).join('\n')); W.log('read about ' + b.topic); }
@@ -116,7 +123,8 @@ W.setHooks({
     if (a.id === 'read') {
       const q = S.researchQueue[0];
       const topic = a.subject || (q && q.topic) || '';
-      if (claude && topic) { a.subject = topic; later(a, 'research', M.research(topic, q && q.topic === topic ? q.question : '')); W.setThought('looking up ' + topic + '.'); }
+      const book = q && q.topic === topic ? q : null;
+      if (claude && topic) { a.subject = topic; later(a, 'research', M.research(topic, book ? book.question : '', book && book.text)); W.setThought(book && book.text ? 'someone left a book about ' + topic + '. reading it.' : 'looking up ' + topic + '.'); }
     }
     if (a.id === 'write' && claude) later(a, 'page', M.writePage(a.subject, a.title));
     if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
@@ -140,17 +148,22 @@ W.setHooks({
   },
   onDiscover(p) {
     const plain = { first_sight: 'found ' + p.name + '. nobody there. the door ' + pick(['was open', 'was locked', 'had a bell that didn\'t ring']) + '.', question: 'who built ' + p.name + '?', wonder: 8 };
-    const done = (r, src) => { W.applyFeel(r); W.addDiary('found', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
+    const done = (r, src) => { W.applyFeel(r); takeInterests(r, p.name); W.addDiary('found', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
     if (canCall()) M.reactToPlace(p).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
   },
   onGraffitiSeen(g) {
     const image = g.by === 'keeper' && g.file ? readImage(g.file) : null;
     const plain = { reaction: 'someone painted on the wall ' + (g.where || '') + '. i stood and looked at it for a long time.', wonder: 8 };
-    const done = (r, src) => { W.applyFeel(r); W.addDiary('graffiti', str(r.reaction, 700), src); if (str(r.belief, 140)) { S.beliefs.unshift(str(r.belief, 140)); S.beliefs = S.beliefs.slice(0, 8); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
+    const done = (r, src) => { W.applyFeel(r); takeInterests(r); W.addDiary('graffiti', str(r.reaction, 700), src); if (str(r.belief, 140)) { S.beliefs.unshift(str(r.belief, 140)); S.beliefs = S.beliefs.slice(0, 8); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
     if (canCall()) M.reactToGraffiti(g, image).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
   },
   onItemSeen(it, p) {
     W.addDiary('window', 'saw ' + it.name + ' in the window of ' + p.name + '. ' + it.price + ' coins.' + (it.price > S.coins ? ' i have ' + S.coins + '.' : ''));
+  },
+  onWake(mood) {
+    const plain = { 'a low day': 'heavy this morning. didn\'t want to get up.', 'a grey day': 'woke up and lay there a while.', 'an ordinary day': 'morning. legs work.', 'a good day': 'woke up before the clock. felt like getting on with things.', 'a bright day': 'woke up light. like something good is going to happen.' }[mood.label] || 'morning.';
+    const done = (t, src) => { W.setThought(t, src); W.addDiary('morning', t, src, { mood: mood.label }); };
+    if (canCall()) M.wakeUp(mood).then(t => done(t, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
   },
   onGrow(g, by) {
     W.addDiary('event', by === 'keeper' ? 'woke up with the feeling the town had got bigger in the night.' : 'the fog looks thinner down ' + (g.road || 'one of the roads') + ' today.');
@@ -165,7 +178,7 @@ function readNotes(claude) {
   const unread = S.notes.filter(n => !n.read);
   if (!unread.length) { W.log('visited the Humming Stone. no notes'); return; }
   for (const n of unread) {
-    n.read = true; n.readDay = W.dayOf(S.t); S.stats.notes++; W.log('found a note at the Humming Stone');
+    n.read = true; n.readDay = W.dayOf(S.t); S.stats.notes++; W.log('found a note at the Humming Stone'); W.contact(28); W.emo('contentment', 15); W.emo('excitement', 12);
     const done = (r, src) => {
       n.reaction = { reaction: str(r.reaction, 600) };
       W.applyFeel(r);
@@ -186,7 +199,8 @@ function firstLook(th, claude) {
     W.applyFeel(r);
     W.addDiary('thing', str(r.first_sight, 600), src);
     if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); }
-    if (str(r.research_topic, 60)) { S.researchQueue.push({ topic: str(r.research_topic, 60), question: str(r.question, 160) }); if (S.researchQueue.length > 6) S.researchQueue.shift(); }
+    if (str(r.research_topic, 60)) { S.researchQueue.push({ topic: str(r.research_topic, 60), question: str(r.question, 160) }); if (S.researchQueue.length > 8) S.researchQueue.shift(); }
+    takeInterests(r, th.name);
     if (str(r.remember, 220)) W.remember(r.remember, 3);
     W.bump();
   };
@@ -260,7 +274,7 @@ const server = http.createServer(async (req, res) => {
       req.on('close', () => streams.delete(res)); return;
     }
     if (req.method === 'POST' && p === '/api/notes') {
-      const b = await readBody(req); const text = str(b.text, 280), from = str(b.from, 30);
+      const b = await readBody(req); const text = str(b.text, 1000), from = str(b.from, 30);
       if (!text) return send(res, 400, { error: 'Write something first.' });
       const ip = ipOf(req), lastAt = lastNoteBy.get(ip) || 0;
       if (Date.now() - lastAt < 90000) return send(res, 429, { error: 'One note at a time. Try again in a minute or two.' });
@@ -337,7 +351,8 @@ const server = http.createServer(async (req, res) => {
       if (what === 'grow') { const g = W.growTown('keeper'); save(); return send(res, 200, { ok: true, road: g.road }); }
       if (what === 'book') {
         const topic = str(b.topic, 60); if (!topic) return send(res, 400, { error: 'What is the book about?' });
-        S.researchQueue.unshift({ topic, question: '' }); S.researchQueue = S.researchQueue.slice(0, 6);
+        const text = String(b.text || '').slice(0, 20000).trim();
+        S.researchQueue.unshift({ topic, question: '', text, given: true }); S.researchQueue = S.researchQueue.slice(0, 8);
         W.log('someone left a book about ' + topic + ' at the library'); W.bump(); save(); return send(res, 200, { ok: true });
       }
       return send(res, 404, { error: 'Unknown keeper action.' });

@@ -93,6 +93,8 @@ export function newWorld() {
     beliefs: ['the town is the whole world', 'the stone hums louder at night'],
     goals: [{ text: 'draw something every day', action: 'draw' }],
     leanings: {}, questions: ['what is past the fog?'],
+    emotions: { loneliness: 30, curiosity: 45, sadness: 10, contentment: 50, frustration: 5, anxiety: 15, excitement: 25 },
+    dayMood: { score: 0.1, label: 'an ordinary day', causes: ['first morning in the cottage'], day: 1 }, moodCarry: 0, interests: [], lastContact: 1,
     knowledge: [], researchQueue: [], memories: [],
     diary: [], drawings: [], pages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
     dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
@@ -187,10 +189,12 @@ export function applyFeel(r) { if (!r) return; for (const k of ['joy', 'calm', '
 export const thingById = id => S.things.find(t => t.id === id);
 export const unsold = () => S.drawings.filter(d => !d.sold);
 export function moodWord() {
-  const n = S.needs;
-  if (n.fullness < 22) return 'hungry'; if (n.energy < 18) return 'sleepy'; if (n.calm < 32) return 'jittery';
-  if (n.wonder < 25) return 'bored'; if (n.joy > 74) return 'happy'; if (n.wonder > 74) return 'curious'; if (n.joy < 32) return 'low';
-  return 'content';
+  const n = S.needs, E = S.emotions || {};
+  if (n.fullness < 22) return 'hungry'; if (n.energy < 18) return 'exhausted';
+  if (E.sadness > 62) return 'sad'; if (E.loneliness > 78) return 'lonely'; if (E.frustration > 55) return 'frustrated'; if (E.anxiety > 60) return 'uneasy';
+  if (E.excitement > 62) return 'excited'; if (E.curiosity > 72) return 'curious';
+  if (n.wonder < 25) return 'bored'; if (n.joy > 74) return 'happy'; if (n.joy < 32) return 'low';
+  return S.dayMood && S.dayMood.score > 0.4 ? 'cheerful' : S.dayMood && S.dayMood.score < -0.3 ? 'flat' : 'content';
 }
 export function doingText() {
   const a = S.act;
@@ -208,14 +212,57 @@ export function doingText() {
   return ACTIONS[a.id].label + (where ? ' at ' + where.name : '');
 }
 
+/* ---------- feelings ---------- */
+// Emotions build and fade; each morning they, the weather, sleep and plain chance add up to a mood for the day.
+export const EMOTIONS = ['loneliness', 'curiosity', 'sadness', 'contentment', 'frustration', 'anxiety', 'excitement'];
+export function emo(k, v) { if (S.emotions && k in S.emotions) S.emotions[k] = clamp(S.emotions[k] + v, 0, 100); }
+function emotionDrift(mins, asleep) {
+  const E = S.emotions, m = S.dayMood.score, f = 0.0015 * mins;
+  E.loneliness = clamp(E.loneliness + (asleep ? 0.6 : 0.9) / 60 * mins, 0, 100); // alone, it creeps up
+  E.curiosity += ((35 + m * 10) - E.curiosity) * f; E.excitement += (15 - E.excitement) * f * 2;
+  E.frustration += (5 - E.frustration) * f * 1.5; E.anxiety += ((15 - m * 10) - E.anxiety) * f;
+  E.sadness += ((10 - m * 25 + E.loneliness * 0.15) - E.sadness) * f * 0.6;
+  E.contentment += ((45 + m * 25 - E.loneliness * 0.15) - E.contentment) * f;
+  for (const k of EMOTIONS) E[k] = clamp(E[k], 0, 100);
+}
+const MOODS = [[-0.55, 'a low day'], [-0.2, 'a grey day'], [0.2, 'an ordinary day'], [0.55, 'a good day'], [9, 'a bright day']];
+export function newDayMood() {
+  const E = S.emotions, w = S.weather.kind, causes = [];
+  let score = S.moodCarry * 0.55 + (S.dayMood ? S.dayMood.score * 0.3 : 0); // moods have momentum
+  if (S.moodCarry < -0.2) causes.push('yesterday still weighing on him'); else if (S.moodCarry > 0.25) causes.push('carrying something good over from yesterday');
+  const slept = S.needs.energy; if (slept < 55) { score -= 0.2; causes.push('slept badly'); } else if (slept > 92) { score += 0.08; }
+  if (E.loneliness > 70) { score -= 0.35 * (E.loneliness - 60) / 40; causes.push('lonely: ' + (dayOf(S.t) - (S.lastContact || 1)) + ' days with no sign of anyone'); }
+  if (w === 'rain' || w === 'fog') { score -= 0.12; causes.push('grey ' + (w === 'fog' ? 'fog' : 'rain') + ' at the window'); }
+  if (w === 'clear') { score += 0.1; causes.push('sun on the floorboards'); } if (w === 'snow') { score += 0.18; causes.push('snow, which he loves'); }
+  if (seasonOf(dayOf(S.t)) === 'winter' && w !== 'snow') score -= 0.05;
+  const chance = (Math.random() + Math.random() + Math.random() - 1.5) * 0.7; // some days are just like that
+  if (chance < -0.35) causes.push('woke up heavy for no reason he can name'); else if (chance > 0.35) causes.push('woke up light for no particular reason');
+  score = clamp(score + chance, -1, 1);
+  const label = MOODS.find(([t]) => score < t)[1];
+  S.dayMood = { score: Math.round(score * 100) / 100, label, causes: causes.slice(0, 4), day: dayOf(S.t) };
+  if (score < -0.4) { emo('sadness', 25); emo('contentment', -15); } else if (score > 0.4) { emo('contentment', 15); emo('excitement', 10); }
+  log('woke up into ' + label + (causes.length ? ' (' + causes.join('; ') + ')' : ''));
+  bump();
+}
+export function contact(amount, what) { emo('loneliness', -amount); S.lastContact = dayOf(S.t); if (what) log(what); }
+// interests: when something new grabs him, he follows it for days
+export function interest(topic, strength = 60) {
+  topic = str(topic, 60); if (!topic) return;
+  const ex = S.interests.find(i => i.topic.toLowerCase() === topic.toLowerCase());
+  if (ex) ex.strength = clamp(ex.strength + strength * 0.5, 0, 100); else S.interests.push({ topic, strength: clamp(strength, 0, 100), since: dayOf(S.t), sessions: 0 });
+  S.interests.sort((a, b) => b.strength - a.strength); S.interests = S.interests.slice(0, 6);
+}
+
 /* ---------- needs ---------- */
 function decay(mins, asleep) {
   const n = S.needs, w = S.weather.kind;
   n.fullness -= (asleep ? 1.6 : 4) / 60 * mins;
-  if (!asleep) n.energy -= 3.4 / 60 * mins;
+  if (!asleep) n.energy -= (S.dayMood && S.dayMood.score < -0.35 ? 4.4 : 3.4) / 60 * mins; // low days are tiring
   n.wonder -= 2.4 / 60 * mins;
-  n.joy += (50 - n.joy) * 0.0012 * mins;
-  n.calm += (55 - n.calm) * 0.0012 * mins;
+  const md = S.dayMood ? S.dayMood.score : 0, E = S.emotions || {};
+  n.joy += ((50 + md * 28 - (E.sadness || 0) * 0.2 - (E.loneliness || 0) * 0.1) - n.joy) * 0.0012 * mins;
+  n.calm += ((55 + md * 15 - (E.anxiety || 0) * 0.3 - (E.frustration || 0) * 0.2) - n.calm) * 0.0012 * mins;
+  emotionDrift(mins, asleep);
   if (n.fullness < 25) { n.joy -= 2 / 60 * mins; n.calm -= 3 / 60 * mins; }
   if (n.energy < 20) n.calm -= 2 / 60 * mins;
   if (n.wonder < 25) n.joy -= 1 / 60 * mins;
@@ -275,6 +322,11 @@ function ruleScore(id, h) {
     case 'inspect': { const b = bestThing(); if (!b) return -1e9; return b.s - (night ? 0.5 : 0) + (Number(S.leanings.inspect) || 0) * 0.45; }
   }
   if (night && !['sleep', 'stargaze', 'pond'].includes(id)) s -= 1;
+  const md = S.dayMood ? S.dayMood.score : 0;
+  if (md < -0.2) { if (['nap', 'tidy', 'pond'].includes(id)) s += -md * 1.2; if (['explore', 'graffiti', 'buy', 'visit', 'sell', 'fog'].includes(id)) s -= -md * 1.0; if (id === 'draw') s -= -md * 0.6; }
+  if (md > 0.3) { if (['explore', 'graffiti', 'visit', 'buy', 'draw'].includes(id)) s += md * 0.7; }
+  if (id === 'read' && S.interests.length) s += S.interests[0].strength / 100 * 0.9;
+  if (id === 'shrine') s += (S.emotions.loneliness - 50) / 50 * 0.6;
   s -= S.recent.slice(-5).filter(r => r === id).length * 0.45;
   s += (Number(S.leanings[id]) || 0) * 0.45;
   if (S.goals.some(g => g.action === id)) s += 0.35;
@@ -363,11 +415,12 @@ function durFor(id, h) {
   return ACTIONS[id].dur;
 }
 function fail(why, thought) {
+  emo('frustration', 8);
   S.lastFail = why; log(why); feel('calm', -5); feel('joy', -3); setThought(thought || why);
   S.act = null; bump();
 }
 
-let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {} };
+let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {}, onWake: () => {} };
 export const setHooks = h => { hooks = { ...hooks, ...h }; };
 
 function arrive(a) {
@@ -375,6 +428,7 @@ function arrive(a) {
   if (p && !p.known) discover(p);
   if (p && TYPES[p.type].open && !isOpen(p, h)) {
     S.stats.closed++;
+    emo('frustration', 12);
     if (S.stats.closed === 1) addDiary('event', 'walked all the way to ' + p.name + '. shut. i should read the sign on the door properly.');
     return fail(p.name + ' was closed', p.name + ' is shut. walked all that way.');
   }
@@ -401,7 +455,7 @@ function arrive(a) {
   bump();
 }
 function discover(p) {
-  p.known = true; p.foundDay = dayOf(S.t); S.stats.found++; feel('wonder', 12);
+  p.known = true; p.foundDay = dayOf(S.t); S.stats.found++; feel('wonder', 12); emo('curiosity', 25); emo('excitement', 20); emo('anxiety', 5);
   log('discovered ' + p.name); setThought(pick(['that wasn\'t here before.', 'a new place. ' + p.name + '.', 'the fog left something behind.']));
   remember('day ' + dayOf(S.t) + ': discovered ' + p.name + ', a ' + TYPES[p.type].label, 3);
   hooks.onDiscover(p); S.town.ver++; bump();
@@ -437,7 +491,7 @@ function finish(a) {
       const placed = unsold().filter(d => !d.onStall).slice(0, Math.max(0, 6 - unsold().filter(d => d.onStall).length));
       for (const d of placed) { d.onStall = true; d.price = d.price || 2 + Math.floor(Math.random() * 4); }
       if (gone.length) {
-        S.stats.sold += gone.length; feel('joy', 6); feel('wonder', 6);
+        S.stats.sold += gone.length; feel('joy', 6); feel('wonder', 6); emo('contentment', 12); contact(10 * gone.length); emo('curiosity', 10);
         const names = gone.map(d => '"' + d.title + '"').join(', ');
         log('found ' + names + ' gone from the stall and ' + coins + ' coins in the tin');
         addDiary('stall', (gone.length === 1 ? names + ' was gone' : names + ' were gone') + ' from the stall. ' + coins + ' coins in the tin. ' + pick(['i never see who takes them.', 'there\'s nobody here. there\'s never anybody here.', 'i waited a while in case. nobody.', 'the tin was warm, like someone had just touched it.']));
@@ -457,7 +511,7 @@ function finish(a) {
     case 'graffiti': if (a.wall) { S.coins = Math.max(0, S.coins - 2); S.stats.painted++; const g = { id: uid(), by: 'percy', x: a.wall.x, y: 1.75, z: a.wall.z, nx: a.wall.nx, nz: a.wall.nz, w: 2.2, h: 2.3, place: a.wall.place, where: a.wall.where, tag: a.title || '', subject: a.subject || '', seed: Math.floor(Math.random() * 1e9), day: dayOf(S.t), seen: true }; S.graffiti.push(g); a.made = g; log('painted graffiti ' + a.wall.where); } break;
     case 'fog': S.fogTests++; S.stats.fog++; log('tested the fog at the end of ' + (a.road || 'a road') + ' (test #' + S.fogTests + ')'); break;
     case 'inspect': { const th = thingById(a.thing); if (th) { th.inspections++; S.stats.things++; if (th.inspections >= 3) th.liked = true; } break; }
-    case 'sleep': log('woke up'); break;
+    case 'sleep': log('woke up'); { const h0 = hourOf(S.t); if (h0 >= 5 && h0 < 11) { newDayMood(); hooks.onWake(S.dayMood); } } break;
     case 'nap': log('took a nap'); break;
   }
   hooks.onFinish(a);
@@ -466,9 +520,11 @@ function finish(a) {
 /* ---------- weather, happenings, growth ---------- */
 function weightedPick(list) { const tot = list.reduce((s, x) => s + x[1], 0); let r = Math.random() * tot; for (const [k, w] of list) { if ((r -= w) <= 0) return k; } return list[0][0]; }
 function onHour(h, d) {
+  if (h === 9 && (!S.dayMood || S.dayMood.day !== d)) { S.needs.energy = Math.min(S.needs.energy, 50); newDayMood(); hooks.onWake(S.dayMood); } // a day with no proper night's sleep still begins
   if (S.t >= S.weather.until) {
     const prev = S.weather.kind, next = weightedPick(WEATHER[seasonOf(d)]);
     S.weather = { kind: next, until: S.t + (3 + Math.random() * 6) * 60 };
+    if (next === 'fog') emo('anxiety', 6); if (next === 'clear') emo('contentment', 5); if (next === 'snow') emo('excitement', 12);
     if (next !== prev) { log('the weather turned ' + ({ clear: 'clear', cloudy: 'cloudy', wind: 'windy', fog: 'foggy', snow: 'snowy', rain: 'rainy' })[next]); bump(); }
   }
   if (h >= 7 && h < 20 && Math.random() < 0.06 && S.events.length < 3) {
@@ -501,6 +557,7 @@ export function addBuilding({ kind, name, desc, x, z }) {
 }
 function newDay(d) {
   S.lastDay = d; S.dayLog[d] = S.dayLog[d] || [];
+  for (const i of S.interests) i.strength -= 7; S.interests = S.interests.filter(i => i.strength > 5); // interests fade unless fed
   const keys = Object.keys(S.dayLog).map(Number).sort((a, b) => a - b);
   while (keys.length > 6) delete S.dayLog[keys.shift()];
   S.events = S.events.filter(e => e.id === 'echo' ? d - e.day < 2 : e.id.startsWith('grow-') ? d - e.day < 2 : e.day >= d);
@@ -518,7 +575,7 @@ export function tick(dt, requestDecision) {
   decay(S.t - before, asleep);
   if (!a) { if (!S.deciding) requestDecision(); return; }
   if (a.phase === 'walk') {
-    let stepLen = WALK_SPEED * dt;
+    let stepLen = WALK_SPEED * dt * (S.dayMood ? (S.dayMood.score < -0.4 ? 0.72 : S.dayMood.score > 0.5 ? 1.12 : 1) : 1);
     while (stepLen > 0 && a.wp < a.path.length) {
       const wpt = a.path[a.wp], dx = wpt.x - S.pos.x, dz = wpt.z - S.pos.z, dist = Math.hypot(dx, dz);
       if (dist <= stepLen) { S.pos.x = wpt.x; S.pos.z = wpt.z; stepLen -= dist; a.wp++; }
@@ -536,18 +593,18 @@ export function tick(dt, requestDecision) {
 function noticeThings() {
   for (const th of S.things) {
     if (!th.noticed && Math.hypot(th.x - S.pos.x, th.z - S.pos.z) < 8) {
-      th.noticed = true; feel('wonder', 4); log('noticed something new: ' + th.name);
+      th.noticed = true; feel('wonder', 4); emo('curiosity', 22); emo('excitement', 12); contact(8); log('noticed something new: ' + th.name);
       setThought(pick(['what is that? that wasn\'t there before.', 'something new by ' + nearPlace(th.x, th.z) + '.'])); bump();
     }
   }
   for (const p of S.town.places) if (!p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 9) discover(p);
   for (const p of S.town.places) if (p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 5) seeItems(p, true);
-  for (const g of S.graffiti) if (!g.seen && Math.hypot(g.x - S.pos.x, g.z - S.pos.z) < 8) { g.seen = true; S.stats.saw++; feel('wonder', 6); log('noticed new graffiti ' + (g.where || 'on a wall')); setThought(pick(['someone painted on that wall.', 'that wasn\'t on the wall yesterday.'])); hooks.onGraffitiSeen(g); bump(); }
+  for (const g of S.graffiti) if (!g.seen && Math.hypot(g.x - S.pos.x, g.z - S.pos.z) < 8) { g.seen = true; S.stats.saw++; feel('wonder', 6); emo('curiosity', 15); if (g.by !== 'percy') contact(15); log('noticed new graffiti ' + (g.where || 'on a wall')); setThought(pick(['someone painted on that wall.', 'that wasn\'t on the wall yesterday.'])); hooks.onGraffitiSeen(g); bump(); }
 }
 
 function seeItems(p, window = false) {
   for (const it of S.items) if (it.shop === p.id && !it.seen && !it.sold) {
-    it.seen = true; it.seenDay = dayOf(S.t); feel('wonder', 4);
+    it.seen = true; it.seenDay = dayOf(S.t); feel('wonder', 4); emo('excitement', 8);
     log((window ? 'saw ' : 'found ') + it.name + ' for sale at ' + p.name + ' (' + it.price + ' coins)');
     remember('saw ' + it.name + ' for sale at ' + p.name + ' for ' + it.price + ' coins', 3);
     hooks.onItemSeen(it, p); bump();
@@ -612,6 +669,7 @@ export function publicState(extra = {}) {
     graffiti: S.graffiti.map(g => ({ id: g.id, by: g.by, x: g.x, y: g.y, z: g.z, nx: g.nx, nz: g.nz, w: g.w, h: g.h, img: g.img || ('/media/graffiti/' + g.id + '.svg'), where: g.where, day: g.day, seen: g.seen })),
     notebook: S.notebook || null, inventory: S.inventory || [],
     items: S.items.map(i => ({ id: i.id, shop: i.shop, name: i.name, desc: i.desc, price: i.price, seen: i.seen, sold: i.sold, img: i.img || '', model: i.model || null, status: i.status || 'ready' })),
+    emotions: S.emotions, dayMood: S.dayMood, interests: S.interests,
     town: publicTown(), fogTests: S.fogTests, memoryCount: S.memories.length,
     ...extra,
   };

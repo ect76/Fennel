@@ -5,7 +5,7 @@ const shorten = t => { t = String(t || ''); return t.length > 140 ? t.slice(0, 1
 const NEEDS = [['fullness', 'Fullness', '--c-full'], ['energy', 'Energy', '--c-energy'], ['wonder', 'Wonder', '--c-wonder'], ['joy', 'Joy', '--c-joy'], ['calm', 'Calm', '--c-calm']];
 const WEATHER = { clear: 'clear', cloudy: 'cloudy', rain: 'raining', fog: 'foggy', wind: 'windy', snow: 'snowing' };
 const LEAN = { sleep: 'sleep', nap: 'naps', eat: 'the bakery', fish: 'fishing', draw: 'drawing', write: 'writing', sell: 'the stall', read: 'the library', pond: 'the pond', stargaze: 'stargazing', shrine: 'the Humming Stone', fog: 'the fog', wander: 'wandering', explore: 'exploring', tidy: 'tidying', inspect: 'new things', visit: 'visiting places', buy: 'buying things', graffiti: 'graffiti' };
-const KIND = { summary: 'end of day', thought: 'thought', reflection: 'reflection', learn: 'learned', note: 'a note', thing: 'something new', drawing: 'drawing', fog: 'the fog', dream: 'dream', page: 'page', found: 'somewhere new', graffiti: 'graffiti', window: 'shop window', bought: 'bought', stall: 'the stall', event: '' };
+const KIND = { summary: 'end of day', thought: 'thought', reflection: 'reflection', learn: 'learned', note: 'a note', thing: 'something new', drawing: 'drawing', fog: 'the fog', dream: 'dream', page: 'page', found: 'somewhere new', graffiti: 'graffiti', window: 'shop window', bought: 'bought', stall: 'the stall', morning: 'waking up', event: '' };
 
 let L = null, ST = null, lastRev = -1, lastLiveAt = 0, W = null;
 
@@ -85,6 +85,14 @@ function renderAll() {
   ms.className = 'dot' + (m.mode === 'claude' ? '' : ' off'); ms.textContent = m.mode === 'claude' ? 'Thinking with Claude' : 'Simple rules (' + m.reason + ')';
   $('#keeperTab').hidden = !ST.keeper;
   $('#siteLink').textContent = '';
+  if (ST.dayMood) {
+    $('#todayLabel').textContent = ST.dayMood.label.charAt(0).toUpperCase() + ST.dayMood.label.slice(1);
+    $('#todayWhy').textContent = ST.dayMood.causes && ST.dayMood.causes.length ? ST.dayMood.causes.join(' · ') : '';
+    const em = $('#emos'); em.textContent = '';
+    const EC = { loneliness: '#6f7fa6', curiosity: 'var(--c-wonder)', sadness: '#5a6f8a', contentment: 'var(--c-energy)', frustration: 'var(--danger)', anxiety: 'var(--c-full)', excitement: 'var(--c-joy)' };
+    for (const k in ST.emotions || {}) { const r = el('div', 'emo'); r.append(el('span', null, k)); const bar = el('div', 'bar'); const i = el('i'); i.style.width = Math.round(ST.emotions[k]) + '%'; i.style.background = EC[k] || 'var(--accent)'; bar.append(i); r.append(bar); em.append(r); }
+    $('#absorbed').textContent = ST.interests && ST.interests.length ? 'Absorbed by: ' + ST.interests.map(i => i.topic).join(', ') : '';
+  }
   $('#selfDesc').textContent = ST.self.description;
   const tr = $('#traits'); tr.textContent = '';
   for (const l of ST.self.likes) tr.append(el('span', 'pill like', 'likes ' + l));
@@ -104,8 +112,9 @@ function renderAll() {
   // diary
   const ol = $('#diary'); ol.textContent = '';
   for (const e of ST.diary.slice().reverse()) {
-    const li = el('li', 'entry' + (['reflection', 'note', 'thing', 'found', 'graffiti', 'bought', 'stall'].includes(e.kind) ? ' big' : ''));
+    const li = el('li', 'entry' + (['reflection', 'note', 'thing', 'found', 'graffiti', 'bought', 'stall', 'morning'].includes(e.kind) ? ' big' : ''));
     li.append(el('div', 'when', 'Day ' + e.day + ' · ' + e.time + (KIND[e.kind] ? ' · ' + KIND[e.kind] : '')), el('div', 'txt', e.text));
+    if (e.mood) li.firstChild.textContent += ' · ' + e.mood;
     if (e.drawing) { const img = el('img'); img.src = '/media/drawings/' + e.drawing + '.svg'; img.alt = 'the drawing'; img.loading = 'lazy'; li.append(img); }
     if (e.sources && e.sources.length) li.append(sources(e.sources));
     ol.append(li);
@@ -202,7 +211,7 @@ $('#makeForm').addEventListener('submit', async e => {
 });
 $('#buildForm').addEventListener('submit', e => { e.preventDefault(); startPlacing('build', { kind: $('#buildKind').value, name: $('#buildName').value.trim(), desc: $('#buildDesc').value.trim() }, 'Tap an empty spot beside a road'); });
 $('#growBtn').onclick = async () => { try { const r = await kpost('grow', {}); $('#buildStatus').textContent = 'The fog pulled back along ' + (r.road || 'a road') + '.'; refreshState(); } catch (err) { $('#buildStatus').textContent = err.message; } };
-$('#bookForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#bookStatus'); try { await kpost('book', { topic: $('#bookTopic').value }); $('#bookTopic').value = ''; st.textContent = 'On the shelf.'; refreshState(); } catch (err) { st.textContent = err.message; } });
+$('#bookForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#bookStatus'); try { await kpost('book', { topic: $('#bookTopic').value, text: $('#bookText').value }); $('#bookTopic').value = ''; $('#bookText').value = ''; st.textContent = 'On the shelf.'; refreshState(); } catch (err) { st.textContent = err.message; } });
 $('#stockForm').addEventListener('submit', async e => {
   e.preventDefault(); const st = $('#stockStatus');
   try { const image = await readImage($('#stockImg').files[0], 768); await kpost('stock', { shop: $('#stockShop').value, name: $('#stockName').value.trim(), price: $('#stockPrice').value, desc: $('#stockDesc').value.trim(), image }); st.textContent = 'In the window. A little 3D version will appear outside the shop.'; $('#stockName').value = ''; $('#stockDesc').value = ''; $('#stockImg').value = ''; refreshState(); }

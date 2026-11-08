@@ -71,6 +71,7 @@ let MAT;
 function makeMaterials() {
   MAT = {
     grass: new THREE.MeshStandardMaterial({ color: 0x7fae5a, map: TEX.grass, roughness: 1 }),
+    hill: new THREE.MeshStandardMaterial({ color: 0x7fae5a, map: TEX.grass, roughness: 1, side: THREE.DoubleSide }),
     cobble: new THREE.MeshStandardMaterial({ color: 0xffffff, map: TEX.cobble, bumpMap: TEX.cobbleBump, bumpScale: 1.5, roughness: 0.95 }),
     path: new THREE.MeshStandardMaterial({ color: 0xc9b38c, map: TEX.grass, roughness: 1 }),
     kerb: std(0x9b958a),
@@ -276,10 +277,14 @@ function station(batch, signs, p) {
   box(batch, B, MAT.wood, 1.8, 0.1, 0.5, -3, 1.3, -0.8); for (const x of [-3.7, -2.3]) box(batch, B, MAT.iron, 0.1, 0.5, 0.4, x, 1.05, -0.8);
   signs.push({ text: 'MOSSBROOK', F: B.clone().multiply(M4(-w / 2 + 4.5, 0, -0.4)), x: 0, y: 3.35, z: 0, w: 3.4, h: 0.55, bg: '#2f4e6b', fg: '#f4f1ea', both: true });
   // the railway, running off into the fog both ways
+  // which way along the platform leads out of town?
+  const ax = Math.cos(p.rot), az = -Math.sin(p.rot); const out = (p.x * ax + p.z * az) >= 0 ? 1 : -1;
   const T = B.clone().multiply(M4(0, 0, -d / 2 - 1.8));
-  for (const s of [-0.72, 0.72]) box(batch, T, MAT.rail, 120, 0.14, 0.1, 0, 0.22, s);
-  for (let i = -55; i <= 55; i++) box(batch, T, MAT.woodDark, 0.3, 0.12, 2.1, i * 1.05, 0.08, 0);
-  box(batch, T, std(0x9c8f7a), 120, 0.1, 3.0, 0, 0.03, 0);
+  const start = -out * (w / 2 + 1), len = 70, mid = start + out * len / 2;
+  for (const s of [-0.72, 0.72]) box(batch, T, MAT.rail, len, 0.14, 0.1, mid, 0.22, s);
+  for (let i = 0; i <= len; i += 1.05) box(batch, T, MAT.woodDark, 0.3, 0.12, 2.1, start + out * i, 0.08, 0);
+  box(batch, T, std(0x9c8f7a), len, 0.1, 3.0, mid, 0.03, 0);
+  box(batch, T, std(0x7b2d26), 0.4, 0.9, 2.2, start - out * 0.2, 0.45, 0); // buffer stop
 }
 function green(batch, p, extras) {
   const B = new THREE.Matrix4().compose(V(p.x, 0, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, p.rot, 0)), V(1, 1, 1));
@@ -294,8 +299,8 @@ function green(batch, p, extras) {
 }
 function lookout(batch, p) {
   const prof = []; for (let i = 0; i <= 16; i++) { const t = i / 16; prof.push(new THREE.Vector2(6.5 * (1 - t) + 0.01, 3 * Math.pow(Math.sin(t * Math.PI / 2), 1.4))); }
-  const hill = new THREE.LatheGeometry(prof.reverse(), 28);
-  batch.add(hill, MAT.grass, M4(p.x, 0, p.z), [6, 6]);
+  const hill = new THREE.LatheGeometry(prof, 28);
+  batch.add(hill, MAT.hill, M4(p.x, 0, p.z), [6, 6]);
   box(batch, M4(p.x, 3, p.z), MAT.wood, 1.8, 0.1, 0.5, 0, 0.45, 0.6); box(batch, M4(p.x, 3, p.z), MAT.wood, 1.8, 0.5, 0.08, 0, 0.75, 0.9);
   const r = rng(p.seed); for (let i = 0; i < 6; i++) { const a = r() * 6.28, rr = 3 + r() * 3; prim(batch, M4(p.x, 0, p.z), G.dodec, MAT.stoneDark, Math.cos(a) * rr, 3 * (1 - rr / 6.5) * 0.9, Math.sin(a) * rr, 0.6 + r() * 0.5, 0.4, 0.5); }
 }
@@ -334,26 +339,28 @@ function garden(batch, p) {
    ========================================================= */
 function makePenguin() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  const black = new THREE.MeshStandardMaterial({ color: 0x1d2128, roughness: 0.55 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xf5f3ee, roughness: 0.6 });
-  const orange = new THREE.MeshStandardMaterial({ color: 0xf0922b, roughness: 0.45 });
-  const prof = []; for (let i = 0; i <= 20; i++) { const t = i / 20, y = t * 1.15; const rr = 0.42 * Math.sin(Math.PI * Math.pow(t, 0.85)) * (1 - 0.18 * t) + 0.02; prof.push(new THREE.Vector2(rr, y)); }
-  const torso = new THREE.Mesh(new THREE.LatheGeometry(prof, 24), black); torso.castShadow = true; body.add(torso);
-  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.33, 20, 16), white); belly.scale.set(0.95, 1.35, 0.6); belly.position.set(0, 0.48, 0.17); body.add(belly);
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), white); face.scale.set(1.05, 0.8, 0.6); face.position.set(0, 0.9, 0.2); body.add(face);
+  const black = new THREE.MeshStandardMaterial({ color: 0x23272f, roughness: 0.5 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf6f4ef, roughness: 0.55 });
+  const orange = new THREE.MeshStandardMaterial({ color: 0xf29a2e, roughness: 0.45 });
+  const mesh = (geo, m, x, y, z, sx = 1, sy = 1, sz = 1) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; body.add(o); return o; };
+  mesh(new THREE.SphereGeometry(0.42, 28, 22), black, 0, 0.5, 0, 1, 1.18, 0.92);            // body
+  mesh(new THREE.SphereGeometry(0.34, 24, 18), white, 0, 0.45, 0.13, 0.95, 1.2, 0.8);       // belly
+  mesh(new THREE.SphereGeometry(0.3, 28, 22), black, 0, 1.05, 0.02);                        // head
+  mesh(new THREE.SphereGeometry(0.22, 22, 16), white, 0, 1.02, 0.13, 1.05, 0.95, 0.75);     // white face
   const eyes = [];
   for (const s of [-1, 1]) {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 })); e.position.set(s * 0.09, 0.95, 0.3); body.add(e); eyes.push(e);
-    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(s * 0.09 + 0.015, 0.97, 0.35); body.add(hl); eyes.push(hl);
+    const e = mesh(new THREE.SphereGeometry(0.058, 14, 10), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.15 }), s * 0.1, 1.08, 0.27); eyes.push(e);
+    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(s * 0.1 + 0.018, 1.105, 0.322); body.add(hl); eyes.push(hl);
+    mesh(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshStandardMaterial({ color: 0xf2a1a8, roughness: 0.8 }), s * 0.17, 0.98, 0.24, 1, 0.6, 0.4); // rosy cheeks
   }
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 10), orange); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.87, 0.36); body.add(beak);
+  const beak = mesh(new THREE.ConeGeometry(0.065, 0.2, 12), orange, 0, 1.0, 0.36); beak.rotation.x = Math.PI / 2;
   const flippers = [];
-  for (const s of [-1, 1]) { const f = new THREE.Group(); f.position.set(s * 0.36, 0.72, 0); const m = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), black); m.scale.set(0.22, 1.25, 0.55); m.position.y = -0.22; m.castShadow = true; f.add(m); f.rotation.z = s * 0.18; body.add(f); flippers.push(f); }
+  for (const s of [-1, 1]) { const f = new THREE.Group(); f.position.set(s * 0.38, 0.78, 0); const m = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), black); m.scale.set(0.24, 1.3, 0.6); m.position.y = -0.24; m.castShadow = true; f.add(m); f.rotation.z = s * 0.2; body.add(f); flippers.push(f); }
   const feet = [];
-  for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), orange); f.scale.set(1, 0.32, 1.5); f.position.set(s * 0.13, 0.03, 0.12); g.add(f); feet.push(f); }
-  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.06, 8, 20), new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.9 })); scarf.rotation.x = Math.PI / 2; scarf.position.y = 0.76; scarf.scale.set(1, 1, 0.9); body.add(scarf);
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.05), new THREE.MeshStandardMaterial({ color: 0xc0392b })); tail.position.set(0.16, 0.6, 0.27); tail.rotation.z = -0.3; body.add(tail);
-  g.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+  for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), orange); f.scale.set(1, 0.32, 1.5); f.position.set(s * 0.14, 0.03, 0.14); f.castShadow = true; g.add(f); feet.push(f); }
+  const scarfM = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.9 });
+  const scarf = mesh(new THREE.TorusGeometry(0.29, 0.065, 10, 24), scarfM, 0, 0.8, 0.0, 1, 1, 0.92); scarf.rotation.x = Math.PI / 2;
+  const tail = mesh(new THREE.BoxGeometry(0.15, 0.3, 0.05), scarfM, 0.17, 0.62, 0.32); tail.rotation.z = -0.25;
   g.userData = { body, flippers, feet, eyes, scarf };
   return g;
 }
@@ -433,7 +440,7 @@ export function createWorld({ canvas, stage, onTap }) {
 
   // post-processing (desktop): a soft glow on lamps and windows at night
   let composer = null, bloom = null;
-  if (!MOBILE) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.5, 0.88); composer.addPass(bloom); composer.addPass(new OutputPass()); }
+  if (!MOBILE) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.4, 0.92); composer.addPass(bloom); composer.addPass(new OutputPass()); }
 
   // groups that get rebuilt when the town changes
   const townGroup = new THREE.Group(), thingGroup = new THREE.Group(), graffitiGroup = new THREE.Group(), itemGroup = new THREE.Group(), boardGroup = new THREE.Group();
@@ -442,7 +449,7 @@ export function createWorld({ canvas, stage, onTap }) {
   const lampLights = []; for (let i = 0; i < (MOBILE ? 3 : 6); i++) { const l = new THREE.PointLight(0xffc77a, 0, 16, 2); scene.add(l); lampLights.push(l); }
 
   // Percy
-  const percy = makePenguin(); percy.scale.setScalar(1.05); scene.add(percy);
+  const percy = makePenguin(); percy.scale.setScalar(1.0); scene.add(percy);
   const percyPos = { x: 0, z: 0, init: false }; let percyFace = 0;
   const easel = new THREE.Group(); { const m = std(0x8a6a4a); const l = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.5, 0.06), m); l.position.y = 0.75; l.rotation.x = 0.12; easel.add(l); const c = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.04), MAT.white); c.position.set(0, 1.1, 0.12); easel.add(c); } easel.visible = false; scene.add(easel);
   const spray = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.22, 8), std(0xe2384d, { metalness: 0.6 })); spray.visible = false; scene.add(spray);
@@ -670,7 +677,8 @@ export function createWorld({ canvas, stage, onTap }) {
     const day = smooth(-6, 8, elev), golden = smooth(-4, 3, elev) * (1 - smooth(4, 16, elev));
     const overcast = { rain: 0.75, snow: 0.6, cloudy: 0.5, fog: 0.6, wind: 0.2 }[wx] || 0;
     sky.visible = elev > -10;
-    renderer.toneMappingExposure = 0.25 + 0.75 * day;
+    renderer.toneMappingExposure = 0.3 + 0.52 * day;
+    if (bloom) { bloom.enabled = day < 0.55; bloom.strength = 0.55 * (1 - day); }
     fogCol.copy(NIGHT).lerp(DAY, day); fogCol.lerp(cA.copy(DUSK), golden * 0.7); fogCol.lerp(cB.copy(OVER).multiplyScalar(0.3 + 0.7 * day), overcast * 0.7);
     scene.fog.color.copy(fogCol); scene.background = sky.visible ? null : fogCol;
     const fogTarget = (wx === 'fog' ? 0.045 : wx === 'rain' || wx === 'snow' ? 0.016 : 0.0065) + (1 - day) * 0.004;
@@ -678,15 +686,15 @@ export function createWorld({ canvas, stage, onTap }) {
     // lights: the sun by day, the moon by night (the same light, so shadows carry on)
     const moonUp = elev < -2;
     if (moonUp) { sun.position.set(-60, 90, -70).add(camT); sun.color.setHex(0xaecbff); sun.intensity = 0.35 * (1 - overcast * 0.7); }
-    else { sun.position.copy(sunDir).multiplyScalar(120).add(camT); sun.color.setHex(0xfff1dc).lerp(cA.setHex(0xffa36b), golden); sun.intensity = 3.2 * day * (1 - overcast * 0.65); }
+    else { sun.position.copy(sunDir).multiplyScalar(120).add(camT); sun.color.setHex(0xfff1dc).lerp(cA.setHex(0xffa36b), golden); sun.intensity = 2.6 * day * (1 - overcast * 0.65); }
     sun.target.position.copy(camT);
-    hemi.intensity = 0.25 + 0.85 * day; hemi.color.setHex(moonUp ? 0x6b7fb3 : 0xcfe6ff);
+    hemi.intensity = 0.25 + 0.55 * day; hemi.color.setHex(moonUp ? 0x6b7fb3 : 0xcfe6ff);
     starMat.opacity = (1 - day) * (1 - overcast); moon.material.opacity = (1 - day) * (1 - overcast * 0.8); moon.position.set(-420, 520, -600);
     MAT.glass.emissiveIntensity = (1 - day) * 1.4; MAT.lampGlass.emissiveIntensity = 0.2 + (1 - day) * 4;
     if ((envTimer -= dt) <= 0 && sky.visible) { envTimer = 20; refreshEnv(sunDir); }
     // town details
     if (townGroup.userData.leafMat) townGroup.userData.leafMat.color.lerp(cA.setHex({ spring: 0x6fae4b, summer: 0x4f8a3a, autumn: 0xc9772c, winter: 0x8a9a8c }[season]), 0.01);
-    MAT.grass.color.lerp(cA.setHex({ spring: 0x8bbd62, summer: 0x9ab35a, autumn: 0xa39a58, winter: wx === 'snow' ? 0xe9eef2 : 0xa9b5a8 }[season]), 0.005);
+    MAT.hill.color.copy(MAT.grass.color); MAT.grass.color.lerp(cA.setHex({ spring: 0x8bbd62, summer: 0x9ab35a, autumn: 0xa39a58, winter: wx === 'snow' ? 0xe9eef2 : 0xa9b5a8 }[season]), 0.005);
     if (pondMesh) { TEX.water.offset.x += dt * 0.01; TEX.water.offset.y += dt * 0.007; MAT.water.color.setHex(season === 'winter' && wx === 'snow' ? 0xbcd6e0 : 0x2c6670); }
     if (stoneFx) { const w = L ? L.watchers : 0; stoneFx.rings.forEach((rg, i) => { const ph = ((now * (0.00025 + Math.min(0.0006, w * 0.00008))) + i / 3) % 1; rg.scale.setScalar(1 + ph * 2.2); rg.material.opacity = REDUCED ? 0.15 : 0.45 * (1 - ph); }); stoneFx.light.intensity = (1 - day) * 6 + 1 + Math.min(8, w * 1.2); }
     if (fogParts) { fogParts.mats.forEach((m, i) => { m.color.copy(fogCol).lerp(cA.setHex(0xffffff), 0.15 * day); m.opacity = (0.5 + i * 0.13) * (0.8 + 0.2 * Math.sin(now * 0.0003 + i)); }); if (!REDUCED) fogParts.puffs.forEach(p => { p.userData.a += dt * 0.004; p.position.x = Math.cos(p.userData.a) * p.userData.r; p.position.z = Math.sin(p.userData.a) * p.userData.r; p.material.color.copy(fogCol).lerp(cA.setHex(0xffffff), 0.2 * day); }); }

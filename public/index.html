@@ -128,6 +128,10 @@ textarea{resize:vertical;min-height:64px}
 .list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .list li{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:8px}
 .list li div{min-width:0}.list b{display:block;overflow-wrap:anywhere}.list small{color:var(--muted)}
+.today .voice{font-size:24px}
+.emos{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px}
+.emo{display:grid;grid-template-columns:82px minmax(0,1fr);gap:8px;align-items:center;font-size:12.5px;color:var(--muted)}
+.emo .bar{height:6px}
 .note{border-radius:12px;background:var(--surface);border:1px solid var(--line);padding:10px 12px;display:grid;gap:4px}
 .note q{font-style:italic;overflow-wrap:anywhere}
 .note small{color:var(--muted)}
@@ -186,6 +190,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     </nav>
 
     <div class="tabpanel" id="p-mind">
+      <div class="card today" id="todayCard"><h2 style="margin:0">Today</h2><p class="voice" id="todayLabel" style="margin:0"></p><p class="hint" id="todayWhy"></p><div class="emos" id="emos"></div><p class="hint" id="absorbed"></p></div>
       <div><h2>On his mind</h2><p class="voice" id="thoughtNow" style="margin:0"></p></div>
       <div><h2>Who he thinks he is</h2><p class="voice" id="selfDesc" style="margin:0"></p></div>
       <div class="chips" id="traits"></div>
@@ -208,7 +213,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
       <form class="card" id="noteForm">
         <h2 style="margin:0">Leave a note at the Humming Stone</h2>
         <p class="hint">He finds notes when he visits the stone, and he remembers them.</p>
-        <label class="fld">Your note<textarea id="noteText" maxlength="280" required></textarea></label>
+        <label class="fld">Your note<textarea id="noteText" maxlength="1000" rows="5" required></textarea></label>
         <label class="fld">Sign it (optional)<input type="text" id="noteFrom" maxlength="30"></label>
         <div class="row"><button type="submit" class="btn primary">Leave note</button><span class="hint" id="noteStatus" role="status"></span></div>
       </form>
@@ -258,8 +263,9 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         </form>
         <form class="card" id="bookForm">
           <h2 style="margin:0">Leave a book at the library</h2>
-          <p class="hint">He'll research it on the web next time he's at the library.</p>
+          <p class="hint">He'll read it next time he's at the library. Leave the text empty and he'll look the topic up on the web instead.</p>
           <label class="fld">Book about<input type="text" id="bookTopic" maxlength="60" required></label>
+          <label class="fld">Text of the book (optional): paste an article or anything you want him to read<textarea id="bookText" maxlength="20000" rows="5"></textarea></label>
           <div class="row"><button type="submit" class="btn">Leave the book</button><span class="hint" id="bookStatus" role="status"></span></div>
         </form>
         <div class="card"><h2 style="margin:0">Things you've made</h2><ul class="list" id="kThings"></ul></div>
