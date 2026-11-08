@@ -82,7 +82,11 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       out.roads = [...roads].map(r => ({ name: r, walked: mind().roadsWalked.includes(r) }));
       out.fog = Town.endNodes(S.town).map(id => S.town.nodes[id]).filter(n => Math.hypot(n.x - pos.x, n.z - pos.z) < 22).map(n => { const e = S.town.edges.find(x => !x.path && (S.town.nodes[x.a] === n || S.town.nodes[x.b] === n)); return (e ? e.name : 'a road') + ' runs into thick fog ' + bearing(pos, n); });
       const stone = S.town.places.find(p => p.type === 'stone');
-      if (stone && Math.hypot(stone.x - pos.x, stone.z - pos.z) < 6) { const unread = S.notes.filter(n => !n.read).length; out.stone = unread ? unread + ' folded paper' + (unread > 1 ? 's' : '') + ' tucked under the stone' : 'nothing under the stone'; }
+      if (stone) { // up close he can count them; from down the lane a new paper still catches the eye
+        const unread = S.notes.filter(n => !n.read).length, d = Math.hypot(stone.x - pos.x, stone.z - pos.z);
+        if (d < 6) out.stone = unread ? unread + ' folded paper' + (unread > 1 ? 's' : '') + ' tucked under the stone' : 'nothing under the stone';
+        else if (unread && d < 34 && !W.isDark(h)) out.stone = 'from here he can see something pale, like folded paper, tucked under the standing stone (' + bearing(pos, stone) + ')';
+      }
       const market = S.town.places.find(p => p.type === 'market');
       if (market && Math.hypot(market.door.x - pos.x, market.door.z - pos.z) < 6) { const on = S.drawings.filter(d => d.onStall && !d.sold).length; out.stall = 'the stall has ' + (on ? on + ' of his drawings on it' : 'nothing on it') + ' and the honesty tin'; }
       const post = S.town.places.find(p => p.type === 'post');
@@ -112,7 +116,7 @@ export function describe(p) {
   if (p.graffiti && p.graffiti.length) L.push('Painted walls: ' + p.graffiti.map(g => g.where + ' (' + g.by + '): ' + g.what).join('; ') + '.');
   if (p.roads && p.roads.length) L.push('Street signs nearby: ' + p.roads.map(r => r.name + (r.walked ? '' : ' (not walked yet)')).join(', ') + '.');
   if (p.fog && p.fog.length) L.push('Fog: ' + p.fog.join('; ') + '.');
-  if (p.stone) L.push('At the stone: ' + p.stone + '.');
+  if (p.stone) L.push((/^from here/.test(p.stone) ? 'Looking towards the stone: ' : 'At the stone: ') + p.stone + '.');
   if (p.stall) L.push('At the market: ' + p.stall + '.');
   if (p.postLamp) L.push(p.postLamp + '.');
   if (p.absences) L.push('Missing: ' + p.absences.join('; ') + '.');
