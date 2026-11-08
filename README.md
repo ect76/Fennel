@@ -133,7 +133,7 @@ When he finds something missing that he wants, he writes a request: what, why, w
 | `ANTHROPIC_API_KEY` | — | Turns on his Claude-powered mind |
 | `KEEPER_KEY` | — | Password for the keeper tools on the web page |
 | `TIME_SCALE` | `4` | Town minutes per real minute. `4` = a town day every 6 hours |
-| `GROW_EVERY_DAYS` | `3` | The fog pulls back every N town days (`0` = only when you do it) |
+| `GROW_EVERY_DAYS` | `0` | The fog pulls back every N town days. `0` (the default) = only when you push it back in the Keeper tab |
 | `MAX_CALLS_PER_DAY` | `300` | Claude calls per real day (change it live in the Keeper tab) |
 | `MAX_SPEND_PER_DAY` | `2` | Estimated dollars per real day, worked out from the tokens each call used (`0` = no cap; change it live) |
 | `MAX_SEARCHES_PER_DAY` | `10` | Paid Claude web searches per day (about $0.01 each) |

@@ -28,7 +28,7 @@ export const config = {
   maxSpendPerDay: numZ(env.MAX_SPEND_PER_DAY, 2),      // estimated US dollars per real day (0 = no spending cap)
   sessionSteps: num(env.SESSION_STEPS, 5),             // steps per coding/research sitting: small sittings, carried on later
   fetchTokens: num(env.FETCH_TOKENS, 6000),            // how much of a web page he reads at once
-  growEveryDays: numZ(env.GROW_EVERY_DAYS, 3),         // the fog pulls back every N town days (0 = only when the keeper says)
+  growEveryDays: numZ(env.GROW_EVERY_DAYS, 0),         // the fog pulls back every N town days (0 = only when the keeper says: the default)
   webResearch: onOff(env.WEB_RESEARCH, true),
 
   // Searching without paying per search: a SearXNG instance (e.g. http://192.168.0.15:8888, with json enabled)
