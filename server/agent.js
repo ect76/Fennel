@@ -257,19 +257,21 @@ function effortOn(i) {
 // "Mixed" thinking: the everyday model for routine moments, the better model where judgement matters:
 // waking and planning the day, when his body is in trouble, when he keeps choosing the same thing or keeps failing,
 // and otherwise as a periodic check-in. Nothing about this is shown to him.
-let lastBetterT = -1e9;
+let lastBetterT = -1e9, lastWakeBetter = -1;
 function chooseModel() {
   const b = budget();
   if (b.quality !== 'mixed') return { model: modelFor('decide') };
-  const better = config.modelBetter, why = [];
-  if (/wak|woke|slept/i.test(lastTrigger)) why.push('waking');
-  if (S.body.fullness < 15 || S.body.energy < 15) why.push('body in trouble');
-  const recent = S.journal.slice(-5).filter(j => j.choice && j.src !== 'body');
-  if (recent.length >= 4 && recent.every(j => j.choice.type === recent[0].choice.type)) why.push('same choice ' + recent.length + ' times');
-  if (recent.slice(-3).filter(j => j.outcome && j.outcome.ok === false).length >= 2) why.push('recent attempts failed');
-  if (S.t - lastBetterT > 120) why.push('check-in');
+  const why = [], since = S.t - lastBetterT, day = W.dayOf(S.t);
+  if (/wak|woke|slept/i.test(lastTrigger) && lastWakeBetter !== day) { why.push('waking'); lastWakeBetter = day; }
+  if (since > 45) { // the other reasons call on the better model at most every 45 town minutes, so a long loop isn't all Sonnet
+    if (S.body.fullness < 15 || S.body.energy < 15) why.push('body in trouble');
+    const recent = S.journal.slice(-5).filter(j => j.choice && j.src !== 'body');
+    if (recent.length >= 4 && recent.every(j => j.choice.type === recent[0].choice.type)) why.push('same choice ' + recent.length + ' times');
+    if (recent.slice(-3).filter(j => j.outcome && j.outcome.ok === false).length >= 2) why.push('recent attempts failed');
+    if (since > 120) why.push('check-in');
+  }
   if (!why.length) return { model: modelFor('decide') };
-  lastBetterT = S.t; return { model: better, why: why.join(', ') };
+  lastBetterT = S.t; return { model: config.modelBetter, why: why.join(', ') };
 }
 
 function resolveGo(to) {
