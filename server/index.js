@@ -86,27 +86,30 @@ function later(a, kind, promise) {
   promise.then(r => { a.job.result = r; }).catch(e => { a.job.error = String(e.message || e); console.warn('[percy] ' + kind + ' failed:', a.job.error); })
     .finally(() => { a.job.done = true; if (a.job.ended) publish(a); });
 }
+// what one research session taught him
+function learned(a, r) {
+  S.knowledge.push({ topic: r.topic, facts: r.facts, sources: r.sources, day: W.dayOf(S.t), src: 'claude', web: r.web });
+  if (S.knowledge.length > 60) S.knowledge.shift();
+  const subject = r.asked || a.subject || '';
+  S.researchQueue = S.researchQueue.filter(q => q.topic.toLowerCase() !== String(subject).toLowerCase() && q.topic.toLowerCase() !== r.topic.toLowerCase());
+  if (r.newQuestion) { S.questions.unshift(r.newQuestion); S.questions = S.questions.slice(0, 6); }
+  W.addDiary('learn', 'read about ' + r.topic + '.\n' + r.facts.map(f => '· ' + f).join('\n') + (r.feeling ? '\n' + r.feeling : ''), 'claude', { sources: r.sources });
+  W.remember('learned about ' + r.topic + ': ' + r.facts[0], 3);
+  { const words = t => String(t).toLowerCase().match(/[a-z]{4,}/g) || [];
+    const rw = new Set(words(r.topic + ' ' + subject));
+    const it = S.interests.find(i => words(i.topic).some(w => rw.has(w))) || (S.interests[0] && S.interests[0].strength > 50 ? S.interests[0] : null);
+    if (it) { it.sessions++; it.strength = Math.min(100, it.strength + 8); }
+    W.emo('curiosity', 6); W.emo('contentment', 6);
+    // down the rabbit hole: while he's hooked, each session suggests the next thing to look up
+    if (r.nextTopic && (!it || it.strength > 35) && !S.researchQueue.some(q => q.topic.toLowerCase() === r.nextTopic.toLowerCase()) && !S.knowledge.some(k => k.topic.toLowerCase() === r.nextTopic.toLowerCase())) S.researchQueue.unshift({ topic: r.nextTopic, question: 'going deeper' + (it ? ' into ' + it.topic : '') });
+    if (S.researchQueue.length > 8) S.researchQueue.length = 8; }
+  W.log('researched ' + r.topic);
+}
 function publish(a) {
   const j = a.job; if (!j || j.published) return; j.published = true;
   if (j.kind === 'research') {
-    const r = j.result;
-    if (r) {
-      S.knowledge.push({ topic: r.topic, facts: r.facts, sources: r.sources, day: W.dayOf(S.t), src: 'claude', web: r.web });
-      if (S.knowledge.length > 60) S.knowledge.shift();
-      S.researchQueue = S.researchQueue.filter(q => q.topic.toLowerCase() !== String(a.subject || '').toLowerCase() && q.topic.toLowerCase() !== r.topic.toLowerCase());
-      if (r.newQuestion) { S.questions.unshift(r.newQuestion); S.questions = S.questions.slice(0, 6); }
-      W.addDiary('learn', 'read about ' + r.topic + '.\n' + r.facts.map(f => '· ' + f).join('\n') + (r.feeling ? '\n' + r.feeling : ''), 'claude', { sources: r.sources });
-      W.remember('learned about ' + r.topic + ': ' + r.facts[0], 3);
-      { const words = t => String(t).toLowerCase().match(/[a-z]{4,}/g) || [];
-        const rw = new Set(words(r.topic + ' ' + (a.subject || '')));
-        const it = S.interests.find(i => words(i.topic).some(w => rw.has(w))) || (S.interests[0] && S.interests[0].strength > 50 ? S.interests[0] : null);
-        if (it) { it.sessions++; it.strength = Math.min(100, it.strength + 8); }
-        W.emo('curiosity', 6); W.emo('contentment', 6);
-        // down the rabbit hole: while he's hooked, each session suggests the next thing to look up
-        if (r.nextTopic && (!it || it.strength > 35) && !S.researchQueue.some(q => q.topic.toLowerCase() === r.nextTopic.toLowerCase()) && !S.knowledge.some(k => k.topic.toLowerCase() === r.nextTopic.toLowerCase())) S.researchQueue.unshift({ topic: r.nextTopic, question: 'going deeper' + (it ? ' into ' + it.topic : '') });
-        if (S.researchQueue.length > 8) S.researchQueue.length = 8; }
-      W.log('researched ' + r.topic);
-    } else bookFallback();
+    const rs = Array.isArray(j.result) ? j.result : [j.result];
+    if (!rs[0]) bookFallback(); else for (const r of rs) if (r) learned(a, r);
   } else if (j.kind === 'drawing') { finishDrawing(a, j.result);
   } else if (j.kind === 'graffiti') { if (a.made) finishGraffiti(a, j.result);
   } else if (j.kind === 'web') {
@@ -206,7 +209,11 @@ W.setHooks({
       const q = S.researchQueue[0];
       const topic = a.subject || (q && q.topic) || '';
       const book = q && q.topic === topic ? q : null;
-      if (claude && topic) { a.subject = topic; later(a, 'research', M.research(topic, book ? book.question : '', book && book.text)); W.setThought(book && book.text ? 'someone left a book about ' + topic + '. reading it.' : 'looking up ' + topic + '.'); }
+      // a long list and a full session: he gets through two things
+      const next = S.researchQueue.find(x => x.topic !== topic && !x.text);
+      const two = !(book && book.text) && next && S.researchQueue.length >= 3;
+      const one = (t, bk) => M.research(t, bk ? bk.question : '', bk && bk.text).then(r => (r.asked = t, r));
+      if (claude && topic) { a.subject = topic; later(a, 'research', two ? one(topic, book).then(async r1 => [r1, await one(next.topic, next).catch(() => null)]) : one(topic, book)); W.setThought(book && book.text ? 'someone left a book about ' + topic + '. reading it.' : 'looking up ' + topic + '.'); }
     }
     if (a.id === 'write' && claude) later(a, 'page', M.writePage(a.subject, a.title));
     if (a.id === 'web' && claude) {

@@ -324,7 +324,7 @@ function ruleScore(id, h) {
     case 'fish': s = (100 - n.fullness) * 0.025 + (S.coins < 2 ? 0.4 : 0); break;
     case 'draw': s = 0.7 + tr.creativity * 0.6 + (100 - n.joy) * 0.006 + (wet ? 0.3 : 0) - (n.energy < 25 ? 0.6 : 0) - S.stats.drew * 0.45; break;
     case 'sell': s = 0.3 + unsold().filter(d => !d.onStall).length * 0.25 + (S.coins < 4 ? 0.8 : 0) + ((S.tin || 0) > 0 ? 0.3 : 0); break;
-    case 'read': s = (100 - n.wonder) * 0.02 + tr.curiosity * 0.5 + (S.researchQueue.length ? 1.2 : 0) + (wet ? 0.3 : 0); break;
+    case 'read': s = (100 - n.wonder) * 0.02 + tr.curiosity * 0.5 + (S.researchQueue.length ? 0.9 + Math.min(S.researchQueue.length, 6) * 0.15 : 0) + (wet ? 0.3 : 0); break;
     case 'pond': s = (100 - n.calm) * 0.025 + 0.3 - (wet ? 0.4 : 0); break;
     case 'stargaze': s = 0.6 + (100 - n.wonder) * 0.018; break;
     case 'shrine': s = 0.3 + S.notes.filter(x => !x.read).length * 1.6 + (n.wonder < 40 ? 0.45 : 0); break;
