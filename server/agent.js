@@ -23,8 +23,8 @@ function initialConditions() {
   Mem.claim({ text: 'His name is ' + S.initial.name + '.', about: 'self', provenance: 'initial', confidence: 1 });
   Mem.claim({ text: 'He wakes in ' + S.initial.cottage + '.', about: home.id, provenance: 'initial', confidence: 1 });
   S.mind.knownPlaces[home.id] = { firstSeen: S.t, firstDay: 1, name: 'his cottage', entered: 1 };
-  Mem.episode({ what: 'Woke in the cottage. This is the first thing he remembers.', where: 'his cottage', kind: 'wake', importance: 4 });
-  W.life('wake', 'Day 1. Percy wakes in a cottage. It is the first thing he remembers.');
+  Mem.episode({ what: 'Woke in the cottage.', where: 'his cottage', kind: 'wake', importance: 3 });
+  W.life('wake', 'Day 1. Percy wakes in his cottage.');
 }
 
 /* ---------- what he can do (capabilities, with the constraints that apply right now) ---------- */
@@ -83,7 +83,7 @@ const DECIDE_TOOL = {
     action: { type: 'object', properties: { type: { type: 'string' }, args: { type: 'object' }, minutes: { type: 'number' } }, required: ['type'] },
     caption: { type: 'string', description: 'a few words an onlooker would use for what he is doing' },
     expectation: { type: 'string', description: 'what he thinks will happen' },
-    thought: { type: 'string' },
+    thought: { type: 'string', description: 'what goes through his head, in his own words, first person; never ids, tool names or talk about options' },
     feeling: { type: 'object', properties: { word: { type: 'string' }, valence: { type: 'number', description: '-1 to 1' } } },
     notes: { type: 'array', description: 'changes to his mind, only if warranted: a question he has; a belief he now holds (say how he knows); a preference, opinion, association or view of himself (with what led to it); a skill he has learned; an idea; or a name he gives a thing (about = thing id)', items: { type: 'object', properties: { kind: { type: 'string', enum: ['question', 'belief', 'preference', 'opinion', 'association', 'self', 'skill', 'idea', 'name', 'answered', 'drop_question'] }, text: { type: 'string' }, about: { type: 'string' }, confidence: { type: 'number' } } } },
   }, required: ['action'] },
@@ -380,7 +380,8 @@ function lookInsideWork(placeId) {
   return async () => {
     const p = W.placeById(placeId); if (!p || p.type === 'home' || p.inside) return null;
     if (!canCall()) return { unfurnished: true };
-    p.inside = await C.furnish(p); return { furnished: true };
+    for (let i = 0; i < 2; i++) { try { p.inside = await C.furnish(p); return { furnished: true }; } catch (e) { console.warn('[percy] describing ' + p.name + ' failed: ' + e.message); } }
+    return { unfurnished: true }; // try again next time he looks around
   };
 }
 async function drawWork(subject, atStall, order) {
@@ -497,7 +498,7 @@ function interpret(a, outcome, facts) {
         facts.push(unread.length ? 'read ' + unread.length + ' note' + (unread.length > 1 ? 's' : '') + ': ' + unread.map(n => '"' + n.text.slice(0, 600) + '"' + (n.from ? ' (signed ' + n.from + ')' : '')).join(' / ') : 'there were no unread notes'); x.importance = unread.length ? 4 : 1; }
       else if (w === 'letters') { const ls = S.letters.filter(l => l.collected && !l.read); for (const l of ls) { l.read = true; Mem.claim({ text: 'A letter from the keeper says: "' + l.text.slice(0, 380) + '"', about: l.about || 'letters', provenance: 'told', confidence: 1, from: 'the keeper' }); } facts.push(ls.length ? ls.map(l => 'letter: "' + l.text + '"').join(' / ') : 'no unread letters'); x.importance = ls.length ? 4 : 1; }
       else if (r && r.facts) { facts.push(...r.facts); x.learning.push(...(r.learning || [])); x.importance = 3; }
-      else { const inside = S.inside && W.placeById(S.inside); const it = inside && inside.inside && inside.inside.items.find(i => i.id === w); if (it && it.text) { it.examined = true; facts.push('read the writing on it: "' + it.text + '"'); Mem.claim({ text: 'Writing found in ' + inside.name + ': "' + it.text.slice(0, 380) + '"', about: inside.id, provenance: 'perceived', confidence: 1 }); x.importance = 3; } else { const said = str(a.args.said_what || w, 60); facts.push(!inside ? 'he was not inside anywhere with things to read, so he could not find "' + said + '"' : it ? 'it had no writing on it' : 'he could not find anything matching "' + said + '" in ' + inside.name + (inside.inside ? ' (things here: ' + inside.inside.items.filter(i => !i.taken).map(i => i.id + ' ' + i.name).join(', ') + ')' : '')); } }
+      else { const inside = S.inside && W.placeById(S.inside); const it = inside && inside.inside && inside.inside.items.find(i => i.id === w); if (it && it.text) { const again = (it.reads = (it.reads || 0) + 1) > 1; it.examined = true; facts.push(again ? 'read it again: the same words as before, "' + it.text + '", and there is nothing more written on it that he can make out (read ' + it.reads + ' times now)' : 'read the writing on it: "' + it.text + '"' + (/\b(book|volume|pages?|ledger|diary|journal)\b/i.test(it.look + ' ' + it.name) && it.text.length < 120 ? '; that is all the writing he can make out' : '')); Mem.claim({ text: 'Writing found in ' + inside.name + ': "' + it.text.slice(0, 380) + '"', about: inside.id, provenance: 'perceived', confidence: 1 }); x.importance = 3; } else { const said = str(a.args.said_what || w, 60); facts.push(!inside ? 'he was not inside anywhere with things to read, so he could not find "' + said + '"' : it ? 'it had no writing on it' : 'he could not find anything matching "' + said + '" in ' + inside.name + (inside.inside ? ' (things here: ' + inside.inside.items.filter(i => !i.taken).map(i => i.id + ' ' + i.name).join(', ') + ')' : '')); } }
       break;
     }
     case 'take': { x.importance = 3; break; }
