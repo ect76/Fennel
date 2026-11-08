@@ -18,6 +18,10 @@ function decide(prompt) {
     write: { type: 'write', args: { kind: 'page', about: 'the clock', title: 'Notes on the clock', publish: true } }, draw: { type: 'draw', args: { subject: 'the clock tower in fog', offer_at_stall: true } },
     request: { type: 'request', args: { kind: 'object', what: 'a small brass telescope', why: 'to see the clock face from home', missing: 'nothing to see far with', alternatives: 'walking there', dependencies: 'none', interest: 'medium' } },
     wait: { type: 'wait', args: { minutes: 30 } }, eat: { type: 'eat', args: { where: 'home' } }, think: { type: 'think', args: { about: 'the clock', minutes: 15 } } }[step];
+  if (process.env.MOCK_NAMES) { // refer to things by name, the way Claude often does
+    const byName = { look: { type: 'look', args: { at: 'around' } }, go: { type: 'go', args: { to: 'the bakery' } }, enter: { type: 'enter', args: { place: "Crumb's Bakery" } }, research: { type: 'read', args: { what: 'the railway timetable' } }, code: { type: 'take', args: { item: 'mantel clock' } }, write: { type: 'eat', args: { where: 'the bakery' } } };
+    if (byName[step]) return { ...base, action: byName[step], notes: [] };
+  }
   return { ...base, action: a, notes: n % 5 === 0 ? [{ kind: 'question', text: 'why does the clock strike?' }] : [] };
 }
 function sittingTurn(body) {

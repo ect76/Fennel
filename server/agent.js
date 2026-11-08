@@ -34,11 +34,11 @@ export function capabilities() {
   const h = W.hourOf(S.t), perms = hooks.permissions(), C1 = [];
   const add = (type, args, note) => C1.push({ type, args, note });
   const libs = known('library'), computers = ['"home" (the old computer on his desk)'].concat(libs.map(l => l.id + ' (' + l.name + (W.isOpen(l, h) ? ', open now' : ', shut now') + ')'));
-  add('go', 'to: a place id, a thing id, a road name from a street sign, or "home"', 'walking takes a few minutes');
-  add('enter', 'place: a place id', 'some places only open at certain hours');
-  add('look', 'at: "around", a thing id, an item id in this room, a place id, "sky" or "fog"; minutes (optional)', '');
-  add('take', 'item: an item id in the room he is in', 'only small things');
-  add('read', 'what: "notes" (papers under the standing stone, when he is there), "letters" (post he has collected), or an item id that has writing', '');
+  add('go', 'to: a place or thing he has seen (its id, or how he knows it: a sign he read, what it looks like, a name he gave it), a road name from a street sign, or "home"', 'walking takes a few minutes');
+  add('enter', 'place: a place he has seen (id or name)', 'some places only open at certain hours');
+  add('look', 'at: "around", a thing, an item in this room or a place (id or how he knows it), "sky" or "fog"; minutes (optional)', '');
+  add('take', 'item: something in the room he is in (id or name)', 'only small things');
+  add('read', 'what: "notes" (papers under the standing stone, when he is there), "letters" (post he has collected), or an item in this room that has writing (id or name)', '');
   const foodNotes = ['home: ' + S.pantry + ' tins left'].concat(known('bakery').concat(known('cafe')).map(p => p.id + ' (' + p.name + ', 2 coins, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') + ')'));
   add('eat', 'where: ' + foodNotes.join('; '), 'he has ' + S.coins + ' coins');
   if (known('green').length) add('fish', '', 'the pond on the green; daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
@@ -219,8 +219,55 @@ function resolveGo(to) {
 function nearSpot(th) { const n = W.S.town.edges.length ? (() => { let best = null; for (const e of S.town.edges) { const A = S.town.nodes[e.a], B = S.town.nodes[e.b]; const dx = B.x - A.x, dz = B.z - A.z, L2 = dx * dx + dz * dz || 1; let t = ((th.x - A.x) * dx + (th.z - A.z) * dz) / L2; t = Math.max(0, Math.min(1, t)); const x = A.x + dx * t, z = A.z + dz * t, d = Math.hypot(th.x - x, th.z - z); if (!best || d < best.d) best = { x, z, d }; } return best; })() : null; if (!n) return { x: th.x + 1.8, z: th.z }; const dx = n.x - th.x, dz = n.z - th.z, L = Math.hypot(dx, dz) || 1; return { x: th.x + dx / L * Math.min(1.8 + (th.size || 2) * 0.3, L), z: th.z + dz / L * Math.min(1.8 + (th.size || 2) * 0.3, L) }; }
 function fail(j, why) { return { error: why }; }
 
+// He refers to things the way he knows them: a sign he has read, what something looks like, a name he gave it.
+// These turn his words into the world's ids, but only for things he has actually seen (never by the keeper's labels).
+const normName = x => String(x || '').toLowerCase().replace(/[‘’`]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^((the|a|an|to|at|into|inside|in|my|his)\s+)+/, '');
+function bestMatch(cands, said, textsOf, posOf) {
+  const q = normName(said); if (!q || !cands.length) return null;
+  const qw = new Set(q.split(' ').filter(w => w.length > 2));
+  let best = null;
+  for (const c of cands) {
+    let score = 0;
+    for (const t0 of textsOf(c)) {
+      const t = normName(t0); if (!t) continue;
+      if (t === q) score = Math.max(score, 100);
+      else if (q.length >= 3 && (t.includes(q) || q.includes(t))) score = Math.max(score, 60);
+      else { const tw = t.split(' ').filter(w => w.length > 2); const hit = tw.filter(w => qw.has(w) || qw.has(w.replace(/s$/, ''))).length; if (hit) score = Math.max(score, 20 * hit / Math.max(1, Math.min(qw.size, tw.length))); }
+    }
+    if (score < 20) continue;
+    const pos = posOf ? posOf(c) : null, d = pos ? Math.hypot(pos.x - S.pos.x, pos.z - S.pos.z) : 0;
+    if (!best || score > best.score || (score === best.score && d < best.d)) best = { c, score, d };
+  }
+  return best ? best.c : null;
+}
+function findPlace(said) {
+  if (W.placeById(said)) return W.placeById(said);
+  if (/^(home|my home|his home|the cottage|cottage|my cottage)$/i.test(String(said || '').trim())) return W.home();
+  return bestMatch(S.town.places.filter(p => S.mind.knownPlaces[p.id]), said, p => [p.name, (W.TYPES[p.type] || {}).label, (S.mind.knownPlaces[p.id] || {}).name], p => p);
+}
+function findThing(said) {
+  if (W.thingById(said)) return W.thingById(said);
+  return bestMatch(S.things.filter(t => S.mind.knownThings[t.id]), said, t => [(S.mind.knownThings[t.id] || {}).name, t.look], t => t);
+}
+function findItem(said) { // something in the room he's in
+  const pl = S.inside && W.placeById(S.inside); const items = pl && pl.inside ? pl.inside.items.filter(i => !i.taken) : [];
+  return items.find(i => i.id === said) || bestMatch(items, said, i => [i.name, i.look]);
+}
+function canonical(type, args) {
+  const a = { ...args }, swap = (k, v) => { if (v && v !== a[k]) { a['said_' + k] = a[k]; a[k] = v; } };
+  if (type === 'go' && a.to && !W.placeById(a.to) && !W.thingById(a.to) && !/^home$/i.test(a.to) && !S.town.edges.some(e => normName(e.name) === normName(a.to))) { const p = findPlace(a.to); const t = !p && findThing(a.to); swap('to', p ? p.id : t ? t.id : null); }
+  if (type === 'enter' && a.place) { const p = findPlace(a.place); swap('place', p && p.id); }
+  if (type === 'eat' && a.where && !/^home$/i.test(a.where)) { const p = findPlace(a.where); swap('where', p && (p.type === 'home' ? 'home' : p.id)); }
+  if (type === 'look' && a.at && !/^around$/i.test(a.at) && !W.thingById(a.at) && !W.placeById(a.at)) { const it = findItem(a.at), t = !it && findThing(a.at), p = !it && !t && findPlace(a.at); swap('at', it ? it.id : t ? t.id : p ? p.id : null); }
+  if (type === 'read' && a.what && !['notes', 'letters'].includes(a.what)) { if (/^(the )?(notes?|notes under the stone)$/i.test(a.what)) swap('what', 'notes'); else if (/^(the )?(letters?|post|my post)$/i.test(a.what)) swap('what', 'letters'); else { const it = findItem(a.what); swap('what', it && it.id); } }
+  if (type === 'take' && a.item) { const it = findItem(a.item); swap('item', it && it.id); }
+  if (type === 'buy' && a.item && !S.items.some(i => i.id === a.item)) { const it = bestMatch(S.items.filter(i => i.seen && !i.sold), a.item, i => [i.name, i.look]); swap('item', it && it.id); }
+  return a;
+}
+const knownPlacesList = () => S.town.places.filter(p => S.mind.knownPlaces[p.id]).map(p => p.id + ' (' + p.name + ')').join(', ');
+
 function act(r, j) {
-  const a = r.action, args = a.args && typeof a.args === 'object' ? a.args : {}, type = String(a.type || '').toLowerCase();
+  const a = r.action, type = String(a.type || '').toLowerCase(), args = canonical(type, a.args && typeof a.args === 'object' ? a.args : {}); a.args = args;
   const minutes = Number.isFinite(Number(a.minutes)) ? Number(a.minutes) : Number.isFinite(Number(args.minutes)) ? Number(args.minutes) : undefined;
   j.choice = { type, args }; j.minutes = minutes;
   const spec = plan(type, args, minutes);
@@ -234,14 +281,14 @@ function act(r, j) {
 function plan(type, args, minutes) {
   const h = W.hourOf(S.t), home = W.home();
   switch (type) {
-    case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'he does not know a way to "' + str(args.to, 40) + '"'); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
-    case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'he does not know that place'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
+    case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
+    case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
     case 'take': { const p = W.placeById(S.inside); if (!p || !p.inside) return fail(null, 'he is not inside anywhere with things to take'); return { place: p.id, enter: true }; }
     case 'read': return planRead(args);
     case 'eat': {
       const w = String(args.where || 'home'); const p = /^home$/i.test(w) ? home : W.placeById(w);
-      if (!p || !S.mind.knownPlaces[p.id] || !['home', 'bakery', 'cafe'].includes(p.type)) return fail(null, 'no known place to eat at "' + str(w, 30) + '"');
+      if (!p || !S.mind.knownPlaces[p.id] || !['home', 'bakery', 'cafe'].includes(p.type)) return fail(null, p && S.mind.knownPlaces[p.id] ? p.name + ' does not sell food' : 'nothing he has seen matches "' + str(args.said_where || w, 30) + '"');
       if (p.type === 'home' && S.pantry <= 0) return fail(null, 'the cupboard at home is empty');
       return { place: p.id, needOpen: p.type !== 'home', enter: true };
     }
@@ -425,7 +472,7 @@ function interpret(a, outcome, facts) {
         facts.push(unread.length ? 'read ' + unread.length + ' note' + (unread.length > 1 ? 's' : '') + ': ' + unread.map(n => '"' + n.text.slice(0, 600) + '"' + (n.from ? ' (signed ' + n.from + ')' : '')).join(' / ') : 'there were no unread notes'); x.importance = unread.length ? 4 : 1; }
       else if (w === 'letters') { const ls = S.letters.filter(l => l.collected && !l.read); for (const l of ls) { l.read = true; Mem.claim({ text: 'A letter from the keeper says: "' + l.text.slice(0, 380) + '"', about: l.about || 'letters', provenance: 'told', confidence: 1, from: 'the keeper' }); } facts.push(ls.length ? ls.map(l => 'letter: "' + l.text + '"').join(' / ') : 'no unread letters'); x.importance = ls.length ? 4 : 1; }
       else if (r && r.facts) { facts.push(...r.facts); x.learning.push(...(r.learning || [])); x.importance = 3; }
-      else { const inside = S.inside && W.placeById(S.inside); const it = inside && inside.inside && inside.inside.items.find(i => i.id === w); if (it && it.text) { it.examined = true; facts.push('read the writing on it: "' + it.text + '"'); Mem.claim({ text: 'Writing found in ' + inside.name + ': "' + it.text.slice(0, 380) + '"', about: inside.id, provenance: 'perceived', confidence: 1 }); x.importance = 3; } else facts.push('there was nothing there to read'); }
+      else { const inside = S.inside && W.placeById(S.inside); const it = inside && inside.inside && inside.inside.items.find(i => i.id === w); if (it && it.text) { it.examined = true; facts.push('read the writing on it: "' + it.text + '"'); Mem.claim({ text: 'Writing found in ' + inside.name + ': "' + it.text.slice(0, 380) + '"', about: inside.id, provenance: 'perceived', confidence: 1 }); x.importance = 3; } else { const said = str(a.args.said_what || w, 60); facts.push(!inside ? 'he was not inside anywhere with things to read, so he could not find "' + said + '"' : it ? 'it had no writing on it' : 'he could not find anything matching "' + said + '" in ' + inside.name + (inside.inside ? ' (things here: ' + inside.inside.items.filter(i => !i.taken).map(i => i.id + ' ' + i.name).join(', ') + ')' : '')); } }
       break;
     }
     case 'take': { x.importance = 3; break; }
