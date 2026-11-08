@@ -164,6 +164,7 @@ function arrive(a) {
   }
   if (p && a.enter && p.h > 0) { S.inside = p.id; p.visits = (p.visits || 0) + 1; }
   if (p && p.h > 0) S.face = Math.atan2(p.x - S.pos.x, p.z - S.pos.z);
+  if (a.type === 'go') a.facts.push(p ? 'arrived at ' + p.name : 'got to where he was heading' + (a.args && a.args.said_to ? ' (' + str(a.args.said_to, 40) + ')' : ''));
   a.phase = 'do'; a.total = a.left = a.type === 'sleep' ? sleepMinutes(h) : a.minutes;
   hooks.onArrive(a, p);
   if (a.workFn) startWork(a);
