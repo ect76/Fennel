@@ -72,7 +72,7 @@ If you want real people to be able to buy real prints, set up your own shop page
 Percy earns coins three ways, and spends them in the shops:
 
 - **The stall.** He leaves drawings out on the market stall; visitors can take one from the Drawings tab and he finds coins in his tin.
-- **Commissions.** Anyone visiting can send him an order from the **Shop & jobs** tab (a drawing, something written, or a web page) and offer up to 20 coins. Orders arrive as letters at the post office in Mossbrook, which he collects when he goes there (it's open 9am to 5pm, town time). He decides whether to take each job (he can say no), does it, and gets paid when it's finished. Each visitor can send three a day. You can remove any order in the Keeper tab.
+- **Commissions.** Anyone visiting can send him an order on his **shop page** (the "His shop & jobs" link under his name, or `/shop`) (a drawing, something written, or a web page) and offer up to 20 coins. Orders arrive as letters at the post office in Mossbrook, which he collects when he goes there (it's open 9am to 5pm, town time). He decides whether to take each job (he can say no), does it, and gets paid when it's finished. Each visitor can send three a day. You can remove any order in the Keeper tab.
 - **His shop.** Now and then he sits down and decides which of his drawings, pages, web projects and belongings to sell, sets his own prices and writes the blurbs. If his website is set up, he also designs and builds his own shop page there (`shop.html`) and redesigns it when he feels like it. The server keeps the stock, prices and "sold" labels on that page up to date.
 
 Nothing to set up for any of that. To let people pay **real money**, which turns into coins, connect Ko-fi:
@@ -86,6 +86,8 @@ Nothing to set up for any of that. To let people pay **real money**, which turns
 Every pound sent becomes 10 coins (change it with **Coins per pound**). Payments arrive in envelopes at the post office, with their message, and he opens them next time he goes. To buy something from his shop, people pay at least its price on Ko-fi and put the item's code (like `PCY-7KQ2`) in their message. The item is marked sold and the payment counts as buying it. A code from an order works the same way, for tipping him for a job. If a supporter ticks Ko-fi's "private" box, Percy only sees the coins: no name, no message.
 
 In the Keeper tab you can also **give him coins** yourself (with a message if you like), or record a shop sale that was paid some other way. Everything he sells is digital: buyers get his drawing, page or web project online, and nothing is ever posted. The post office is only part of his world, not a job for you. You handle anything owed on real money (Ko-fi's terms, tax).
+
+His requests (what he's asking for, how long he's waited, what came true, what he gave up on, and what he's saving for) have their own page too: the "His requests" link under his name, or `/requests`. When you're unlocked as keeper, each request has a **Make this** button that takes you to the town with it filled in.
 
 ### 9. Taking things away
 

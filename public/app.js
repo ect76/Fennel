@@ -120,10 +120,7 @@ function renderAll() {
   list($('#questions'), ST.questions, q => el('li', null, q));
   list($('#beliefs'), ST.beliefs, b => el('li', null, b));
   list($('#goals'), ST.goals, g => { const li = el('li', null, g.text); if (g.action) li.append(el('small', null, '→ ' + (LEAN[g.action] || g.action))); return li; });
-  list($('#wishes'), ST.wishes, w => { const li = el('li', null, w.text); const wait = ST.day - w.day; li.append(el('small', null, w.granted ? 'granted on day ' + w.grantedDay : 'asked on day ' + w.day + (wait > 0 ? ' · waiting ' + wait + ' day' + (wait === 1 ? '' : 's') : '') + (w.asked > 1 ? ' · asked ' + w.asked + ' times' : ''))); return li; });
-  const gave = (ST.wishLog || []).filter(w => !w.granted).slice(-4).map(w => w.text);
-  $('#wishLog').textContent = gave.length ? 'Gave up hoping for: ' + gave.join(', ') + '.' : '';
-  $('#savingWrap').hidden = !(ST.saving && ST.saving.what); if (ST.saving && ST.saving.what) $('#saving').textContent = ST.saving.what + (ST.saving.coins ? ' · ' + Math.min(ST.coins, ST.saving.coins) + ' of ' + ST.saving.coins + ' coins' : '');
+  { const open = (ST.wishes || []).filter(w => !w.granted).length; $('#reqLink').textContent = 'His requests' + (open ? ' (' + open + ')' : ''); const forSale = (ST.shop || []).filter(x => !x.sold).length; $('#shopLink').textContent = 'His shop & jobs' + (forSale ? ' (' + forSale + ' for sale)' : ''); }
   list($('#inventory'), ST.inventory, i => { const li = el('li', null, i.name); li.append(el('small', null, 'bought day ' + i.day + ' for ' + i.price)); return li; });
   list($('#queue'), ST.researchQueue, q => el('li', null, q));
   const seek = [], avoid = []; for (const k in ST.leanings) (ST.leanings[k] > 0 ? seek : avoid).push(LEAN[k] || k);
@@ -167,7 +164,6 @@ function renderAll() {
   }
   if (!ST.pages.length && !(ST.webPages || []).length) pg.append(el('p', 'hint', 'He hasn\'t written any pages yet.'));
   for (const p of ST.pages.slice().reverse()) { const a = el('article', 'page'); a.append(el('h3', null, p.title), el('small', null, 'Day ' + p.day + (p.forWho ? ' · written for ' + p.forWho : '')), el('div', 'txt', p.body)); pg.append(a); }
-  renderWork();
   // notes
   const pn = $('#percyNotes'); pn.textContent = ''; $('#percyNotesWrap').hidden = !(ST.percyNotes || []).length;
   for (const n of (ST.percyNotes || []).slice().reverse()) { const d = el('div', 'note'); d.append(el('div', 'voice', n.text)); d.append(el('small', null, 'left on day ' + n.day + (n.to ? ' for ' + n.to : '') + (n.inReplyTo ? ' · in reply to "' + n.inReplyTo + '"' : ''))); pn.append(d); }
@@ -183,54 +179,12 @@ async function take(dr, btn) {
 }
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b ? 'true' : 'false'));
-  for (const t of ['mind', 'diary', 'drawings', 'pages', 'work', 'stone', 'keeper']) $('#p-' + t).hidden = t !== b.dataset.tab;
+  for (const t of ['mind', 'diary', 'drawings', 'pages', 'stone', 'keeper']) $('#p-' + t).hidden = t !== b.dataset.tab;
 }));
-{ const h = { '#drawings': 'drawings', '#work': 'work', '#shop': 'work', '#stone': 'stone' }[location.hash]; if (h) document.querySelector('[data-tab=' + h + ']').click(); }
+if (location.hash === '#work' || location.hash === '#shop') location.replace('/shop'); // old links to the shop tab
+{ const h = { '#drawings': 'drawings', '#stone': 'stone', '#keeper': 'keeper' }[location.hash]; if (h) document.querySelector('[data-tab=' + h + ']').click(); }
 
-/* ---------- his shop, commissions, real coins ---------- */
-let myJobs = new Map(); try { myJobs = new Map(JSON.parse(localStorage.getItem('percy-jobs') || '[]')); } catch {}
-const STATUS = { posted: 'waiting at the post office', read: 'he has opened it and is thinking', accepted: 'he said yes and is working on it', declined: 'he said no', done: 'finished', failed: 'he couldn\'t do it' };
-const KINDNAME = { drawing: 'a drawing', page: 'something written', web: 'a web page' };
-function renderWork() {
-  const rate = ST.coinsPerPound || 10, pounds = c => '£' + (Math.max(1, c / rate)).toFixed(2).replace(/\.00$/, '');
-  const sign = $('#shopSign'); sign.hidden = !ST.advert; sign.textContent = ST.advert || '';
-  const items = (ST.shop || []).slice().reverse(), open = items.filter(x => !x.sold), sold = items.filter(x => x.sold).slice(0, 8);
-  const how = $('#shopHow'); how.textContent = '';
-  if (!open.length) how.append('Nothing for sale yet. Percy decides what to sell and sets the prices himself.');
-  else if (ST.kofiUrl) how.append('To buy something, pay at least the price in pounds on Ko-fi and put its code (like PCY-7KQ2) in your message. The money turns into coins that reach him at the post office.');
-  else how.append('His shop isn\'t taking money yet.');
-  if (ST.shopUrl) { how.append(' '); const a = el('a', null, 'His own shop page →'); a.href = ST.shopUrl; a.target = '_blank'; a.rel = 'noopener'; how.append(a); }
-  const g = $('#shopItems'); g.textContent = '';
-  for (const x of open.concat(sold)) {
-    const f = el('figure');
-    if (x.kind === 'drawing') { const img = el('img'); img.src = '/media/drawings/' + x.ref + '.svg'; img.alt = x.title; img.loading = 'lazy'; f.append(img); }
-    f.append(el('figcaption', null, x.title));
-    if (x.blurb) f.append(el('small', null, x.blurb));
-    f.append(el('small', null, x.sold ? 'sold on day ' + x.soldDay : x.price + ' coins · ' + pounds(x.price) + ' · code ' + x.code));
-    if (!x.sold && ST.kofiUrl) { const a = el('a', 'btn small', 'Buy on Ko-fi'); a.href = ST.kofiUrl; a.target = '_blank'; a.rel = 'noopener'; a.onclick = () => { try { navigator.clipboard.writeText(x.code).catch(() => {}); } catch {} }; a.title = 'Opens Ko-fi; the code ' + x.code + ' is copied for your message'; f.append(a); }
-    g.append(f);
-  }
-  const jw = $('#jobs'); jw.textContent = ''; $('#jobsWrap').hidden = !(ST.commissions || []).length;
-  for (const c of ST.commissions || []) {
-    const d = el('div', 'note'); d.append(el('q', null, c.text));
-    d.append(el('small', null, KINDNAME[c.kind] + ' · ' + c.offer + ' coins offered' + (c.paidReal ? ' + ' + c.paidReal + ' real' : '') + (c.from ? ' · from ' + c.from : '') + ' · day ' + c.day + ' · ' + (STATUS[c.status] || c.status) + (myJobs.has(c.id) ? ' · your letter (code ' + c.code + ')' : '')));
-    if (c.reply) d.append(el('div', 'voice', c.reply));
-    if (c.result) {
-      if (c.result.type === 'drawing') { const img = el('img'); img.src = c.result.url; img.alt = c.result.title; img.style.cssText = 'max-width:220px;border-radius:6px'; d.append(img); }
-      else if (c.result.type === 'web') { const a = el('a', null, 'Open "' + c.result.title + '"'); a.href = c.result.url; a.target = '_blank'; a.rel = 'noopener'; d.append(a); }
-      else { const a = el('a', null, 'Read "' + c.result.title + '" in the Pages tab'); a.href = '#'; a.onclick = e => { e.preventDefault(); document.querySelector('[data-tab=pages]').click(); }; d.append(a); }
-    }
-    jw.append(d);
-  }
-  $('#kofiCard').hidden = !ST.kofiUrl;
-  if (ST.kofiUrl) { $('#kofiLink').href = ST.kofiUrl; $('#kofiHow').textContent = 'Anything you send on Ko-fi turns into coins (' + rate + ' for every pound) in an envelope at the post office, with your message. Put a code in your message to pay for something in his shop, or for your letter.'; }
-  const e = ST.earned || {}; $('#earned').textContent = 'Earned so far: ' + (e.stall || 0) + ' coins from the stall, ' + (e.work || 0) + ' from commissions, ' + (e.real || 0) + ' sent from outside.';
-}
-$('#jobForm').addEventListener('submit', async e => {
-  e.preventDefault(); const st = $('#jobStatus');
-  try { const r = await post('/api/commissions', { text: $('#jobText').value, kind: $('#jobKind').value, offer: $('#jobOffer').value, from: $('#jobFrom').value }); myJobs.set(r.id, r.code); try { localStorage.setItem('percy-jobs', JSON.stringify([...myJobs])); } catch {} $('#jobText').value = ''; st.textContent = 'Posted. He\'ll find it next time he goes to the post office.' + (ST && ST.kofiUrl ? ' Want to pay real money too? Put ' + r.code + ' in a Ko-fi message.' : ''); refreshState(); }
-  catch (err) { st.textContent = err.message; }
-});
+const STATUS = { posted: 'waiting at the post office', read: 'he is reading it', accepted: 'he said yes and is working on it', declined: 'he said no', done: 'finished', failed: 'he couldn\'t do it' };
 
 /* ---------- notes ---------- */
 $('#noteForm').addEventListener('submit', async e => {
@@ -260,6 +214,8 @@ function readImage(file, max = 1024, type = 'image/jpeg') {
 
 // tap-to-place
 let placing = null, makeWish = '';
+// "Make this" on the requests page comes here with the request filled in
+{ const want = new URLSearchParams(location.search).get('make'); if (want) { $('#makeDesc').value = want.slice(0, 200); makeWish = want.slice(0, 200); history.replaceState(null, '', location.pathname); document.querySelector('[data-tab=keeper]').click(); setTimeout(() => $('#makeForm').scrollIntoView({ behavior: 'smooth', block: 'center' }), 400); } }
 function startPlacing(kind, payload, text) { placing = { kind, payload }; stage.classList.add('placing'); $('#bannerText').textContent = text; $('#banner').hidden = false; if (W && kind !== 'graffiti') setMode('overview'); stage.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 function endPlacing() { placing = null; stage.classList.remove('placing'); $('#banner').hidden = true; }
 $('#cancelPlace').onclick = endPlacing;
@@ -323,8 +279,6 @@ function renderKeeper() {
   if (!ST || $('#keeperTools').hidden) return;
   const shops = ST.town.places.filter(p => ['shop', 'bakery', 'cafe', 'market', 'post', 'workshop', 'museum'].includes(p.type));
   const sel = $('#stockShop'), cur = sel.value; sel.textContent = ''; for (const p of shops) { const o = el('option', null, p.name); o.value = p.id; sel.append(o); } if (cur) sel.value = cur;
-  const open = (ST.wishes || []).filter(w => !w.granted); $('#kWishesWrap').hidden = !open.length; const kw = $('#kWishes'); kw.textContent = '';
-  for (const w of open) { const li = el('li'); const d = el('div'); d.append(el('b', null, w.text), el('small', null, 'asked on day ' + w.day)); const b = el('button', 'btn small', 'Make this'); b.type = 'button'; b.onclick = () => { $('#makeDesc').value = w.text; makeWish = w.text; $('#makeDesc').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#makeDesc').focus(); }; li.append(d, b); kw.append(li); }
   const rm = (what, id) => async () => { try { await kpost(what, { id }); refreshState(); } catch {} };
   const row = (title, sub, what, id) => { const li = el('li'); const d = el('div'); d.append(el('b', null, title), el('small', null, sub)); li.append(d); if (what) { const b = el('button', 'btn small', 'Remove'); b.type = 'button'; b.onclick = rm(what, id); li.append(b); } return li; };
   list($('#kThings'), ST.things, t => row(t.name, (t.status === 'building' ? 'being built… · ' : t.status === 'failed' ? 'couldn\'t be built, so it\'s a crate · ' : '') + (t.seen ? 'he\'s looked at it ' + t.inspections + '×' : t.noticed ? 'he\'s noticed it' : 'not noticed yet'), 'remove-thing', t.id));

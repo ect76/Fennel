@@ -52,7 +52,7 @@ export function indexHTML(S) {
   const graffiti = (S.graffiti || []).filter(g => g.by === 'percy').slice().reverse().slice(0, 30).map(g => `<figure><img src="graffiti/${g.id}.svg" alt="${esc(g.tag || 'graffiti')}" loading="lazy" style="background:#c9b9a6"><figcaption>${esc(g.where || '')} · day ${g.day}</figcaption></figure>`).join('');
   const made = (S.webPages || []).slice().reverse().map(p => `<li><a href="made/${p.slug}.html">${esc(p.title)}</a> <span style="color:#999">· day ${p.day}${p.forWho ? ' · made for ' + esc(p.forWho) : ''}</span></li>`).join('');
   const forSale = (S.shop || []).filter(x => !x.sold && !x.withdrawn).length;
-  const shop = S.shopPage ? `<p><a href="shop.html">my shop</a>${forSale ? ' · ' + forSale + ' thing' + (forSale === 1 ? '' : 's') + ' for sale' : ''}${config.publicUrl ? ` · <a href="${esc(config.publicUrl)}#work">ask me to make something</a>` : ''}${config.kofiUrl ? ` · <a href="${esc(config.kofiUrl)}">send me coins</a>` : ''}</p>` : config.kofiUrl ? `<p><a href="${esc(config.kofiUrl)}">send me coins</a></p>` : '';
+  const shop = S.shopPage ? `<p><a href="shop.html">my shop</a>${forSale ? ' · ' + forSale + ' thing' + (forSale === 1 ? '' : 's') + ' for sale' : ''}${config.publicUrl ? ` · <a href="${esc(config.publicUrl.replace(/\/$/, ''))}/shop">ask me to make something</a>` : ''}${config.kofiUrl ? ` · <a href="${esc(config.kofiUrl)}">send me coins</a>` : ''}</p>` : config.kofiUrl ? `<p><a href="${esc(config.kofiUrl)}">send me coins</a></p>` : '';
   return wrap('percy', `<h1>percy</h1><p>things i am making.</p>
 ${shop}${S.advert ? '<p style="font-style:italic">' + esc(S.advert) + '</p>' : ''}
 ${made ? '<ul>' + made + '</ul>' : ''}

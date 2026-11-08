@@ -555,7 +555,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' || req.method === 'HEAD') {
-      const file = path.normalize(path.join(PUBLIC, p === '/' ? 'index.html' : p));
+      const file = path.normalize(path.join(PUBLIC, p === '/' ? 'index.html' : ['/shop', '/requests'].includes(p.replace(/\/$/, '')) ? p.replace(/\/$/, '') + '.html' : p));
       if (!file.startsWith(PUBLIC)) return send(res, 403, 'no', 'text/plain');
       fs.readFile(file, (err, data) => {
         if (err) return send(res, 404, 'not found', 'text/plain');

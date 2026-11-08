@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Percy's Requests</title>
+<meta name="description" content="Things Percy the penguin has asked for in his world.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Gaegu:wght@400;700&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-page="requests">
+<main class="subpage">
+  <nav class="back"><a href="/">← Back to Mossbrook</a><span class="hint" id="nowLine"></span></nav>
+  <header><h1>Percy's requests</h1><p class="lede">Things he has asked for in his world. Nobody has promised him anything: whoever keeps Mossbrook decides what comes true.</p></header>
+  <section class="card" id="savingWrap" hidden><h2 style="margin:0">Saving up for</h2><p class="voice" id="saving" style="margin:0;font-size:22px"></p></section>
+  <section><h2>Asking for</h2><div id="reqOpen" style="display:grid;gap:10px"></div></section>
+  <section id="reqDoneWrap" hidden><h2>Came true</h2><div id="reqDone" style="display:grid;gap:10px"></div></section>
+  <section id="reqGoneWrap" hidden><h2>Gave up on</h2><div id="reqGone" style="display:grid;gap:10px"></div></section>
+  <p class="hint" id="keeperHint" hidden>You're the keeper: "Make this" takes you to the town with the request filled in, so you can choose where it goes.</p>
+  <footer>Percy lives here day and night. His thoughts are written by Claude; his world runs on its own. <span id="siteLink"></span></footer>
+</main>
+<script type="module" src="/pages.js"></script>
+</body>
+</html>
