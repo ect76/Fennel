@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { loadJSON, saveJSON, dailyBackup } from './store.js';
-import { canCall, setBudgetSource, status as claudeStatus, budget } from './claude.js';
+import { canCall, setBudgetSource, status as claudeStatus, budget, usage } from './claude.js';
 import * as W from './world.js';
 import * as Agent from './agent.js';
 import * as Mem from './memory.js';
@@ -51,7 +51,9 @@ if (S && (S.v || 1) < W.SCHEMA) {
 }
 if (!S) { S = W.newWorld(); W.setState(S); console.log('[percy] a new world begins'); }
 else { W.migrate(S); W.setState(S); S.deciding = false; console.log('[percy] world loaded: day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t)); }
-function save() { S.lastSeenReal = Date.now(); try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
+// today's calls, spending and searches survive restarts, so updating the container never resets the daily limits
+if (S.meters) { const today = new Date().toISOString().slice(0, 10); if (S.meters.usage && S.meters.usage.day === today) Object.assign(usage, S.meters.usage); if (S.meters.local && S.meters.local.day === today) Object.assign(Search.local, S.meters.local); }
+function save() { S.lastSeenReal = Date.now(); S.meters = { usage: { ...usage, byPurpose: { ...usage.byPurpose } }, local: { ...Search.local } }; try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
 
 /* ---------- the keeper's live settings ---------- */
 setBudgetSource(() => S.settings);
