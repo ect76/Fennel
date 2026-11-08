@@ -361,9 +361,9 @@ const RULE_THOUGHTS = {
   wander: ['going for a walk.', 'just walking for a bit.', 'stretching my legs.'], explore: ['going somewhere i haven\'t been for a while.'], tidy: ['the cottage needs tidying.'],
   visit: ['going to have a look inside somewhere.'], buy: ['i have enough coins. i\'m going to buy it.'], graffiti: ['want to paint something on a wall.'], inspect: ['going to look at that new thing.'],
 };
-export function ruleDecision() {
+export function ruleDecision({ avoid = '' } = {}) {
   const h = hourOf(S.t); let best = 'wander', bs = -1e9;
-  for (const id of ACTION_IDS) { const s = ruleScore(id, h); if (s > bs) { bs = s; best = id; } }
+  for (const id of ACTION_IDS) { if (id === avoid) continue; const s = ruleScore(id, h); if (s > bs) { bs = s; best = id; } }
   const dec = { action: best, thought: pick(RULE_THOUGHTS[best] || ['hm.']), src: 'rules' };
   if (best === 'inspect') dec.target = (bestThing() || {}).thing;
   if (best === 'buy') dec.target = (S.items.filter(i => i.seen && !i.sold && i.price <= S.coins)[0] || {}).id;
@@ -418,6 +418,8 @@ function chooseTarget(a, dec) {
   const e = pick(near).e, t = Math.random(), A3 = S.town.nodes[e.a], B3 = S.town.nodes[e.b];
   return { x: A3.x + (B3.x - A3.x) * t, z: A3.z + (B3.z - A3.z) * t };
 }
+// how many times in a row he has just done this
+export const streak = id => { let n = 0; for (let i = S.recent.length - 1; i >= 0 && S.recent[i] === id; i--) n++; return n; };
 export function startAct(dec) {
   let id = ACTIONS[dec.action] ? dec.action : 'wander';
   if (id === 'inspect' && !thingById(dec.target)) { const b = bestThing(); if (b) dec.target = b.thing; else id = 'wander'; }

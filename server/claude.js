@@ -2,6 +2,8 @@
 import { config } from './config.js';
 
 export const usage = { day: '', calls: 0, searches: 0, inputTokens: 0, outputTokens: 0, errors: 0, lastError: '' };
+// Some models won't accept being made to use a particular tool. Once a model says so, it's asked nicely instead.
+const noForce = new Set();
 
 function rollDay() {
   const d = new Date().toISOString().slice(0, 10);
@@ -21,7 +23,7 @@ export async function callClaude({ model, system, prompt, maxTokens = 800, webSe
   const tools = [];
   if (webSearches > 0) tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: webSearches });
   if (json) tools.push({ name: 'respond', description: 'Give your final answer by calling this tool, with exactly the JSON object the prompt asks for as its input.', input_schema: { type: 'object', additionalProperties: true } });
-  const toolChoice = json ? (webSearches > 0 ? { type: 'any' } : { type: 'tool', name: 'respond' }) : null;
+  let toolChoice = json && !noForce.has(model) ? (webSearches > 0 ? { type: 'any' } : { type: 'tool', name: 'respond' }) : null;
   const content = [];
   for (let round = 0; round < 4; round++) {
     const ctl = new AbortController();
@@ -39,6 +41,11 @@ export async function callClaude({ model, system, prompt, maxTokens = 800, webSe
       usage.errors++; usage.lastError = e.name === 'AbortError' ? 'timed out' : String(e.message || e);
       throw new Error(usage.lastError);
     } finally { clearTimeout(timer); }
+    if (!res.ok && toolChoice && data && data.error && /tool_choice/i.test(data.error.message || '')) {
+      noForce.add(model); toolChoice = null; round--; // try again, letting the model choose to use the tool
+      console.log('[percy] ' + model + ' won\'t be made to use a tool; asking it nicely instead');
+      continue;
+    }
     if (!res.ok || !data) {
       usage.errors++;
       usage.lastError = (data && data.error && data.error.message) || ('HTTP ' + res.status);

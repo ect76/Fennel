@@ -49,6 +49,14 @@ function shopUpdate() {
 
 /* ---------- load or create the world ---------- */
 let S = loadJSON(SAVE);
+if (!S && fs.existsSync(SAVE)) {
+  // the save is there but can't be read: never start over on top of it. Try the last good copies first.
+  const bdir = path.join(config.dataDir, 'backups');
+  const tries = [SAVE + '.tmp', ...(fs.existsSync(bdir) ? fs.readdirSync(bdir).filter(f => f.startsWith('world-')).sort().reverse().map(f => path.join(bdir, f)) : [])];
+  for (const f of tries) { S = loadJSON(f); if (S) { console.warn('[percy] world.json could not be read; restored from ' + f); break; } }
+  const keep = path.join(config.dataDir, 'world-unreadable-' + Date.now() + '.json');
+  try { fs.copyFileSync(SAVE, keep); console.warn('[percy] kept the unreadable save as ' + keep); } catch {}
+}
 if (S && S.v === 1) {
   // the first version (Fennel the frog, on an island): keep it safe and start Percy's village, with Fennel's notebook in the cottage
   const old = S;

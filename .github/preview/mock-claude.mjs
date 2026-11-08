@@ -10,7 +10,8 @@ const cat = { name: 'cat statue', parts: [
   { shape: 'sphere', size: [0.06], pos: [-0.13, 1.9, 0.46], color: '#1b1b1b' }, { shape: 'sphere', size: [0.06], pos: [0.13, 1.9, 0.46], color: '#1b1b1b' },
   { shape: 'capsule', size: [0.09, 0.9], pos: [0.55, 0.9, -0.3], rot: [30, 0, -40], color: '#d08a3a' } ] };
 http.createServer((req, res) => { let b = ''; req.on('data', c => b += c); req.on('end', () => {
-  const body = JSON.parse(b); const c0 = body.messages[0].content; const p = typeof c0 === 'string' ? c0 : c0.filter(x => x.type === 'text').map(x => x.text).join(' ');
+  const body = JSON.parse(b);
+  if (/sonnet/.test(body.model) && body.tool_choice && body.tool_choice.type !== 'auto') { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'tool_choice: type "tool" and "any" are not supported for this model.' } })); } const c0 = body.messages[0].content; const p = typeof c0 === 'string' ? c0 : c0.filter(x => x.type === 'text').map(x => x.text).join(' ');
   n++; let text;
   if (p.includes('Design a charming low-poly')) text = JSON.stringify(cat);
   else if (p.includes('Paint it as an SVG illustration') || p.includes('Paint it as an SVG: a real spray')) text = '<svg viewBox="0 0 800 800"><rect width="800" height="800" fill="#f3ead8"/><circle cx="400" cy="380" r="160" fill="#2c6670" opacity=".5"/><path d="M180 600 Q400 500 620 600" stroke="#333" stroke-width="6" fill="none"/><text x="740" y="770" font-size="28">P.</text></svg>';

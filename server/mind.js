@@ -107,6 +107,7 @@ function actionMenu() {
     if (id === 'job' && !S.commissions.some(c => c.status === 'accepted')) return null;
     if (id === 'post' && W.postWaiting()) notes.push('the lamp is lit: post waiting');
     if (id === 'sleep' && !W.isNight(h)) notes.push('it is daytime; use nap if tired');
+    { const k = W.streak(id); if (k >= 2 && !['sleep', 'nap'].includes(id)) notes.push('he has just done this ' + k + ' times in a row and is getting restless with it'); }
     return `${id}: ${A.desc}${notes.length ? ' (' + notes.join(', ') + ')' : ''}`;
   }).filter(Boolean).join('\n');
 }
@@ -141,6 +142,10 @@ Reply with only JSON:
   if (action === 'inspect' && !S.things.length) action = 'wander';
   if (action === 'web' && !W.webEnabled) action = 'write';
   if (action === 'job' && !S.commissions.some(c => c.status === 'accepted')) action = 'wander';
+  // a body has limits: exhausted means bed (or a nap in the day), however absorbed he is
+  if (S.needs.energy < 10 && !['sleep', 'nap'].includes(action)) { const a = W.isNight(h) || h >= 20 ? 'sleep' : 'nap'; return { action: a, thought: pick(['can\'t keep my eyes open. bed.', 'legs have stopped listening. going home.', 'too tired to think. lying down.']), src: 'rules' }; }
+  // and like anyone, he gets restless doing the same thing over and over
+  if (!['sleep', 'nap'].includes(action) && W.streak(action) >= 3) { const d = W.ruleDecision({ avoid: action }); d.thought = pick(['enough of that for now.', 'i\'ve done that enough today. something else.', 'my head needs a different thing.']); return d; }
   if (str(r.remember, 220)) W.remember(r.remember, 2);
   if (str(r.diary, 600)) W.addDiary('thought', str(r.diary, 600), 'claude');
   return { action, target: str(r.target, 20), thought: str(r.thought, 500), doing: str(r.doing, 80), subject: str(r.subject, 80), title: str(r.title, 50), src: 'claude' };
