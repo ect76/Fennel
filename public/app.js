@@ -39,10 +39,29 @@ function renderHUD() {
   $('#thoughtNow').textContent = L.thought ? L.thought.text : '';
 }
 const bubble = $('#bubble'); let bubbleText = '';
+// a little thought cloud showing how he feels
+const ICONS = {
+  sun: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="6.5" fill="#f5b72a"/><g stroke="#f5b72a" stroke-width="2.4" stroke-linecap="round"><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.8 6.8l2.8 2.8M22.4 22.4l2.8 2.8M6.8 25.2l2.8-2.8M22.4 9.6l2.8-2.8"/></g></svg>',
+  smile: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="#ffe08a"/><circle cx="12" cy="13" r="1.8" fill="#333"/><circle cx="20" cy="13" r="1.8" fill="#333"/><path d="M10.5 18.5q5.5 5 11 0" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+  rain: '<svg viewBox="0 0 32 32"><path d="M9 18a6 6 0 0 1 1-11.9A7 7 0 0 1 23.5 8 5 5 0 0 1 23 18z" fill="#8c98a8"/><g stroke="#4a8fd1" stroke-width="2.2" stroke-linecap="round"><path d="M11 22l-1.5 4M17 22l-1.5 4M23 22l-1.5 4"/></g></svg>',
+  cloud: '<svg viewBox="0 0 32 32"><path d="M9 23a6.5 6.5 0 0 1 1-12.9A7.5 7.5 0 0 1 24 12a5.5 5.5 0 0 1-.5 11z" fill="#a7b0bb"/></svg>',
+  lonely: '<svg viewBox="0 0 32 32"><path d="M21 6a10 10 0 1 0 5 17A11 11 0 0 1 21 6z" fill="#7d8bb5"/><circle cx="9" cy="9" r="1.2" fill="#c7cde0"/><circle cx="25" cy="10" r="1" fill="#c7cde0"/></svg>',
+  question: '<svg viewBox="0 0 32 32"><path d="M11 11a5 5 0 1 1 7.5 4.3c-1.6.9-2.5 2-2.5 3.7v1" stroke="#6f5aa6" stroke-width="3.2" fill="none" stroke-linecap="round"/><circle cx="16" cy="25.5" r="2" fill="#6f5aa6"/></svg>',
+  sparkle: '<svg viewBox="0 0 32 32"><path d="M16 3l3 10 10 3-10 3-3 10-3-10-10-3 10-3z" fill="#f0a830"/><path d="M26 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z" fill="#e8607a"/></svg>',
+  zzz: '<svg viewBox="0 0 32 32"><g fill="none" stroke="#5a6f8a" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"><path d="M5 14h8l-8 9h8"/><path d="M17 7h6l-6 7h6"/><path d="M25 3h4l-4 4.5h4"/></g></svg>',
+  fish: '<svg viewBox="0 0 32 32"><path d="M5 16c4-6 12-7 17-3l5-4v14l-5-4c-5 4-13 3-17-3z" fill="#4a8fd1"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>',
+  scribble: '<svg viewBox="0 0 32 32"><path d="M4 18c3-8 5 8 8 0s5 8 8 0 5 8 8 0" stroke="#d1503f" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M8 8l4 3M24 8l-4 3" stroke="#d1503f" stroke-width="2.6" stroke-linecap="round"/></svg>',
+  uneasy: '<svg viewBox="0 0 32 32"><g stroke="#c99a2e" stroke-width="2.6" fill="none" stroke-linecap="round"><path d="M5 10q3-3 6 0t6 0 6 0 5 0"/><path d="M5 17q3-3 6 0t6 0 6 0 5 0"/><path d="M5 24q3-3 6 0t6 0 6 0 5 0"/></g></svg>',
+  flat: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="#d7dbe0"/><circle cx="12" cy="13.5" r="1.8" fill="#555"/><circle cx="20" cy="13.5" r="1.8" fill="#555"/><path d="M11 20.5h10" stroke="#555" stroke-width="2" stroke-linecap="round"/></svg>',
+};
+const MOOD_ICON = { happy: 'sun', cheerful: 'sun', content: 'smile', sad: 'rain', low: 'cloud', flat: 'flat', lonely: 'lonely', curious: 'question', excited: 'sparkle', exhausted: 'zzz', sleepy: 'zzz', hungry: 'fish', frustrated: 'scribble', uneasy: 'uneasy', bored: 'flat', jittery: 'uneasy' };
+const moodEl = $('#moodBubble'); let moodShown = '';
 const labelPool = []; const labelsEl = $('#labels');
 if (W) W.onFrame = () => {
   const a = W.percyAnchor(); const pos = W.project(a.x, a.y, a.z);
   let txt = L && L.thought ? L.thought.text : ''; if (L && L.deciding) txt = '…'; if (a.asleep && !(L && L.thought && L.thought.src === 'claude')) txt = 'zzz…';
+  const mw = a.asleep ? 'sleepy' : (L && L.mood) || '';
+  if (pos && mw) { if (mw !== moodShown) { moodShown = mw; $('#moodIcon').innerHTML = ICONS[MOOD_ICON[mw] || 'smile']; moodEl.setAttribute('aria-label', 'Percy is feeling ' + mw); moodEl.title = 'feeling ' + mw; } moodEl.style.opacity = '1'; moodEl.style.left = (pos.x + 22) + 'px'; moodEl.style.top = (pos.y + 48) + 'px'; } else moodEl.style.opacity = '0';
   if (pos && txt) { if (txt !== bubbleText) { bubbleText = txt; bubble.textContent = shorten(txt); } bubble.style.opacity = '1'; bubble.style.left = pos.x + 'px'; bubble.style.top = pos.y + 'px'; } else bubble.style.opacity = '0';
   // place names near the camera
   const t = W.cameraTarget(); const near = W.labels().map(l => ({ l, d: Math.hypot(l.x - t.x, l.z - t.z) })).filter(o => o.d < (W.mode === 'overview' ? 200 : 30)).sort((a, b) => a.d - b.d).slice(0, W.mode === 'overview' ? 14 : 8);

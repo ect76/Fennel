@@ -55,6 +55,11 @@ a{color:var(--accent)}
 .iconbtn:hover,.seg button:hover{background:rgba(255,255,255,.14)}
 .bubble{position:absolute;left:0;top:0;max-width:250px;background:var(--bubble-bg);color:var(--bubble-ink);font-family:var(--f-voice);font-size:17px;line-height:1.15;padding:7px 11px 8px;border-radius:14px;transform:translate(-50%,calc(-100% - 10px));pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.2);transition:opacity .3s;z-index:2}
 .bubble::after{content:"";position:absolute;left:50%;bottom:-7px;width:12px;height:12px;background:var(--bubble-bg);transform:translateX(-50%) rotate(45deg);border-radius:2px}
+.mood{position:absolute;left:0;top:0;pointer-events:none;z-index:2;transition:opacity .4s}
+.mood .cloud{position:absolute;left:14px;bottom:18px;width:46px;height:38px;background:var(--bubble-bg);border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.2),-12px 6px 0 -6px var(--bubble-bg),12px 6px 0 -6px var(--bubble-bg);display:grid;place-items:center}
+.mood .cloud svg{width:28px;height:28px}
+.mood i{position:absolute;background:var(--bubble-bg);border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.mood .t1{left:8px;bottom:9px;width:9px;height:9px}.mood .t2{left:2px;bottom:1px;width:5px;height:5px}
 .label{position:absolute;left:0;top:0;transform:translate(-50%,-100%);pointer-events:none;background:rgba(12,16,22,.55);color:#f2f5f0;font-size:11.5px;padding:2px 8px;border-radius:999px;white-space:nowrap;z-index:1;transition:opacity .25s}
 .banner{position:absolute;left:50%;top:58px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 20px);background:var(--hud-bg);color:var(--hud-ink);border-radius:12px;padding:8px 10px 8px 14px;display:flex;gap:10px;align-items:center;font-size:14px;backdrop-filter:blur(8px);z-index:4}
 .banner button{border:0;border-radius:999px;padding:4px 12px;background:var(--hud-ink);color:#10161a;font-weight:700;cursor:pointer}
@@ -145,6 +150,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <canvas id="world"></canvas>
     <div id="labels"></div>
     <div class="bubble" id="bubble" style="opacity:0"></div>
+    <div class="mood" id="moodBubble" style="opacity:0" role="img" aria-label=""><span class="cloud" id="moodIcon"></span><i class="t1"></i><i class="t2"></i></div>
     <div class="hud top">
       <div class="chip clock"><span id="clockDay">Day 1</span><b id="clockTime">--:--</b><span id="weatherWord"></span></div>
       <div class="cluster">
