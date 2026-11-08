@@ -61,7 +61,7 @@ PLACES HE KNOWS:
 ${places}${unknown ? `\nThere ${unknown === 1 ? 'is somewhere' : 'are ' + unknown + ' places'} in town he hasn't found yet (exploring would find ${unknown === 1 ? 'it' : 'them'}).` : ''}
 NOW: day ${d}, ${W.hhmm(S.t)}, ${W.seasonOf(d)}, weather ${S.weather.kind}. He is ${W.whereIs()}, ${W.doingText()}.
 TODAY: ${S.dayMood.label}${S.dayMood.causes.length ? ' (' + S.dayMood.causes.join('; ') + ')' : ''}.
-FEELINGS (0-100): ${W.EMOTIONS.map(k => k + ' ' + Math.round(S.emotions[k])).join(', ')}.${S.interests.length ? '\nCURRENTLY ABSORBED BY: ' + S.interests.map(i => i.topic + ' (strength ' + Math.round(i.strength) + ', ' + W.depthOf(i) + ', ' + (i.sessions || 0) + ' research sessions since day ' + i.since + ')').join(', ') + '\n(The deeper an interest, the more he knows and the more it shows: an expert has favourites, strong opinions, the right jargon and pet theories; a newcomer has wide-eyed questions.)' : ''}
+FEELINGS (0-100): ${W.EMOTIONS.map(k => k + ' ' + Math.round(S.emotions[k])).join(', ')}.${S.interests.length ? '\nCURRENTLY ABSORBED BY: ' + S.interests.map(i => i.topic + ' (strength ' + Math.round(i.strength) + ', ' + W.depthOf(i) + ', ' + (i.sessions || 0) + ' research sessions since day ' + i.since + ')').join(', ') + '\n(The deeper an interest, the more he knows and the more it shows: an expert has favourites, strong opinions, the right jargon and pet theories; a newcomer has wide-eyed questions. Interests are human: they can wear thin, get pushed aside by something new, or come back later.)' + (S.pastInterests && S.pastInterests.length ? '\nTHINGS HE USED TO BE INTO: ' + S.pastInterests.slice(-6).map(p => p.topic).join(', ') : '') + '' : ''}
 NEEDS (0-100): fullness ${Math.round(n.fullness)}, energy ${Math.round(n.energy)}, wonder ${Math.round(n.wonder)}, joy ${Math.round(n.joy)}, calm ${Math.round(n.calm)}. Mood: ${W.moodWord()}. Coins: ${S.coins}. Drawings at home: ${W.unsold().filter(d => !d.onStall).length}.
 WATCHING: ${watchers} outside visitor${watchers === 1 ? ' is' : 's are'} watching the town right now. He can't see them, but the Humming Stone hums louder the more there are.
 HAPPENING TODAY: ${S.events.map(e => e.text).join(' ') || 'nothing unusual'}
@@ -294,7 +294,7 @@ Reply with only JSON:
  "research": {"topic": "what he wants to look up", "question": "the question behind it"},
  "mood_carry": number from -1 (this day will weigh on him tomorrow) to 1 (he goes to sleep lighter),
  "wishes": ["0-3 specific things he wishes existed in his world, in his own words (e.g. 'a boat for the pond', 'someone to wave at'); keep wishes that still matter, drop ones that don't"],
- "interests": [{"topic": "something that currently absorbs him", "strength": 0 to 100}] (keep, strengthen, fade or drop his current interests; add new ones only if the day gave him one)}`;
+ "interests": [{"topic": "something that currently absorbs him", "strength": 0 to 100}] (keep, strengthen, fade or drop his current interests, as a real person would: everything feels enormous the first time; things he has done a lot can start to feel stale; a new fascination can crowd out an old one; an old one can come back. Add new ones only if the day gave him one)}`;
   const r = (await ask('slow', { model: config.modelReflect, system: VOICE, prompt, maxTokens: 2000 }));
   if (!r || !r.diary) throw new Error('no usable reflection');
   const arr = (v, n, m) => Array.isArray(v) ? v.map(x => str(x, m)).filter(Boolean).slice(0, n) : null;

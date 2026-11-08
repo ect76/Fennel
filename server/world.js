@@ -253,7 +253,13 @@ export const depthOf = i => { const n = i.sessions || 0; return n >= 10 ? 'an ex
 export function interest(topic, strength = 60) {
   topic = str(topic, 60); if (!topic) return;
   const ex = S.interests.find(i => i.topic.toLowerCase() === topic.toLowerCase());
-  if (ex) ex.strength = clamp(ex.strength + strength * 0.5, 0, 100); else S.interests.push({ topic, strength: clamp(strength, 0, 100), since: dayOf(S.t), sessions: 0 });
+  if (ex) ex.strength = clamp(ex.strength + strength * 0.5, 0, 100);
+  else {
+    // attention is limited: something new pushes the others aside a little
+    for (const i of S.interests) i.strength = clamp(i.strength - strength * 0.2, 0, 100);
+    const past = (S.pastInterests || []).find(p => p.topic.toLowerCase() === topic.toLowerCase());
+    S.interests.push({ topic, strength: clamp(strength + (past ? 10 : 0), 0, 100), since: dayOf(S.t), sessions: past ? Math.floor(past.sessions / 2) : 0, rediscovered: !!past });
+  }
   S.interests.sort((a, b) => b.strength - a.strength); S.interests = S.interests.slice(0, 6);
 }
 
@@ -566,7 +572,14 @@ export function addBuilding({ kind, name, desc, x, z }) {
 }
 function newDay(d) {
   S.lastDay = d; S.dayLog[d] = S.dayLog[d] || [];
-  for (const i of S.interests) i.strength -= 7 * (1 - Math.min(i.sessions || 0, 12) / 15); S.interests = S.interests.filter(i => i.strength > 5); // interests fade unless fed; deep ones fade slowly
+  for (const i of S.interests) {
+    i.strength -= 7 * (1 - Math.min(i.sessions || 0, 12) / 15); // interests fade unless fed; deep ones fade slowly
+    // and like anyone, he can simply get bored of something he's been at for a while
+    const age = d - (i.since || d), worn = (i.sessions || 0) >= 3 || age >= 4;
+    if (worn && Math.random() < 0.06 + Math.min(i.sessions || 0, 10) * 0.015 + Math.min(age, 14) * 0.01) { i.strength *= 0.45; i.bored = d; log('going off ' + i.topic + ' a bit'); remember('day ' + d + ': started to get bored of ' + i.topic, 2); }
+  }
+  for (const i of S.interests) if (i.strength <= 5) { S.pastInterests = (S.pastInterests || []).filter(p => p.topic !== i.topic).concat([{ topic: i.topic, sessions: i.sessions || 0, until: d }]).slice(-20); }
+  S.interests = S.interests.filter(i => i.strength > 5);
   const keys = Object.keys(S.dayLog).map(Number).sort((a, b) => a - b);
   while (keys.length > 6) delete S.dayLog[keys.shift()];
   S.events = S.events.filter(e => e.id === 'echo' ? d - e.day < 2 : e.id.startsWith('grow-') ? d - e.day < 2 : e.day >= d);
