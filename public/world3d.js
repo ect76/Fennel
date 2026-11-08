@@ -699,17 +699,27 @@ export function createWorld({ canvas, stage, onTap }) {
   let mode = 'follow', ang = 0.6, tilt = 0.55, zoom = 1, pitch = 0, drag = null; const pointers = new Map(); let pinch0 = null;
   const camT = new THREE.Vector3(), camP = new THREE.Vector3();
   const keys = new Set();
-  canvas.addEventListener('pointerdown', e => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom }; drag = null; } else drag = { x: e.clientX, y: e.clientY, a: ang, t: tilt, p: pitch, moved: 0 }; if (mode === 'explore' && e.pointerType === 'mouse' && !placingNow() && canvas.requestPointerLock && document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} } });
+  // Town view: right-click drag (or Shift + drag, or two fingers) slides the map around
+  const pan = { x: 0, z: 0 };
+  canvas.addEventListener('contextmenu', e => { if (mode === 'overview') e.preventDefault(); });
+  canvas.addEventListener('pointerdown', e => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, px: pan.x, pz: pan.z }; drag = null; } else drag = { x: e.clientX, y: e.clientY, a: ang, t: tilt, p: pitch, moved: 0, pan: mode === 'overview' && (e.button === 2 || e.shiftKey), px: pan.x, pz: pan.z }; if (mode === 'explore' && e.pointerType === 'mouse' && !placingNow() && canvas.requestPointerLock && document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} } });
   // with the pointer locked, the mouse turns your head freely (Esc to let go)
   document.addEventListener('mousemove', e => { if (document.pointerLockElement !== canvas || mode !== 'explore') return; ang -= e.movementX * 0.0025; pitch = clamp(pitch - e.movementY * 0.0025, -1.25, 1.25); });
   const placingNow = () => stage.classList.contains('placing');
   addEventListener('pointermove', e => {
     if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pinch0 && pointers.size === 2) { const [a, b] = [...pointers.values()]; zoom = clamp(pinch0.z * pinch0.d / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), 0.3, 3.5); return; }
+    if (pinch0 && pointers.size === 2) { const [a, b] = [...pointers.values()]; zoom = clamp(pinch0.z * pinch0.d / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), 0.3, 3.5); if (mode === 'overview') panBy(pinch0.px, pinch0.pz, (a.x + b.x) / 2 - pinch0.cx, (a.y + b.y) / 2 - pinch0.cy); return; }
     if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
     if (mode === 'explore') { if (document.pointerLockElement === canvas) return; ang = drag.a - dx * 0.005; pitch = clamp(drag.p - dy * 0.005, -1.25, 1.25); return; }
+    if (drag.pan) { panBy(drag.px, drag.pz, dx, dy); return; }
     ang = drag.a - dx * 0.006; if (e.pointerType !== 'touch') tilt = clamp(drag.t + dy * 0.004, 0.12, 1.35);
   });
+  // move the map with the pointer: screen right/down mapped onto the ground as the camera sees it
+  function panBy(px, pz, dx, dy) {
+    const k = townR * 1.5 * zoom * 0.0015, rx = Math.cos(ang), rz = -Math.sin(ang), fx = -Math.sin(ang), fz = -Math.cos(ang);
+    let x = px - rx * dx * k + fx * dy * k, z = pz - rz * dx * k + fz * dy * k; const r = Math.hypot(x, z), lim = townR * 0.9;
+    if (r > lim) { x *= lim / r; z *= lim / r; } pan.x = x; pan.z = z;
+  }
   const endPointer = e => { if (drag && drag.moved < 8 && e.type === 'pointerup' && e.target === canvas && onTap) onTap(e, api); pointers.delete(e.pointerId); if (pointers.size < 2) pinch0 = null; if (!pointers.size) drag = null; };
   addEventListener('pointerup', endPointer); addEventListener('pointercancel', endPointer);
   canvas.addEventListener('wheel', e => { e.preventDefault(); zoom = clamp(zoom * Math.exp(e.deltaY * 0.0012), 0.3, 3.5); }, { passive: false });
@@ -805,7 +815,7 @@ export function createWorld({ canvas, stage, onTap }) {
       camera.lookAt(camT);
     } else {
       wisp.visible = false; if (camera.fov !== 50) { camera.fov = 50; camera.updateProjectionMatrix(); }
-      if (mode === 'overview') camT.lerp(v3.set(0, 0, 0), 0.05); else camT.lerp(v3.set(percyPos.x, gy + 0.6, percyPos.z), 0.08);
+      if (mode === 'overview') camT.lerp(v3.set(pan.x, 0, pan.z), 0.12); else camT.lerp(v3.set(percyPos.x, gy + 0.6, percyPos.z), 0.08);
       const base = mode === 'overview' ? townR * 1.5 : 11; const dist = base * zoom, tl = mode === 'overview' ? Math.max(tilt, 0.7) : tilt;
       camP.set(camT.x + Math.sin(ang) * Math.cos(tl) * dist, camT.y + Math.sin(tl) * dist + 0.5, camT.z + Math.cos(ang) * Math.cos(tl) * dist);
       camera.position.lerp(camP, 0.1); camera.lookAt(camT);
