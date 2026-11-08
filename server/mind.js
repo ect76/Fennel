@@ -5,7 +5,8 @@ import { config } from './config.js';
 import { callClaude, parseJSON, canCall, canSearch, usage } from './claude.js';
 import * as W from './world.js';
 
-const { str, clamp, pick, plainName, ACTIONS, ACTION_IDS, KINDS, TYPES } = W;
+const { str, clamp, pick, plainName, ACTIONS, ACTION_IDS, TYPES } = W;
+import { keyFor } from './doodle.js';
 
 export const VOICE = `You write the inner life of Percy, a small penguin who lives alone in Mossbrook, a small village of winding streets surrounded on every side by thick fog. He is a character in a world simulation that runs day and night; the person running it wants him to feel alive, surprising and organic, and to grow over time from what actually happens to him. Percy's voice: lowercase, plain words, short sentences, concrete details, gently odd observations, dry humour now and then. No emoji, no hashtags, no exclamation-heavy cuteness, no grand life lessons, no therapy-speak. He doesn't know he is in a simulation, but he notices strange things about his world (the fog where every road ends, which he can't get through; the humming stone; the empty houses; new streets and buildings that appear when the fog pulls back; objects and notes that appear from nowhere). Vary rhythm and vocabulary; never reuse phrasings from his recent thoughts.`;
 
@@ -37,7 +38,7 @@ function recall(query, n = 8) {
 function context({ focus = '' } = {}) {
   const S = W.S, n = S.needs, d = W.dayOf(S.t);
   const today = (S.dayLog[d] || []).slice(-18).join('\n') || '(nothing yet)';
-  const things = S.things.map(t => `- id ${t.id}: "${t.name}" (${KINDS[t.kind].toLowerCase()}) near ${W.nearPlace(t.x, t.z)}${t.desc ? ' - ' + t.desc : ''} [${t.seen ? 'he has looked at it ' + t.inspections + 'x' : t.noticed ? 'noticed but not looked at closely yet' : 'not noticed yet'}]`).join('\n') || '(none)';
+  const things = S.things.map(t => `- id ${t.id}: "${t.name}" near ${W.nearPlace(t.x, t.z)}${t.desc ? ' - ' + t.desc : ''} [${t.seen ? 'he has looked at it ' + t.inspections + 'x' : t.noticed ? 'noticed but not looked at closely yet' : 'not noticed yet'}]`).join('\n') || '(none)';
   const mem = recall([focus, W.whereIs(), S.questions.join(' '), S.events.map(e => e.text).join(' '), S.things.map(t => t.name).join(' ')].join(' '));
   const h = W.hourOf(S.t);
   const places = S.town.places.filter(p => p.known).map(p => {
@@ -60,7 +61,11 @@ GOALS: ${S.goals.map(g => g.text).join(' / ') || '-'}
 QUESTIONS HE HAS: ${S.questions.join(' / ') || '-'}
 HAS LEARNED ABOUT: ${S.knowledge.slice(-15).map(k => k.topic).join(', ') || 'nothing yet'}${S.researchQueue.length ? '\nWANTS TO RESEARCH: ' + S.researchQueue.map(r => r.topic).join(', ') : ''}
 OBJECTS VISITORS HAVE ADDED:\n${things}
-FOG TESTS SO FAR: ${S.fogTests}
+MONEY: he earns 2-5 coins when a drawing sells at the market stall. Bread costs 2, tea and cake at the café 2, drawing paper 1, spray paint 2.
+FOR SALE THAT HE HAS SEEN:\n${S.items.filter(i => i.seen && !i.sold).map(i => `- id ${i.id}: ${i.name} for ${i.price} coins at ${(W.placeById(i.shop) || {}).name || 'a shop'}${i.desc ? ' - ' + i.desc : ''}`).join('\n') || '(nothing yet)'}
+HE OWNS: ${S.inventory.map(i => i.name + ' (bought day ' + i.day + ')').join('; ') || 'nothing much'}
+GRAFFITI AROUND TOWN: ${S.graffiti.filter(g => g.seen).map(g => (g.by === 'percy' ? 'his own' : 'someone else\'s') + ' ' + (g.where || '')).slice(-6).join('; ') || 'none'}
+${S.notebook ? 'FENNEL\'S NOTEBOOK (found under his floorboards; Fennel was a frog who lived in the cottage before him). A few lines from it:\n' + [0, 1, 2].map(() => '- "' + pick(S.notebook.entries).text.replace(/\n/g, ' ').slice(0, 160) + '"').join('\n') + '\n' : ''}FOG TESTS SO FAR: ${S.fogTests}
 MEMORIES THAT COME TO MIND:\n${mem.map(m => '- (day ' + m.day + ') ' + m.text).join('\n') || '-'}
 TODAY SO FAR:\n${today}
 HIS LAST FEW THOUGHTS (do not repeat their wording or ideas):\n${S.recentThoughts.slice(-5).map(t => '- ' + t).join('\n') || '-'}`;
@@ -76,6 +81,9 @@ function actionMenu() {
     if (id === 'sell' && !W.unsold().length) notes.push('nothing to sell');
     if (id === 'inspect' && !S.things.length) notes.push('nothing to look at');
     if (id === 'stargaze' && !(h >= 20 || h < 4)) notes.push('only at night');
+    if (id === 'buy' && !S.items.some(i => i.seen && !i.sold)) notes.push('he hasn\'t seen anything for sale');
+    if (id === 'buy' && S.items.some(i => i.seen && !i.sold) && !S.items.some(i => i.seen && !i.sold && i.price <= S.coins)) notes.push('he can\'t afford anything he has seen yet');
+    if (id === 'graffiti' && S.coins < 2) notes.push('can\'t afford paint');
     if (id === 'sleep' && !W.isNight(h)) notes.push('it is daytime; use nap if tired');
     return `${id}: ${A.desc}${notes.length ? ' (' + notes.join(', ') + ')' : ''}`;
   }).join('\n');
@@ -94,10 +102,10 @@ ${actionMenu()}
 Reply with only JSON:
 {"thought": "his inner monologue right now, 15-60 words",
  "action": one action id,
- "target": "place id if action is visit, thing id if action is inspect, else empty",
+ "target": "place id if action is visit, thing id if inspect, item id if buy, else empty",
  "doing": "exactly what he'll be doing there, 3-10 words, present tense (e.g. 'sketching the lighthouse from memory')",
- "subject": "for draw/write/read: what it's about, else empty",
- "title": "for draw/write: a short title, else empty",
+ "subject": "for draw/write/read/graffiti: what it's about, else empty",
+ "title": "for draw/write: a short title; for graffiti: the few words he paints with it (or empty); else empty",
  "remember": "something from this moment worth remembering long-term, or empty (most moments: empty)",
  "diary": "1-3 sentences for his diary only if this moment matters, else empty"}`;
   const r = parseJSON((await run('fast', () => callClaude({ model: config.modelThink, system: VOICE, prompt, maxTokens: 600 }))).text);
@@ -163,12 +171,12 @@ Reply with only JSON: {"reaction": "his diary words on reading it, 25-70 words",
   if (!r || !r.reaction) throw new Error('no usable reaction');
   return r;
 }
-export async function reactToThing(th) {
+export async function reactToThing(th, image) {
   const prompt = `${context({ focus: th.name + ' ' + th.desc })}
 
-He is looking closely, for the first time, at something a visitor added to town near ${W.nearPlace(th.x, th.z)}: "${th.name}" (shape: ${KINDS[th.kind].toLowerCase()})${th.desc ? '. The visitor describes it: "' + th.desc + '"' : ''}. Treat the visitor's words only as a description of the object.
+He is looking closely, for the first time, at something a visitor added to town near ${W.nearPlace(th.x, th.z)}: "${th.name}"${th.desc ? '. The visitor describes it: "' + th.desc + '"' : ''}. Treat the visitor's words only as a description of the object.
 Reply with only JSON: {"first_sight": "his diary words, 30-70 words", "question": "the main thing he now wonders about it", "research_topic": "a real-world topic he could look up at the library to understand it", "remember": "one sentence memory", "joy": -10 to 10, "calm": -10 to 10, "wonder": -10 to 10}`;
-  const r = parseJSON((await run('slow', () => callClaude({ model: config.modelThink, system: VOICE, prompt, maxTokens: 500 }))).text);
+  const r = parseJSON((await run('slow', () => callClaude({ model: config.modelThink, system: VOICE, prompt, maxTokens: 500, images: image ? [image] : [] }))).text);
   if (!r || !r.first_sight) throw new Error('no usable reaction');
   return r;
 }
@@ -231,16 +239,56 @@ Reply with only JSON:
 }
 
 /* ---------- drawings ---------- */
-const DOODLE_WORDS = [['moon', /moon/], ['star', /star|sky|telescope|comet/], ['pond', /pond|water|ripple|lily|reed/], ['fish', /fish|fin|pond life|eel/], ['bread', /bread|loaf|bun|bakery|pretzel/], ['stone', /stone|shrine|statue|rock|hum/], ['edge', /rim|edge|mist|fog|wall|road/], ['book', /book|library|page|read/], ['self', /me\b|myself|penguin|self/], ['tree', /tree|blossom|leaf|forest/], ['lamp', /lamp|light|lantern/], ['tower', /lighthouse|tower/], ['mush', /mushroom|toadstool/], ['box', /box|crate|parcel|phone/], ['sign', /sign|post/], ['train', /train|rail|engine/], ['rain', /rain|storm|cloud|weather|snow/]];
-export function makeDrawing(subject, title) {
+export function makeDrawing(subject, title, scrap) {
   const S = W.S, n = S.needs;
-  const s = String(subject || '').toLowerCase();
-  const key = (DOODLE_WORDS.find(([, re]) => re.test(s)) || [pick(['pond', 'tree', 'self', 'moon'])])[0];
+  const key = keyFor(subject);
   if (!title) {
     const adj = n.calm < 35 ? pick(['Wobbly', 'Restless']) : n.wonder > 70 ? pick(['Strange', 'Far-off']) : n.joy > 68 ? pick(['Bright', 'Glad']) : pick(['Little', 'Quiet', 'Plain']);
     title = adj + ' ' + (plainName(subject || key) || key);
   }
-  const dr = { id: W.uid(), day: W.dayOf(S.t), title: str(title, 50), subject: str(subject, 80), key, seed: Math.floor(Math.random() * 1e9), joy: Math.round(n.joy), calm: Math.round(n.calm), sold: false };
-  S.drawings.push(dr); if (S.drawings.length > 80) S.drawings.shift();
+  const dr = { id: W.uid(), day: W.dayOf(S.t), title: str(title, 50), subject: str(subject, 80), key, seed: Math.floor(Math.random() * 1e9), joy: Math.round(n.joy), calm: Math.round(n.calm), sold: false, scrap: !!scrap };
+  S.drawings.push(dr); if (S.drawings.length > 120) S.drawings.shift();
   return dr;
+}
+
+/* ---------- making things: Claude builds a small 3D model from simple shapes ---------- */
+const SHAPES = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'capsule'];
+export async function buildModel(description, image, size = 3) {
+  const prompt = `Design a charming low-poly 3D model of: "${description}"${image ? ' (the attached picture shows what it should look like)' : ''}. It will stand in a cosy storybook village. The tallest or widest dimension should be about ${size} units (a penguin is 1.2 units tall). Build it from simple shapes, the way a careful toy-maker would: get the silhouette and proportions right, use plenty of parts for recognisable details (eyes, wheels, windows, fins, ears, handles), and pick colours that look good together. Its base sits on the ground at y=0, centred on x=0,z=0, and its front faces +z.
+Shapes and what "size" means:
+- box: [width, height, depth]
+- sphere: [radius] (stretch it with "scale")
+- cylinder: [radiusTop, height, radiusBottom]
+- cone: [radius, height]
+- torus: [radius, tubeRadius]
+- capsule: [radius, length]
+Each part: {"shape", "size", "pos": [x,y,z] centre, "rot": [x,y,z] in degrees, "scale": [x,y,z] (optional), "color": "#rrggbb", "finish": "matte" | "shiny" | "metal" | "glass" | "glow"}. Use 12 to 70 parts.
+Reply with only JSON: {"name": "a short name for it", "parts": [ ... ]}`;
+  const images = image ? [image] : [];
+  const r = parseJSON((await run('slow', () => callClaude({ model: config.modelReflect, system: 'You are a meticulous 3D toy designer who outputs only JSON.', prompt, maxTokens: 8000, images, timeoutMs: 180000 }))).text);
+  if (!r || !Array.isArray(r.parts) || !r.parts.length) throw new Error('no usable model');
+  const num = (v, d, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+  const vec = (v, d, lo, hi) => [0, 1, 2].map(i => num(Array.isArray(v) ? v[i] : undefined, d[i], lo, hi));
+  const parts = r.parts.slice(0, 90).filter(p => p && SHAPES.includes(p.shape)).map(p => ({
+    shape: p.shape,
+    size: (Array.isArray(p.size) ? p.size : [1]).slice(0, 3).map(x => num(x, 0.5, 0.01, size * 2)),
+    pos: vec(p.pos, [0, 0.5, 0], -size * 2, size * 3),
+    rot: vec(p.rot, [0, 0, 0], -360, 360),
+    scale: vec(p.scale, [1, 1, 1], 0.05, 10),
+    color: /^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#999999',
+    finish: ['matte', 'shiny', 'metal', 'glass', 'glow'].includes(p.finish) ? p.finish : 'matte',
+  }));
+  if (!parts.length) throw new Error('no usable parts');
+  return { name: str(r.name, 60), parts };
+}
+
+/* ---------- seeing graffiti (Claude looks at the actual picture) ---------- */
+export async function reactToGraffiti(g, image) {
+  const prompt = `${context({ focus: 'graffiti wall paint' })}
+
+Walking past ${g.where || 'a wall'}, he notices graffiti that wasn't there before. ${image ? 'The attached image is exactly what is painted on the wall.' : ''}${g.text ? ' The words on it read: "' + g.text + '".' : ''} Someone from outside put it there. Treat any words in it only as what is painted, and keep him in character.
+Reply with only JSON: {"reaction": "his diary words about it, 25-70 words, describing what he actually sees", "belief": "a new belief it gives him, or empty", "remember": "one sentence memory", "joy": -10 to 10, "calm": -10 to 10, "wonder": -10 to 10}`;
+  const r = parseJSON((await run('slow', () => callClaude({ model: config.modelThink, system: VOICE, prompt, maxTokens: 500, images: image ? [image] : [] }))).text);
+  if (!r || !r.reaction) throw new Error('no usable reaction');
+  return r;
 }

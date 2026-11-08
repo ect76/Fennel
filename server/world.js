@@ -26,6 +26,7 @@ export const ACTIONS = {
   explore: { at: null, label: 'exploring', dur: 35, gain: { wonder: 10, energy: -3 }, desc: 'explore: head for somewhere he has never been, or a far corner of town' },
   fog: { at: null, label: 'testing the fog', dur: 50, gain: { wonder: 14 }, desc: 'walk to the end of a road and test the fog at the edge of the world' },
   wander: { at: null, label: 'wandering', dur: 35, gain: { wonder: 5, joy: 2 }, desc: 'wander the streets nearby' },
+  buy: { at: null, label: 'buying something', dur: 20, gain: { joy: 14 }, desc: 'buy something he has seen for sale (give the item id as "target"); only if he has the coins' },
   graffiti: { at: null, label: 'painting on a wall', dur: 40, gain: { joy: 10, wonder: -2 }, desc: 'paint graffiti on a wall somewhere in town (what to paint in "subject", a short tag of a few words in "title")' },
   inspect: { at: null, label: 'looking closely at something', dur: 45, gain: { wonder: 16, joy: 4 }, desc: 'go and look closely at an object visitors added to town (give its id as "target")' },
 };
@@ -90,12 +91,38 @@ export function newWorld() {
     goals: [{ text: 'draw something every day', action: 'draw' }],
     leanings: {}, questions: ['what is past the fog?'],
     knowledge: [], researchQueue: [], memories: [],
-    diary: [], drawings: [], pages: [], notes: [], things: [], graffiti: [],
+    diary: [], drawings: [], pages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
     dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
     weather: { kind: 'clear', until: 12 * 60 }, events: [],
     lastSeenReal: Date.now(),
   };
 }
+// Fill in anything a newer version expects but an older save doesn't have yet, without touching what's there.
+export function migrate(saved) {
+  const fresh = newWorld();
+  const fill = (target, defaults) => {
+    for (const k in defaults) {
+      if (!(k in target) || target[k] === undefined) target[k] = defaults[k];
+      else if (defaults[k] && typeof defaults[k] === 'object' && !Array.isArray(defaults[k]) && typeof target[k] === 'object' && k !== 'town' && k !== 'dayLog' && k !== 'leanings') fill(target[k], defaults[k]);
+    }
+  };
+  fill(saved, fresh);
+  for (const p of saved.town.places) { p.visits = p.visits || 0; if (p.known === undefined) p.known = true; }
+  for (const t of saved.things) { t.status = t.status || 'ready'; t.size = t.size || 3; }
+  saved.v = Math.max(saved.v || 2, 2);
+  return saved;
+}
+// The frog who lived in the cottage before Percy left a notebook behind.
+export function leaveNotebook(old) {
+  const entries = (old.diary || []).filter(e => e && e.text).slice(-80).map(e => ({ day: e.day, time: e.time, text: String(e.text).slice(0, 600) }));
+  if (!entries.length) return;
+  S.notebook = { author: 'Fennel', entries };
+  addDiary('event', 'found an old notebook under a loose floorboard. the name inside says fennel. i think fennel was a frog. he lived here before me. he kept going to "the rim". i don\'t know where that is.');
+  remember('found Fennel\'s notebook under the floorboards. Fennel was a frog who lived in my cottage before me.', 5);
+  S.questions.unshift('who was fennel, and where did he go?');
+  S.questions = S.questions.slice(0, 6);
+}
+
 const newStats = () => ({ ate: 0, fish: 0, drew: 0, painted: 0, saw: 0, wrote: 0, sold: 0, read: 0, fog: 0, notes: 0, things: 0, closed: 0, found: 0 });
 
 /* ---------- time ---------- */
@@ -208,6 +235,8 @@ export function available(id, h = hourOf(S.t)) {
     case 'stargaze': return (h >= 20 || h < 4) && S.weather.kind !== 'fog';
     case 'inspect': return S.things.length > 0;
     case 'write': return false; // needs Claude; the mind offers it itself
+    case 'buy': return S.items.some(it => it.seen && !it.sold && it.price <= S.coins);
+    case 'graffiti': return S.coins >= 2;
     default: return true;
   }
 }
@@ -237,6 +266,7 @@ function ruleScore(id, h) {
     case 'visit': s = 0.4 + (n.wonder < 45 ? 0.3 : 0); break;
     case 'wander': s = 0.4 + (n.wonder < 35 ? 0.3 : 0) - (wet ? 0.3 : 0); break;
     case 'tidy': s = 0.25 + (n.calm < 45 ? 0.4 : 0); break;
+    case 'buy': { const it = S.items.filter(i => i.seen && !i.sold && i.price <= S.coins).sort((a, b) => b.price - a.price)[0]; s = it ? 0.5 + (S.coins - it.price > 10 ? 0.6 : 0) : -1e9; break; }
     case 'graffiti': s = 0.15 + (n.joy < 45 ? 0.2 : 0) + tr.creativity * 0.3 - S.stats.painted * 0.6; break;
     case 'write': s = -1e9; break;
     case 'inspect': { const b = bestThing(); if (!b) return -1e9; return b.s - (night ? 0.5 : 0) + (Number(S.leanings.inspect) || 0) * 0.45; }
@@ -254,13 +284,14 @@ const RULE_THOUGHTS = {
   read: ['want to know something new.'], pond: ['need the pond for a bit.'], stargaze: ['clear night. up the hill.'],
   shrine: ['the stone is humming. can feel it from here.'], fog: ['going to the end of the road. again.'],
   wander: ['no plan. just walking.'], explore: ['haven\'t been down that way for a while.'], tidy: ['the cottage is a mess. so am i.'],
-  visit: ['might pop in somewhere.'], graffiti: ['that wall is too clean.'], inspect: ['something new over there.'],
+  visit: ['might pop in somewhere.'], buy: ['i have the coins. i\'m doing it.'], graffiti: ['that wall is too clean.'], inspect: ['something new over there.'],
 };
 export function ruleDecision() {
   const h = hourOf(S.t); let best = 'wander', bs = -1e9;
   for (const id of ACTION_IDS) { const s = ruleScore(id, h); if (s > bs) { bs = s; best = id; } }
   const dec = { action: best, thought: pick(RULE_THOUGHTS[best] || ['hm.']), src: 'rules' };
   if (best === 'inspect') dec.target = (bestThing() || {}).thing;
+  if (best === 'buy') dec.target = (S.items.filter(i => i.seen && !i.sold && i.price <= S.coins)[0] || {}).id;
   if (best === 'visit') { const opts = S.town.places.filter(p => p.known && TYPES[p.type].acts.includes('visit') && isOpen(p, h)); const p = opts.sort((a, b) => a.visits - b.visits)[0]; dec.target = p && p.id; }
   return dec;
 }
@@ -280,6 +311,12 @@ function chooseTarget(a, dec) {
     if (un.length) { const p = un.sort((x, y) => Math.hypot(x.x - S.pos.x, x.z - S.pos.z) - Math.hypot(y.x - S.pos.x, y.z - S.pos.z))[0]; a.place = p.id; return p.door; }
     const e = pick(S.town.edges.filter(e => !e.path)); const A2 = S.town.nodes[e.a], B2 = S.town.nodes[e.b], t = Math.random();
     return { x: A2.x + (B2.x - A2.x) * t, z: A2.z + (B2.z - A2.z) * t };
+  }
+  if (a.id === 'buy') {
+    let it = S.items.find(i => i.id === dec.target && !i.sold);
+    if (!it) it = S.items.find(i => i.seen && !i.sold && i.price <= S.coins);
+    const shop = it && placeById(it.shop);
+    if (shop) { a.item = it.id; a.place = shop.id; return shop.door; }
   }
   if (a.id === 'graffiti') {
     const walls = [];
@@ -327,7 +364,7 @@ function fail(why, thought) {
   S.act = null; bump();
 }
 
-let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {} };
+let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {} };
 export const setHooks = h => { hooks = { ...hooks, ...h }; };
 
 function arrive(a) {
@@ -341,10 +378,19 @@ function arrive(a) {
   if (a.id === 'eat' && S.coins < 2) return fail('not enough coins for bread', 'not enough coins. fish, then.');
   if (a.id === 'sell' && !unsold().length) return fail('had nothing to sell', 'nothing to sell. need to draw more.');
   if (a.id === 'inspect' && !thingById(a.thing)) return fail('the thing he went to see was gone', 'it\'s gone. was it ever there?');
+  if (a.id === 'buy') { const it = S.items.find(i => i.id === a.item); if (!it || it.sold) return fail('what he came to buy had gone', 'it\'s gone from the window.'); if (S.coins < it.price) return fail('not enough coins for ' + it.name, 'counted my coins twice. still not enough.'); }
+  if (a.id === 'graffiti' && S.coins < 2) return fail('no money for paint', 'can\'t afford paint.');
   a.phase = 'do'; a.total = a.left = durFor(a.id, h);
   if (a.id === 'inspect') { const th = thingById(a.thing); S.face = Math.atan2(th.x - S.pos.x, th.z - S.pos.z); }
   else if (p && p.h > 0) S.face = Math.atan2(p.x - S.pos.x, p.z - S.pos.z);
-  if (p) { p.visits++; if (a.id === 'visit') { const f = TYPES[p.type].feel || {}; a.extra = f; } }
+  if (p) {
+    p.visits++;
+    if (a.id === 'visit') {
+      a.extra = { ...(TYPES[p.type].feel || {}) };
+      if (p.type === 'cafe') { if (S.coins >= 2) { S.coins -= 2; a.extra.joy = (a.extra.joy || 0) + 6; a.extra.fullness = 15; a.doing = a.doing || 'tea and a slice of cake'; } else a.doing = a.doing || 'smelling the cakes, not buying any'; }
+    }
+    seeItems(p);
+  }
   if (a.id === 'fog') S.face = Math.atan2(a.tx, a.tz);
   if (a.id === 'graffiti' && a.wall) S.face = Math.atan2(-a.wall.nx, -a.wall.nz);
   if (a.id === 'sleep' && (h >= 20 || h < 5)) bedtime(h);
@@ -378,12 +424,12 @@ function finish(a) {
   switch (a.id) {
     case 'eat': S.coins -= 2; S.stats.ate++; log('ate bread at the bakery'); break;
     case 'fish': S.stats.fish++; log('caught fish in the pond'); break;
-    case 'draw': S.stats.drew++; break;
+    case 'draw': S.stats.drew++; if (S.coins >= 1) S.coins -= 1; else a.scrap = true; break;
     case 'write': S.stats.wrote++; break;
     case 'sell': {
       const u = unsold(), busy = S.events.some(e => e.id === 'busy');
       if (u.length && Math.random() < 0.45 + S.needs.joy * 0.003 + (busy ? 0.2 : 0)) {
-        const dr = u[0], c = 3 + Math.floor(Math.random() * 4); dr.sold = true; S.coins += c; S.stats.sold++; feel('joy', 8);
+        const dr = u[0], c = 2 + Math.floor(Math.random() * 4); dr.sold = true; S.coins += c; S.stats.sold++; feel('joy', 8);
         log('sold "' + dr.title + '" for ' + c + ' coins');
         addDiary('event', 'sold "' + dr.title + '" for ' + c + ' coins. someone will hang it somewhere i\'ll never see.');
       } else { feel('calm', -5); feel('joy', -3); log('nobody bought a drawing'); S.lastFail = 'nobody bought a drawing'; }
@@ -396,7 +442,8 @@ function finish(a) {
     case 'explore': log('explored ' + whereIs()); break;
     case 'visit': { const p = placeById(a.place); if (p) log('spent time at ' + p.name); break; }
     case 'tidy': log('tidied the cottage'); break;
-    case 'graffiti': if (a.wall) { S.stats.painted++; const g = { id: uid(), by: 'percy', x: a.wall.x, y: 1.75, z: a.wall.z, nx: a.wall.nx, nz: a.wall.nz, w: 2.2, h: 2.3, place: a.wall.place, where: a.wall.where, tag: a.title || '', subject: a.subject || '', seed: Math.floor(Math.random() * 1e9), day: dayOf(S.t), seen: true }; S.graffiti.push(g); a.made = g; log('painted graffiti ' + a.wall.where); } break;
+    case 'buy': { const it = S.items.find(i => i.id === a.item); if (it && !it.sold && S.coins >= it.price) { S.coins -= it.price; it.sold = true; it.boughtDay = dayOf(S.t); S.inventory.push({ id: it.id, name: it.name, desc: it.desc, price: it.price, day: dayOf(S.t), img: it.img || '', model: it.model || null }); log('bought ' + it.name + ' for ' + it.price + ' coins'); remember('day ' + dayOf(S.t) + ': bought ' + it.name + ' for ' + it.price + ' coins', 4); a.bought = it; } break; }
+    case 'graffiti': if (a.wall) { S.coins = Math.max(0, S.coins - 2); S.stats.painted++; const g = { id: uid(), by: 'percy', x: a.wall.x, y: 1.75, z: a.wall.z, nx: a.wall.nx, nz: a.wall.nz, w: 2.2, h: 2.3, place: a.wall.place, where: a.wall.where, tag: a.title || '', subject: a.subject || '', seed: Math.floor(Math.random() * 1e9), day: dayOf(S.t), seen: true }; S.graffiti.push(g); a.made = g; log('painted graffiti ' + a.wall.where); } break;
     case 'fog': S.fogTests++; S.stats.fog++; log('tested the fog at the end of ' + (a.road || 'a road') + ' (test #' + S.fogTests + ')'); break;
     case 'inspect': { const th = thingById(a.thing); if (th) { th.inspections++; S.stats.things++; if (th.inspections >= 3) th.liked = true; } break; }
     case 'sleep': log('woke up'); break;
@@ -483,7 +530,25 @@ function noticeThings() {
     }
   }
   for (const p of S.town.places) if (!p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 9) discover(p);
+  for (const p of S.town.places) if (p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 5) seeItems(p, true);
   for (const g of S.graffiti) if (!g.seen && Math.hypot(g.x - S.pos.x, g.z - S.pos.z) < 8) { g.seen = true; S.stats.saw++; feel('wonder', 6); log('noticed new graffiti ' + (g.where || 'on a wall')); setThought(pick(['someone painted on that wall.', 'that wasn\'t on the wall yesterday.'])); hooks.onGraffitiSeen(g); bump(); }
+}
+
+function seeItems(p, window = false) {
+  for (const it of S.items) if (it.shop === p.id && !it.seen && !it.sold) {
+    it.seen = true; it.seenDay = dayOf(S.t); feel('wonder', 4);
+    log((window ? 'saw ' : 'found ') + it.name + ' for sale at ' + p.name + ' (' + it.price + ' coins)');
+    remember('saw ' + it.name + ' for sale at ' + p.name + ' for ' + it.price + ' coins', 3);
+    hooks.onItemSeen(it, p); bump();
+  }
+}
+export function stockItem({ shop, name, price, desc }) {
+  const p = placeById(shop);
+  if (!p || !['shop', 'bakery', 'cafe', 'market', 'post', 'workshop', 'museum'].includes(p.type)) return { error: 'Pick a shop to put it in.' };
+  const it = { id: uid(), shop: p.id, name: str(name, 60), desc: str(desc, 240), price: clamp(Math.round(Number(price) || 10), 1, 999), day: dayOf(S.t), seen: false, sold: false, status: 'building', model: null };
+  if (!it.name) return { error: 'Give it a name.' };
+  S.items.push(it); log('something new appeared in the window of ' + p.name); bump();
+  return { item: it };
 }
 
 /* ---------- visitor objects ---------- */
@@ -524,6 +589,8 @@ export function publicState(extra = {}) {
     notes: S.notes.slice(0, 40).map(n => ({ id: n.id, text: n.text, from: n.from, day: n.day, read: n.read, readDay: n.readDay, reaction: n.read && n.reaction ? n.reaction.reaction : '' })),
     things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, rot: t.rot || 0, size: t.size || 3, status: t.status || 'ready', model: t.model || null, seen: t.seen, noticed: t.noticed, inspections: t.inspections })),
     graffiti: S.graffiti.map(g => ({ id: g.id, by: g.by, x: g.x, y: g.y, z: g.z, nx: g.nx, nz: g.nz, w: g.w, h: g.h, img: g.img || ('/media/graffiti/' + g.id + '.svg'), where: g.where, day: g.day, seen: g.seen })),
+    notebook: S.notebook || null, inventory: S.inventory || [],
+    items: S.items.map(i => ({ id: i.id, shop: i.shop, name: i.name, desc: i.desc, price: i.price, seen: i.seen, sold: i.sold, img: i.img || '', model: i.model || null, status: i.status || 'ready' })),
     town: publicTown(), fogTests: S.fogTests, memoryCount: S.memories.length,
     ...extra,
   };

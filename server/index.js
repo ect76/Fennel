@@ -9,20 +9,45 @@ import { loadJSON, saveJSON, dailyBackup } from './store.js';
 import { canCall } from './claude.js';
 import * as W from './world.js';
 import * as M from './mind.js';
+import { drawingSVG, graffitiSVG, keyFor } from './doodle.js';
+import * as Pub from './publish.js';
 
 const { str, pick, plainName } = W;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, '..', 'public');
 const SAVE = path.join(config.dataDir, 'world.json');
+const MEDIA = path.join(config.dataDir, 'media');
+for (const d of ['drawings', 'graffiti', 'uploads']) fs.mkdirSync(path.join(MEDIA, d), { recursive: true });
+function writeMedia(rel, data) { try { fs.writeFileSync(path.join(MEDIA, rel), data); } catch (e) { console.warn('[percy] could not save ' + rel + ':', e.message); } }
+function readImage(rel) {
+  try { const buf = fs.readFileSync(path.join(MEDIA, rel)); const ext = path.extname(rel).slice(1); const mt = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[ext]; return mt ? { mediaType: mt, data: buf.toString('base64') } : null; } catch { return null; }
+}
+function parseDataURL(u) {
+  const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(u || ''));
+  if (!m) return null;
+  const buf = Buffer.from(m[3], 'base64'); if (buf.length > 4 * 1024 * 1024) return null;
+  return { mediaType: m[1], ext: m[2] === 'jpeg' ? 'jpg' : m[2], buf, data: m[3] };
+}
+// his website: re-render the index whenever something new goes up
+function siteUpdate(files, message) { if (!Pub.enabled()) return; for (const [p, c] of files) Pub.queueFile(p, c, message); Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index'); }
 
 /* ---------- load or create the world ---------- */
 let S = loadJSON(SAVE);
-if (!S || S.v !== 2) {
+if (S && S.v === 1) {
+  // the first version (Fennel the frog, on an island): keep it safe and start Percy's village, with Fennel's notebook in the cottage
+  const old = S;
+  try { saveJSON(path.join(config.dataDir, 'world-fennel-archive.json'), old); } catch (e) { console.error('[percy] could not archive the old world:', e.message); }
+  S = W.newWorld(); W.setState(S);
+  W.addDiary('event', 'day 1. woke up in the cottage. the stone was humming before the birds started.');
+  W.leaveNotebook(old);
+  console.log('[percy] archived Fennel\'s world to world-fennel-archive.json; Percy\'s village begins');
+} else if (!S) {
   S = W.newWorld(); W.setState(S);
   W.addDiary('event', 'day 1. woke up in the cottage. the stone was humming before the birds started.');
   console.log('[percy] a new world begins');
 } else {
-  W.setState(S);
+  // every later version keeps everything: just add whatever is new
+  W.migrate(S); W.setState(S);
   S.deciding = false;
   const gapMin = (Date.now() - (S.lastSeenReal || Date.now())) / 60000;
   if (gapMin > 10) { W.addDiary('event', 'the world went quiet for a while. i don\'t remember any of it. the clock says it\'s still ' + W.hhmm(S.t) + '.'); W.log('the world paused'); }
@@ -53,8 +78,10 @@ function publish(a) {
   } else if (j.kind === 'page') {
     const r = j.result;
     if (r) {
-      S.pages.push({ id: W.uid(), day: W.dayOf(S.t), title: r.title, body: r.body });
+      const page = { id: W.uid(), day: W.dayOf(S.t), title: r.title, body: r.body };
+      S.pages.push(page);
       if (S.pages.length > 60) S.pages.shift();
+      siteUpdate([['pages/' + Pub.slug(page.title) + '.html', Pub.pageHTML(page)]], 'percy wrote a page: ' + page.title);
       W.addDiary('page', 'wrote a page called "' + r.title + '" and pinned it up.', 'claude');
       W.log('wrote a page: ' + r.title); W.remember('wrote a page called "' + r.title + '"', 2);
     } else W.log('tried to write but nothing came');
@@ -85,9 +112,20 @@ W.setHooks({
     if (a.job) { a.job.ended = true; if (a.job.done) publish(a); }
     else if (a.id === 'read') bookFallback();
     if (a.id === 'draw') {
-      const dr = M.makeDrawing(a.subject, a.title);
-      W.addDiary('drawing', 'drew "' + dr.title + '". ' + pick(['it came out wobbly. i like it anyway.', 'not sure about the left side.', 'pinned it on the wall.', 'it looks like how it felt.']));
+      const dr = M.makeDrawing(a.subject, a.title, a.scrap);
+      const svg = drawingSVG(dr); writeMedia('drawings/' + dr.id + '.svg', svg);
+      W.addDiary('drawing', 'drew "' + dr.title + '"' + (a.scrap ? ' on the back of an old envelope. no money for paper.' : '. ') + (a.scrap ? '' : pick(['it came out wobbly. i like it anyway.', 'not sure about the left side.', 'pinned it on the board on the high street.', 'it looks like how it felt.'])), 'rules', { drawing: dr.id });
       W.log('drew "' + dr.title + '"');
+      siteUpdate([['drawings/' + dr.id + '.svg', svg]], 'percy drew ' + dr.title);
+    }
+    if (a.id === 'graffiti' && a.made) {
+      const g = a.made, svg = graffitiSVG({ key: keyFor(g.subject), seed: g.seed, tag: g.tag });
+      writeMedia('graffiti/' + g.id + '.svg', svg); g.img = '/media/graffiti/' + g.id + '.svg';
+      W.addDiary('graffiti', 'painted ' + (g.subject || 'something') + ' ' + g.where + (g.tag ? '. it says "' + g.tag + '".' : '.'), a.src === 'claude' ? 'claude' : 'rules');
+      siteUpdate([['graffiti/' + g.id + '.svg', svg]], 'percy painted on a wall');
+    }
+    if (a.id === 'buy' && a.bought) {
+      W.addDiary('bought', 'bought ' + a.bought.name + ' for ' + a.bought.price + ' coins. ' + pick(['carried it home very carefully.', 'counted the coins out one at a time.', 'it\'s mine now. that feels strange.']));
     }
     if (a.id === 'fog' && (S.fogTests <= 3 || S.fogTests % 3 === 0)) {
       W.addDiary('fog', pick(['walked to the end of ' + (a.road || 'the road') + ' until my feet stopped. not tired. just stopped.', 'pushed into the fog with one hand. soft, like a wall made of pillows.', 'threw a pebble into the fog. no sound when it landed.', 'stood where ' + (a.road || 'the road') + ' runs out for a long time. nothing out there looked back.']) + ' test #' + S.fogTests + '.');
@@ -97,6 +135,15 @@ W.setHooks({
     const plain = { first_sight: 'found ' + p.name + '. nobody there. the door ' + pick(['was open', 'was locked', 'had a bell that didn\'t ring']) + '.', question: 'who built ' + p.name + '?', wonder: 8 };
     const done = (r, src) => { W.applyFeel(r); W.addDiary('found', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
     if (canCall()) M.reactToPlace(p).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
+  },
+  onGraffitiSeen(g) {
+    const image = g.by === 'keeper' && g.file ? readImage(g.file) : null;
+    const plain = { reaction: 'someone painted on the wall ' + (g.where || '') + '. i stood and looked at it for a long time.', wonder: 8 };
+    const done = (r, src) => { W.applyFeel(r); W.addDiary('graffiti', str(r.reaction, 700), src); if (str(r.belief, 140)) { S.beliefs.unshift(str(r.belief, 140)); S.beliefs = S.beliefs.slice(0, 8); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
+    if (canCall()) M.reactToGraffiti(g, image).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
+  },
+  onItemSeen(it, p) {
+    W.addDiary('window', 'saw ' + it.name + ' in the window of ' + p.name + '. ' + it.price + ' coins.' + (it.price > S.coins ? ' i have ' + S.coins + '.' : ''));
   },
   onGrow(g, by) {
     W.addDiary('event', by === 'keeper' ? 'woke up with the feeling the town had got bigger in the night.' : 'the fog looks thinner down ' + (g.road || 'one of the roads') + ' today.');
@@ -137,7 +184,7 @@ function firstLook(th, claude) {
     W.bump();
   };
   const plain = { first_sight: 'there\'s a ' + nm + ' near ' + W.nearPlace(th.x, th.z) + '. it wasn\'t there before. nobody saw who brought it.', question: 'who put the ' + nm + ' here?', research_topic: nm, wonder: 10 };
-  if (claude) M.reactToThing(th).then(r => done(r, 'claude')).catch(() => done(plain, 'rules'));
+  if (claude) M.reactToThing(th, th.file ? readImage(th.file) : null).then(r => done(r, 'claude')).catch(() => done(plain, 'rules'));
   else done(plain, 'rules');
 }
 
@@ -165,7 +212,7 @@ setInterval(() => {
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); process.exit(0); });
 
 /* ---------- web server ---------- */
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const TYPES = { '.jpg': 'image/jpeg', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const streams = new Set();
 const ipOf = req => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 const lastNoteBy = new Map();
@@ -174,9 +221,9 @@ function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
-function readBody(req) {
+function readBody(req, limit = 10000) {
   return new Promise((resolve, reject) => {
-    let data = ''; req.on('data', c => { data += c; if (data.length > 10000) { reject(new Error('too large')); req.destroy(); } });
+    let data = ''; req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('bad json')); } });
   });
 }
@@ -199,7 +246,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, W.publicState(extra()));
     if (req.method === 'GET' && p === '/api/live') return send(res, 200, live());
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...M.status() });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...M.status(), website: Pub.pubStatus });
     if (req.method === 'GET' && p === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write('retry: 3000\n\n'); streams.add(res);
@@ -217,16 +264,53 @@ const server = http.createServer(async (req, res) => {
       W.bump(); save(); return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && p.startsWith('/api/keeper/')) {
-      const b = await readBody(req);
+      const b = await readBody(req, 7 * 1024 * 1024);
       if (!config.keeperKey) return send(res, 403, { error: 'Keeper tools are off. Set KEEPER_KEY in the container settings to use them.' });
       if (!keeperOK(b.key)) return send(res, 403, { error: 'That keeper key is wrong.' });
       const what = p.slice('/api/keeper/'.length);
       if (what === 'check') return send(res, 200, { ok: true });
-      if (what === 'thing') {
-        const name = str(b.name, 40); if (!name) return send(res, 400, { error: 'Give it a name.' });
-        const x = Number(b.x), z = Number(b.z); const prob = W.spotProblem(x, z); if (prob) return send(res, 400, { error: prob });
-        const th = W.addThing({ kind: b.kind, name, desc: b.desc, x, z }); save(); return send(res, 200, { ok: true, id: th.id });
+      if (what === 'make') {
+        const desc = str(b.description, 200), img = b.image ? parseDataURL(b.image) : null;
+        if (!desc && !img) return send(res, 400, { error: 'Describe it or add a picture.' });
+        if (b.image && !img) return send(res, 400, { error: 'That picture couldn\'t be read. Try a JPEG or PNG under 4 MB.' });
+        const size = Math.max(1, Math.min(8, Number(b.size) || 3));
+        const x = Number(b.x), z = Number(b.z); const prob = W.spotProblem(x, z, size * 0.7); if (prob) return send(res, 400, { error: prob });
+        const th = W.addThing({ name: desc || 'something from a picture', desc, x, z, size });
+        if (img) { th.file = 'uploads/' + th.id + '.' + img.ext; writeMedia(th.file, img.buf); }
+        save(); send(res, 200, { ok: true, id: th.id });
+        if (!canCall()) { th.status = 'failed'; W.bump(); return; }
+        M.buildModel(desc || 'the thing in this picture', img ? { mediaType: img.mediaType, data: img.data } : null, size)
+          .then(m => { th.model = m.parts; if (m.name) th.name = m.name; th.status = 'ready'; })
+          .catch(e => { th.status = 'failed'; console.warn('[percy] building a model failed:', e.message); })
+          .finally(() => { W.bump(); save(); });
+        return;
       }
+      if (what === 'graffiti') {
+        const img = parseDataURL(b.image); if (!img) return send(res, 400, { error: 'Draw something or add a picture first.' });
+        const x = Number(b.x), y = Number(b.y), z = Number(b.z), nx = Number(b.nx), nz = Number(b.nz);
+        if (![x, y, z, nx, nz].every(Number.isFinite)) return send(res, 400, { error: 'Tap a wall to paint on.' });
+        const w = Math.max(0.6, Math.min(5, Number(b.w) || 2)), h = Math.max(0.4, Math.min(5, Number(b.h) || w));
+        const g = { id: W.uid(), by: 'keeper', x, y, z, nx, nz, w, h, text: str(b.text, 80), where: 'near ' + W.nearPlace(x, z), day: W.dayOf(S.t), seen: false };
+        g.file = 'graffiti/' + g.id + '.' + img.ext; g.img = '/media/' + g.file; writeMedia(g.file, img.buf);
+        S.graffiti.push(g); W.log('new graffiti appeared ' + g.where); W.bump(); save();
+        return send(res, 200, { ok: true, id: g.id });
+      }
+      if (what === 'stock') {
+        const img = b.image ? parseDataURL(b.image) : null;
+        const r = W.stockItem({ shop: b.shop, name: b.name, price: b.price, desc: b.desc });
+        if (r.error) return send(res, 400, { error: r.error });
+        const it = r.item;
+        if (img) { it.file = 'uploads/' + it.id + '.' + img.ext; it.img = '/media/' + it.file; writeMedia(it.file, img.buf); }
+        save(); send(res, 200, { ok: true, id: it.id });
+        if (!canCall()) { it.status = 'failed'; return; }
+        M.buildModel(it.name + (it.desc ? ', ' + it.desc : '') + ' (an item for sale in a shop window)', img ? { mediaType: img.mediaType, data: img.data } : null, 0.9)
+          .then(m => { it.model = m.parts; it.status = 'ready'; })
+          .catch(e => { it.status = 'failed'; console.warn('[percy] building an item failed:', e.message); })
+          .finally(() => { W.bump(); save(); });
+        return;
+      }
+      if (what === 'remove-graffiti') { S.graffiti = S.graffiti.filter(g => g.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
+      if (what === 'remove-item') { S.items = S.items.filter(i => i.id !== b.id || i.sold); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-thing') { S.things = S.things.filter(t => t.id !== b.id); W.log('something vanished from town'); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-note') { S.notes = S.notes.filter(n => n.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'build') {
@@ -241,6 +325,16 @@ const server = http.createServer(async (req, res) => {
         W.log('someone left a book about ' + topic + ' at the library'); W.bump(); save(); return send(res, 200, { ok: true });
       }
       return send(res, 404, { error: 'Unknown keeper action.' });
+    }
+    if ((req.method === 'GET' || req.method === 'HEAD') && p.startsWith('/media/')) {
+      const file = path.normalize(path.join(MEDIA, decodeURIComponent(p.slice(7))));
+      if (!file.startsWith(MEDIA)) return send(res, 403, 'no', 'text/plain');
+      fs.readFile(file, (err, data) => {
+        if (err) return send(res, 404, 'not found', 'text/plain');
+        res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'public, max-age=86400' });
+        res.end(req.method === 'HEAD' ? undefined : data);
+      });
+      return;
     }
     if (req.method === 'GET' || req.method === 'HEAD') {
       const file = path.normalize(path.join(PUBLIC, p === '/' ? 'index.html' : p));
@@ -261,4 +355,6 @@ server.listen(config.port, () => {
   console.log(`[percy] Mossbrook is open on port ${config.port}`);
   console.log('[percy] mind: ' + (config.apiKey ? `Claude (${config.modelThink} / ${config.modelReflect})` : 'simple rules only (no ANTHROPIC_API_KEY set)'));
   console.log('[percy] keeper tools: ' + (config.keeperKey ? 'on' : 'off (set KEEPER_KEY to turn on)'));
+  console.log('[percy] website: ' + (Pub.enabled() ? 'publishing to ' + config.githubRepo : 'off (set GITHUB_TOKEN and GITHUB_REPO to turn on)'));
+  if (Pub.enabled()) Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index');
 });
