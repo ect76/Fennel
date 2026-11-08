@@ -252,7 +252,7 @@ async function keeper(req, res, what) {
   switch (what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
-      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), build: (process.env.BUILD_REF || 'dev').slice(0, 7), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
+      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), betterUsed: S.betterUse && S.betterUse.day === new Date().toISOString().slice(0, 10) ? S.betterUse.n : 0, build: (process.env.BUILD_REF || 'dev').slice(0, 7), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
         journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
@@ -262,6 +262,7 @@ async function keeper(req, res, what) {
       if ('paused' in b) s.paused = !!b.paused;
       if ('fastSleep' in b) s.fastSleep = !!b.fastSleep;
       if ('timeScale' in b) s.timeScale = n(b.timeScale, 0.25, 60);
+      if ('betterPerDay' in b) s.betterPerDay = n(b.betterPerDay, 0, 200);
       if ('sessionSteps' in b) s.sessionSteps = n(b.sessionSteps, 2, 20);
       if ('quality' in b) s.quality = ['better', 'mixed'].includes(b.quality) ? b.quality : 'economy';
       if ('searchVia' in b) s.searchVia = ['auto', 'searxng', 'browser', 'claude'].includes(b.searchVia) ? b.searchVia : 'auto';

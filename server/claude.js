@@ -20,6 +20,7 @@ export function budget() {
     spendPerDay: Number.isFinite(b.spendPerDay) ? b.spendPerDay : config.maxSpendPerDay,
     paused: !!b.paused, quality: ['better', 'mixed'].includes(b.quality) ? b.quality : 'economy',
     sessionSteps: Number.isFinite(b.sessionSteps) ? b.sessionSteps : config.sessionSteps,
+    betterPerDay: Number.isFinite(b.betterPerDay) ? b.betterPerDay : 8,
   };
 }
 export function modelFor(kind) {

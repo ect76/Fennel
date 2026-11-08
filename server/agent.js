@@ -257,21 +257,26 @@ function effortOn(i) {
 // "Mixed" thinking: the everyday model for routine moments, the better model where judgement matters:
 // waking and planning the day, when his body is in trouble, when he keeps choosing the same thing or keeps failing,
 // and otherwise as a periodic check-in. Nothing about this is shown to him.
-let lastBetterT = -1e9, lastWakeBetter = -1;
+let lastWakeBetter = -1;
+const lastFor = {}; // town time each reason last used the better model
 function chooseModel() {
   const b = budget();
   if (b.quality !== 'mixed') return { model: modelFor('decide') };
-  const why = [], since = S.t - lastBetterT, day = W.dayOf(S.t);
-  if (/wak|woke|slept/i.test(lastTrigger) && lastWakeBetter !== day) { why.push('waking'); lastWakeBetter = day; }
-  if (since > 45) { // the other reasons call on the better model at most every 45 town minutes, so a long loop isn't all Sonnet
-    if (S.body.fullness < 15 || S.body.energy < 15) why.push('body in trouble');
-    const recent = S.journal.slice(-5).filter(j => j.choice && j.src !== 'body');
-    if (recent.length >= 4 && recent.every(j => j.choice.type === recent[0].choice.type)) why.push('same choice ' + recent.length + ' times');
-    if (recent.slice(-3).filter(j => j.outcome && j.outcome.ok === false).length >= 2) why.push('recent attempts failed');
-    if (since > 120) why.push('check-in');
+  // a hard daily limit on better-model decisions (real days, like the rest of the budget)
+  const today = new Date().toISOString().slice(0, 10); S.betterUse = S.betterUse && S.betterUse.day === today ? S.betterUse : { day: today, n: 0 };
+  if (S.betterUse.n >= b.betterPerDay) return { model: modelFor('decide') };
+  const day = W.dayOf(S.t), gap = (k, mins) => S.t - (lastFor[k] ?? -1e9) > mins;
+  let why = '';
+  if (/wak|woke|slept/i.test(lastTrigger) && lastWakeBetter !== day) { why = 'waking'; lastWakeBetter = day; }
+  else if ((S.body.fullness < 10 || S.body.energy < 10) && gap('body', 180)) why = 'body in trouble';
+  else {
+    const recent = S.journal.slice(-6).filter(j => j.choice && j.src !== 'body');
+    const stuck = (recent.length >= 5 && recent.every(j => j.choice.type === recent[0].choice.type)) || recent.slice(-4).filter(j => j.outcome && j.outcome.ok === false).length >= 3;
+    if (stuck && gap('stuck', 120)) why = 'stuck';
   }
-  if (!why.length) return { model: modelFor('decide') };
-  lastBetterT = S.t; return { model: config.modelBetter, why: why.join(', ') };
+  if (!why) return { model: modelFor('decide') };
+  lastFor[why === 'waking' ? 'wake' : why === 'stuck' ? 'stuck' : 'body'] = S.t; S.betterUse.n++;
+  return { model: config.modelBetter, why: why + ' (' + S.betterUse.n + ' of ' + b.betterPerDay + ' today)' };
 }
 
 function resolveGo(to) {
