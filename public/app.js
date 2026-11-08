@@ -120,6 +120,7 @@ function renderAll() {
   list($('#questions'), ST.questions, q => el('li', null, q));
   list($('#beliefs'), ST.beliefs, b => el('li', null, b));
   list($('#goals'), ST.goals, g => { const li = el('li', null, g.text); if (g.action) li.append(el('small', null, '→ ' + (LEAN[g.action] || g.action))); return li; });
+  list($('#wishes'), ST.wishes, w => { const li = el('li', null, w.text); li.append(el('small', null, 'since day ' + w.day)); return li; });
   list($('#inventory'), ST.inventory, i => { const li = el('li', null, i.name); li.append(el('small', null, 'bought day ' + i.day + ' for ' + i.price)); return li; });
   list($('#queue'), ST.researchQueue, q => el('li', null, q));
   const seek = [], avoid = []; for (const k in ST.leanings) (ST.leanings[k] > 0 ? seek : avoid).push(LEAN[k] || k);
@@ -163,6 +164,8 @@ function renderAll() {
   if (!ST.pages.length && !(ST.webPages || []).length) pg.append(el('p', 'hint', 'He hasn\'t written any pages yet.'));
   for (const p of ST.pages.slice().reverse()) { const a = el('article', 'page'); a.append(el('h3', null, p.title), el('small', null, 'Day ' + p.day), el('div', 'txt', p.body)); pg.append(a); }
   // notes
+  const pn = $('#percyNotes'); pn.textContent = ''; $('#percyNotesWrap').hidden = !(ST.percyNotes || []).length;
+  for (const n of (ST.percyNotes || []).slice().reverse()) { const d = el('div', 'note'); d.append(el('div', 'voice', n.text)); d.append(el('small', null, 'left on day ' + n.day + (n.to ? ' for ' + n.to : '') + (n.inReplyTo ? ' · in reply to "' + n.inReplyTo + '"' : ''))); pn.append(d); }
   const nw = $('#notes'); nw.textContent = '';
   for (const n of ST.notes) { const d = el('div', 'note'); d.append(el('q', null, n.text)); d.append(el('small', null, (n.from ? 'from ' + n.from + ' · ' : '') + 'left day ' + n.day + (n.read ? ' · he found it on day ' + n.readDay : ' · still under the stone'))); if (n.reaction) d.append(el('div', 'voice', n.reaction)); nw.append(d); }
   renderKeeper();

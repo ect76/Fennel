@@ -203,6 +203,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
       <div><h2>Wondering about</h2><ul class="plain" id="questions"></ul></div>
       <div><h2>Beliefs</h2><ul class="plain" id="beliefs"></ul></div>
       <div><h2>Goals</h2><ul class="plain" id="goals"></ul></div>
+      <div><h2>He wishes</h2><ul class="plain" id="wishes"></ul></div>
       <div><h2>His things</h2><ul class="plain" id="inventory"></ul></div>
       <div><h2>Leanings</h2><p class="hint" id="leanings"></p></div>
       <div><h2>Wants to look up</h2><ul class="plain" id="queue"></ul></div>
@@ -223,6 +224,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <label class="fld">Sign it (optional)<input type="text" id="noteFrom" maxlength="30"></label>
         <div class="row"><button type="submit" class="btn primary">Leave note</button><span class="hint" id="noteStatus" role="status"></span></div>
       </form>
+      <div id="percyNotesWrap" hidden><h2>Notes Percy left under the stone</h2><div id="percyNotes" style="display:grid;gap:10px"></div></div>
       <div id="notes" style="display:grid;gap:10px"></div>
     </div>
     <div class="tabpanel" id="p-keeper" hidden>

@@ -210,6 +210,7 @@ function readNotes(claude) {
     n.read = true; n.readDay = W.dayOf(S.t); S.stats.notes++; W.log('found a note at the Humming Stone'); W.contact(28); W.emo('contentment', 15); W.emo('excitement', 12);
     const done = (r, src) => {
       n.reaction = { reaction: str(r.reaction, 600) };
+      if (str(r.reply, 400)) { S.percyNotes.push({ text: str(r.reply, 400), to: n.from || '', inReplyTo: n.text.slice(0, 80), day: W.dayOf(S.t) }); if (S.percyNotes.length > 60) S.percyNotes.shift(); W.log('left a note under the stone in reply'); }
       W.applyFeel(r);
       if (str(r.belief, 140)) { S.beliefs.unshift(str(r.belief, 140)); S.beliefs = S.beliefs.slice(0, 8); }
       if (str(r.remember, 220)) W.remember(r.remember, 3);
