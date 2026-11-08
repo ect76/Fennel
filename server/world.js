@@ -55,7 +55,7 @@ export function newWorld() {
     settings: {}, permissions: {}, lastSeenReal: Date.now(),
     // explicit initial conditions, tagged as such in his memory (see agent.initialConditions)
     initial: {
-      cottage: 'a small cottage with a bed, a desk with paper, pencils and an old computer, a clock on the wall, a cupboard with a few tins of sardines, and a window onto a lane',
+      cottage: 'a small cottage with a bed, a desk with paper, pencils and an old computer, a cupboard with a few tins of sardines, and a window onto a lane',
       name: 'Percy',
     },
   };

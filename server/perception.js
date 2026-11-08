@@ -34,7 +34,7 @@ function noteSeen(list, key, id, extra = {}) { const m = mind()[key]; if (!m[id]
 export function perceive({ sinceT = 0, watchers = 0 } = {}) {
   const S = W.S, pos = S.pos, h = W.hourOf(S.t), dark = W.isDark(h), out = { newly: [] };
   const inside = S.inside ? W.placeById(S.inside) : null;
-  out.when = 'day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t) + ' by the clock' + (dark ? ' (dark outside)' : '') + ', ' + W.seasonOf(W.dayOf(S.t));
+  out.when = 'day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t) + (dark ? ' (dark outside)' : '') + ', ' + W.seasonOf(W.dayOf(S.t));
   out.weather = S.weather.kind;
   out.where = W.whereWords();
   out.body = W.bodySense();
