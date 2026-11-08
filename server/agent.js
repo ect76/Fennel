@@ -191,7 +191,12 @@ function applyMind(r, j) {
     }
     if (m) j.learning.push(m.id);
   }
-  if (r.feeling && str(r.feeling.word, 40)) S.feeling = { word: str(r.feeling.word, 40), valence: clamp(Number(r.feeling.valence) || 0, -1, 1), t: S.t };
+  if (r.feeling && str(r.feeling.word, 40)) {
+    S.feeling = { word: str(r.feeling.word, 40), valence: clamp(Number(r.feeling.valence) || 0, -1, 1), t: S.t };
+    // a record for watchers only: it is never shown back to him
+    S.feelings = S.feelings || []; const last = S.feelings[S.feelings.length - 1];
+    if (!last || last.word !== S.feeling.word || S.t - last.t > 120) { S.feelings.push({ ...S.feeling, day: W.dayOf(S.t), time: W.hhmm(S.t), doing: str((r.caption || (r.action && r.action.type) || ''), 60) }); if (S.feelings.length > 400) S.feelings.shift(); }
+  }
   const thought = str(plain(r.thought), 400);
   if (thought) S.thought = { text: thought, src: 'claude', t: S.t };
   j.thought = thought; j.expectation = str(r.expectation, 300); j.caption = str(r.caption, 100);

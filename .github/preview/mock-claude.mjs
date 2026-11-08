@@ -12,7 +12,8 @@ function decide(prompt) {
   const tr = String(prompt).split('\n').find(l => l.startsWith('How his recent efforts')); if (tr) console.log('[mock] saw: ' + tr);
   const places = ids(prompt, /place (\w+): /g), things = ids(prompt, /thing (\w+): /g), projects = ids(prompt, /project (pr\w+) /g), inv = ids(prompt, /(R\w+) "/g);
   const step = PLAN[plan++ % PLAN.length];
-  const base = { intention: { op: 'new', text: 'see what this place is', why: 'everything is unfamiliar', horizon: 'today' }, expectation: 'something will happen', thought: 'a small thought.', caption: '' };
+  const FEEL = [['curious', 0.4], ['tired', -0.3], ['pleased', 0.6], ['uneasy', -0.5], ['calm', 0.1]][plan % 5];
+  const base = { feeling: { word: FEEL[0], valence: FEEL[1] }, intention: { op: 'new', text: 'see what this place is', why: 'everything is unfamiliar', horizon: 'today' }, expectation: 'something will happen', thought: 'a small thought.', caption: '' };
   const a = { look: { type: 'look', args: { at: things[0] || 'around' } }, go: { type: 'go', args: { to: places[0] || 'home' } }, enter: { type: 'enter', args: { place: places[0] || 'x' } },
     research: { type: 'research', args: inv[0] && plan > 12 ? { continue: inv[0], question: '' } : { question: 'how does a clock keep time', why: 'the tower clock', where: 'home' } },
     code: { type: 'code', args: projects[0] ? { project: projects[0], goal: 'fix what is broken' } : { project: 'new', title: 'Clock face', goal: 'a page that shows a ticking clock', where: 'home' } },

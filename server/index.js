@@ -133,7 +133,7 @@ function publicState() {
   return {
     t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: config.timeScale, rev: S.rev,
     pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, caption: S.act.caption, place: S.act.place, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
-    doing: doingText(), thought: S.thought, feeling: S.feeling, body: S.body, coins: S.coins, pantry: S.pantry,
+    doing: doingText(), thought: S.thought, feeling: S.feeling, feelings: (S.feelings || []).slice(-80), body: S.body, coins: S.coins, pantry: S.pantry,
     town: W.publicTown(), things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, size: t.size, model: t.model, status: t.status, day: t.day, known: !!m.knownThings[t.id], hisName: (m.knownThings[t.id] || {}).name || '' })),
     graffiti: S.graffiti, items: S.items.filter(i => !i.sold).map(i => ({ id: i.id, shop: i.shop, name: i.name, price: i.price, model: i.model, img: i.img || '', status: i.status })), inventory: S.inventory,
     drawings: S.drawings.slice(-120).map(d => ({ id: d.id, day: d.day, title: d.title, onStall: !!d.onStall, sold: !!d.sold, price: d.price || 0, listed: !!d.listed, forOrder: d.forOrder })),

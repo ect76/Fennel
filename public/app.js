@@ -39,6 +39,8 @@ function renderHUD() {
   $('#watching').textContent = L.watchers + (L.watchers === 1 ? ' visitor' : ' visitors') + ' watching'; $('#season').textContent = L.season;
   $('#doingNow').textContent = L.doing.charAt(0).toUpperCase() + L.doing.slice(1) + '.';
   $('#thoughtNow').textContent = recentThought();
+  const fn = $('#feelNow'); fn.textContent = '';
+  if (L.feeling && L.feeling.word) { const ago = Math.max(0, Math.round(L.t - (L.feeling.t || L.t))); fn.append('Last said he felt '); fn.append(el('b', null, L.feeling.word)); fn.append(el('span', 'hint', ' · ' + (ago < 2 ? 'just now' : ago < 60 ? ago + ' minutes ago' : Math.round(ago / 60) + ' hour' + (Math.round(ago / 60) === 1 ? '' : 's') + ' ago') + ' (town time)')); }
 }
 // his own words and feelings fade from the bubble after a while (they're moments, not a permanent state)
 const recentThought = () => L && L.thought && L.thought.text && (L.t - (L.thought.t || 0)) < 180 ? L.thought.text : '';
@@ -120,6 +122,14 @@ function renderAll() {
   const sittings = ST.researchLog.filter(r => r.kind === 'research').length; $('#resLink').textContent = 'His research' + (sittings ? ' (' + sittings + ')' : '');
   const forSale = (ST.shop || []).filter(x => !x.sold).length; $('#shopLink').textContent = 'His shop & orders' + (forSale ? ' (' + forSale + ' for sale)' : '');
   const m = ST.mind;
+  // his feelings, as he expressed them (a record for watchers; it never goes back to him)
+  const fs = ST.feelings || [], fw = $('#feelings'); $('#feelWrap2').hidden = !fs.length; fw.textContent = '';
+  const fcol = v => v < -0.15 ? 'hsl(215 65% ' + (60 - Math.abs(v) * 10) + '%)' : v > 0.15 ? 'hsl(38 85% ' + (58 - v * 8) + '%)' : 'hsl(150 6% 60%)';
+  let lastDay = null;
+  for (const f of fs.slice(-40)) {
+    if (f.day !== lastDay) { lastDay = f.day; fw.append(el('div', 'day', 'Day ' + f.day)); }
+    const c = el('span', 'chip'); c.style.setProperty('--fc', fcol(Number(f.valence) || 0)); c.append(el('b', null, f.word), el('small', null, f.time + (f.doing ? ' · ' + f.doing : ''))); c.title = 'day ' + f.day + ', ' + f.time; fw.append(c);
+  }
   // a plain observation of what he has been choosing lately (not shown to him)
   const recent = ST.life.filter(e => ST.day - e.day <= 2 && KIND[e.kind]).map(e => KIND[e.kind]); const counts = {}; for (const k of recent) counts[k] = (counts[k] || 0) + 1;
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 4);
