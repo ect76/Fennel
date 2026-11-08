@@ -159,7 +159,7 @@ function deliverCommission(a, r) {
     result = { type: 'web', id: page.id, title: r.title, slug: sl, url: Pub.enabled() ? Pub.siteUrl() + 'made/' + sl + '.html' : '/media/web/' + sl + '.html' };
   }
   const pay = W.finishCommission(c, result);
-  W.addDiary('job', 'finished the commission for ' + (c.from || 'whoever ordered it') + ': "' + result.title + '". sent it off. ' + pay + ' coins came back. ' + pick(['i hope they like it.', 'i keep thinking about them opening it.', 'my own money, from my own work.', 'i checked it four times before i let it go.']), 'claude', result.type === 'drawing' ? { drawing: result.id } : {});
+  W.addDiary('job', 'finished the commission for ' + (c.from || 'whoever wrote the letter') + ': "' + result.title + '". posted it off. ' + pay + ' coins came back. ' + pick(['i hope they like it.', 'i keep thinking about them opening it.', 'my own money, from my own work.', 'i checked it four times before i let it go.']), 'claude', result.type === 'drawing' ? { drawing: result.id } : {});
 }
 // a shop session: listings, his sign, and maybe a new design for his shop page
 function openShop(a, r) {
@@ -276,30 +276,35 @@ W.setHooks({
   onGrow(g, by) {
     W.addDiary('event', 'the fog has pulled back' + (g.road ? ' along ' + g.road : '') + '. there\'s more town out there than there was.');
   },
-  onInbox(envs, letters, coins) {
+  onPost(envs, letters, coins) {
     const claude = canCall();
     if (envs.length) {
       const sold = envs.filter(e => e.forTitle).map(e => e.forTitle);
-      const plain = { diary: (envs.length === 1 ? 'a payment' : envs.length + ' payments') + ' in my shop inbox. ' + coins + ' coins.' + (sold.length ? ' for ' + sold.join(', ') + '.' : '') + ' ' + pick(['somebody out there paid for something i made.', 'i held them for a long time before i put them in my pocket.', 'just a name and some numbers. i read it three times anyway.']), joy: 8, wonder: 6 };
+      const plain = { diary: 'found ' + (envs.length === 1 ? 'an envelope' : envs.length + ' envelopes') + ' at the post office. ' + coins + ' coins.' + (sold.length ? ' for ' + sold.join(', ') + '.' : '') + ' ' + pick(['somebody out there paid for something i made.', 'i held them for a long time before i put them in my pocket.', 'no return address. there never is.']), joy: 8, wonder: 6 };
       const done = (r, src) => {
-        W.applyFeel(r); W.addDiary('inbox', str(r.diary, 900), src, { coins });
+        W.applyFeel(r); W.addDiary('post', str(r.diary, 900), src, { coins });
         if (str(r.thought, 400)) W.setThought(str(r.thought, 400), src);
-        if (Array.isArray(r.replies)) for (const n of r.replies.slice(0, 3)) if (n && str(n.text, 400)) { S.percyNotes.push({ text: str(n.text, 400), to: str(n.to, 40), inReplyTo: 'a payment', day: W.dayOf(S.t) }); if (S.percyNotes.length > 60) S.percyNotes.shift(); }
+        if (Array.isArray(r.replies)) for (const n of r.replies.slice(0, 3)) if (n && str(n.text, 400)) { S.percyNotes.push({ text: str(n.text, 400), to: str(n.to, 40), inReplyTo: 'an envelope', day: W.dayOf(S.t) }); if (S.percyNotes.length > 60) S.percyNotes.shift(); }
         if (str(r.remember, 220)) W.remember(r.remember, 4);
         W.bump(); save();
       };
       if (claude) M.reactToPost(envs, coins).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
     }
     if (letters.length) {
-      if (!claude) { for (const c of letters) { c.status = 'posted'; c.waitDay = W.dayOf(S.t); } W.log('left the orders for later'); return; } // he'll read them properly another time
+      if (!claude) { for (const c of letters) { c.status = 'posted'; c.waitDay = W.dayOf(S.t); } W.log('left the letters for later'); return; } // he'll read them properly another time
       M.considerCommissions(letters).then(r => {
         for (const c of letters) { const ans = r.letters.find(x => x && x.id === c.id); if (ans) W.answerCommission(c, { accept: !!ans.accept, reply: ans.reply }); else c.status = 'posted'; }
         if (str(r.thought, 400)) W.setThought(str(r.thought, 400), 'claude');
         const took = letters.filter(c => c.status === 'accepted').length, no = letters.filter(c => c.status === 'declined').length;
-        W.addDiary('orders', (str(r.diary, 700) || 'orders in my inbox.') + (took ? '\ntook on ' + took + '.' : '') + (no ? (took ? ' ' : '\n') + 'said no to ' + no + '.' : ''), 'claude');
+        W.addDiary('letters', (str(r.diary, 700) || 'letters at the post office.') + (took ? '\ntook on ' + took + '.' : '') + (no ? (took ? ' ' : '\n') + 'said no to ' + no + '.' : ''), 'claude');
         W.bump(); save();
-      }).catch(e => { for (const c of letters) c.status = 'posted'; console.warn('[percy] reading orders failed:', e.message); });
+      }).catch(e => { for (const c of letters) c.status = 'posted'; console.warn('[percy] reading letters failed:', e.message); });
     }
+  },
+  onVanished(v) {
+    const plain = { first_sight: v.name + ' is gone. i walked round the spot twice. nothing. not even a mark.', wonder: 4, calm: -6 };
+    const done = (r, src) => { W.applyFeel(r); W.addDiary('gone', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 4); W.bump(); };
+    if (canCall()) M.reactToGone(v).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
   },
   onBedtime(day) {
     if (!canCall()) return;
@@ -375,8 +380,8 @@ function readRaw(req, limit = 65536) {
   return new Promise((resolve, reject) => { let data = ''; req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } }); req.on('end', () => resolve(data)); req.on('error', reject); });
 }
 function tokenOK(given, expected) { if (!expected || typeof given !== 'string') return false; const a = crypto.createHash('sha256').update(given).digest(), b = crypto.createHash('sha256').update(expected).digest(); return crypto.timingSafeEqual(a, b); }
-// money from outside becomes coins, waiting in his shop inbox
-function payIn(opts) { const r = W.receivePayment(opts); if (!r.duplicate) { save(); siteUpdate([], r.listing ? 'something sold from percy\'s shop' : 'percy got paid'); } return r; }
+// money from outside becomes coins in an envelope at the post office
+function payIn(opts) { const r = W.receivePayment(opts); if (!r.duplicate) { save(); siteUpdate([], r.listing ? 'something sold from percy\'s shop' : 'percy got some post'); } return r; }
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
@@ -435,8 +440,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/commissions') {
       const b = await readBody(req); const ip = ipOf(req), now = Date.now();
       const mine = (jobsBy.get(ip) || []).filter(t => now - t < 24 * 3600000);
-      if (mine.length && now - mine[mine.length - 1] < 10 * 60000) return send(res, 429, { error: 'One order at a time. Try again in a few minutes.' });
-      if (mine.length >= 3) return send(res, 429, { error: 'That\'s three orders today. Give him a chance to catch up.' });
+      if (mine.length && now - mine[mine.length - 1] < 10 * 60000) return send(res, 429, { error: 'One letter at a time. Try again in a few minutes.' });
+      if (mine.length >= 3) return send(res, 429, { error: 'That\'s three letters today. Give him a chance to catch up.' });
       const r = W.postCommission({ text: b.text, kind: b.kind, from: b.from, offer: b.offer });
       if (r.error) return send(res, 400, { error: r.error });
       jobsBy.set(ip, mine.concat([now])); save();
@@ -504,7 +509,8 @@ const server = http.createServer(async (req, res) => {
       if (what === 'print-sold') { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-graffiti') { S.graffiti = S.graffiti.filter(g => g.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-item') { S.items = S.items.filter(i => i.id !== b.id || i.sold); W.bump(); save(); return send(res, 200, { ok: true }); }
-      if (what === 'remove-thing') { S.things = S.things.filter(t => t.id !== b.id); W.log('something vanished from town'); W.bump(); save(); return send(res, 200, { ok: true }); }
+      if (what === 'remove-thing') { W.removeThing(b.id); save(); return send(res, 200, { ok: true }); }
+      if (what === 'remove-building') { const r = W.removeBuilding(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error }); save(); return send(res, 200, { ok: true }); }
       if (what === 'give') {
         const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' });
         payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) });

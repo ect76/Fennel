@@ -119,6 +119,17 @@ export function addPlace(town, { type, name, desc = '', x, z, rot, known = true,
   town.places.push(p); updateR(town); town.ver++;
   return p;
 }
+// Take a building away (and the footpath that led to its door, if it had one).
+export function removePlace(town, id) {
+  const p = town.places.find(x => x.id === id); if (!p) return null;
+  town.places = town.places.filter(x => x !== p);
+  for (const [nid, n] of Object.entries(town.nodes)) {
+    if (!nid.startsWith('p') || Math.hypot(n.x - p.door.x, n.z - p.door.z) > 0.01) continue;
+    town.edges = town.edges.filter(e => !(e.path && (e.a === nid || e.b === nid))); delete town.nodes[nid];
+  }
+  town.ver++;
+  return p;
+}
 function splitEdge(town, e, t) {
   if (t < 0.05) return e.a; if (t > 0.95) return e.b;
   const A = town.nodes[e.a], B = town.nodes[e.b];

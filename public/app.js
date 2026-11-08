@@ -4,8 +4,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const shorten = t => { t = String(t || ''); return t.length > 140 ? t.slice(0, 137).replace(/\s\S*$/, '') + '…' : t; };
 const NEEDS = [['fullness', 'Fullness', '--c-full'], ['energy', 'Energy', '--c-energy'], ['wonder', 'Wonder', '--c-wonder'], ['joy', 'Joy', '--c-joy'], ['calm', 'Calm', '--c-calm']];
 const WEATHER = { clear: 'clear', cloudy: 'cloudy', rain: 'raining', fog: 'foggy', wind: 'windy', snow: 'snowing' };
-const LEAN = { inbox: 'his inbox', job: 'commissions', shopfront: 'his shop', web: 'his website', sleep: 'sleep', nap: 'naps', eat: 'the bakery', fish: 'fishing', draw: 'drawing', write: 'writing', sell: 'the stall', read: 'the library', pond: 'the pond', stargaze: 'stargazing', shrine: 'the Humming Stone', fog: 'the fog', wander: 'wandering', explore: 'exploring', tidy: 'tidying', inspect: 'new things', visit: 'visiting places', buy: 'buying things', graffiti: 'graffiti' };
-const KIND = { summary: 'end of day', thought: 'thought', reflection: 'reflection', learn: 'learned', note: 'a note', thing: 'something new', drawing: 'drawing', fog: 'the fog', dream: 'dream', page: 'page', found: 'somewhere new', graffiti: 'graffiti', window: 'shop window', bought: 'bought', stall: 'the stall', morning: 'waking up', inside: 'inside', inbox: 'his inbox', orders: 'orders', job: 'a commission', shop: 'his shop', event: '' };
+const LEAN = { post: 'the post office', job: 'commissions', shopfront: 'his shop', web: 'his website', sleep: 'sleep', nap: 'naps', eat: 'the bakery', fish: 'fishing', draw: 'drawing', write: 'writing', sell: 'the stall', read: 'the library', pond: 'the pond', stargaze: 'stargazing', shrine: 'the Humming Stone', fog: 'the fog', wander: 'wandering', explore: 'exploring', tidy: 'tidying', inspect: 'new things', visit: 'visiting places', buy: 'buying things', graffiti: 'graffiti' };
+const KIND = { summary: 'end of day', thought: 'thought', reflection: 'reflection', learn: 'learned', note: 'a note', thing: 'something new', drawing: 'drawing', gone: 'gone', fog: 'the fog', dream: 'dream', page: 'page', found: 'somewhere new', graffiti: 'graffiti', window: 'shop window', bought: 'bought', stall: 'the stall', morning: 'waking up', inside: 'inside', post: 'the post', letters: 'letters', job: 'a commission', shop: 'his shop', event: '' };
 
 let L = null, ST = null, lastRev = -1, lastLiveAt = 0, W = null;
 
@@ -135,7 +135,7 @@ function renderAll() {
   // diary
   const ol = $('#diary'); ol.textContent = '';
   for (const e of ST.diary.slice().reverse()) {
-    const li = el('li', 'entry' + (['reflection', 'note', 'thing', 'found', 'graffiti', 'bought', 'stall', 'morning', 'inside', 'inbox', 'orders', 'job', 'shop'].includes(e.kind) ? ' big' : ''));
+    const li = el('li', 'entry' + (['reflection', 'note', 'thing', 'found', 'graffiti', 'bought', 'stall', 'morning', 'inside', 'post', 'letters', 'job', 'shop'].includes(e.kind) ? ' big' : ''));
     li.append(el('div', 'when', 'Day ' + e.day + ' · ' + e.time + (KIND[e.kind] ? ' · ' + KIND[e.kind] : '')), el('div', 'txt', e.text));
     if (e.mood) li.firstChild.textContent += ' · ' + e.mood;
     if (e.drawing) { const img = el('img'); img.src = '/media/drawings/' + e.drawing + '.svg'; img.alt = 'the drawing'; img.loading = 'lazy'; li.append(img); }
@@ -189,7 +189,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 
 /* ---------- his shop, commissions, real coins ---------- */
 let myJobs = new Map(); try { myJobs = new Map(JSON.parse(localStorage.getItem('percy-jobs') || '[]')); } catch {}
-const STATUS = { posted: 'in his inbox, not read yet', read: 'he is reading it', accepted: 'he said yes and is working on it', declined: 'he said no', done: 'finished', failed: 'he couldn\'t do it' };
+const STATUS = { posted: 'waiting at the post office', read: 'he has opened it and is thinking', accepted: 'he said yes and is working on it', declined: 'he said no', done: 'finished', failed: 'he couldn\'t do it' };
 const KINDNAME = { drawing: 'a drawing', page: 'something written', web: 'a web page' };
 function renderWork() {
   const rate = ST.coinsPerPound || 10, pounds = c => '£' + (Math.max(1, c / rate)).toFixed(2).replace(/\.00$/, '');
@@ -197,7 +197,7 @@ function renderWork() {
   const items = (ST.shop || []).slice().reverse(), open = items.filter(x => !x.sold), sold = items.filter(x => x.sold).slice(0, 8);
   const how = $('#shopHow'); how.textContent = '';
   if (!open.length) how.append('Nothing for sale yet. Percy decides what to sell and sets the prices himself.');
-  else if (ST.kofiUrl) how.append('To buy something, pay at least the price in pounds on Ko-fi and put its code (like PCY-7KQ2) in your message. The money turns into coins in his shop inbox.');
+  else if (ST.kofiUrl) how.append('To buy something, pay at least the price in pounds on Ko-fi and put its code (like PCY-7KQ2) in your message. The money turns into coins that reach him at the post office.');
   else how.append('His shop isn\'t taking money yet.');
   if (ST.shopUrl) { how.append(' '); const a = el('a', null, 'His own shop page →'); a.href = ST.shopUrl; a.target = '_blank'; a.rel = 'noopener'; how.append(a); }
   const g = $('#shopItems'); g.textContent = '';
@@ -213,7 +213,7 @@ function renderWork() {
   const jw = $('#jobs'); jw.textContent = ''; $('#jobsWrap').hidden = !(ST.commissions || []).length;
   for (const c of ST.commissions || []) {
     const d = el('div', 'note'); d.append(el('q', null, c.text));
-    d.append(el('small', null, KINDNAME[c.kind] + ' · ' + c.offer + ' coins offered' + (c.paidReal ? ' + ' + c.paidReal + ' real' : '') + (c.from ? ' · from ' + c.from : '') + ' · day ' + c.day + ' · ' + (STATUS[c.status] || c.status) + (myJobs.has(c.id) ? ' · your order (code ' + c.code + ')' : '')));
+    d.append(el('small', null, KINDNAME[c.kind] + ' · ' + c.offer + ' coins offered' + (c.paidReal ? ' + ' + c.paidReal + ' real' : '') + (c.from ? ' · from ' + c.from : '') + ' · day ' + c.day + ' · ' + (STATUS[c.status] || c.status) + (myJobs.has(c.id) ? ' · your letter (code ' + c.code + ')' : '')));
     if (c.reply) d.append(el('div', 'voice', c.reply));
     if (c.result) {
       if (c.result.type === 'drawing') { const img = el('img'); img.src = c.result.url; img.alt = c.result.title; img.style.cssText = 'max-width:220px;border-radius:6px'; d.append(img); }
@@ -223,12 +223,12 @@ function renderWork() {
     jw.append(d);
   }
   $('#kofiCard').hidden = !ST.kofiUrl;
-  if (ST.kofiUrl) { $('#kofiLink').href = ST.kofiUrl; $('#kofiHow').textContent = 'Anything you send on Ko-fi turns into coins (' + rate + ' for every pound) in his shop inbox, with your message. Put a code in your message to pay for something in his shop, or for your order.'; }
+  if (ST.kofiUrl) { $('#kofiLink').href = ST.kofiUrl; $('#kofiHow').textContent = 'Anything you send on Ko-fi turns into coins (' + rate + ' for every pound) in an envelope at the post office, with your message. Put a code in your message to pay for something in his shop, or for your letter.'; }
   const e = ST.earned || {}; $('#earned').textContent = 'Earned so far: ' + (e.stall || 0) + ' coins from the stall, ' + (e.work || 0) + ' from commissions, ' + (e.real || 0) + ' sent from outside.';
 }
 $('#jobForm').addEventListener('submit', async e => {
   e.preventDefault(); const st = $('#jobStatus');
-  try { const r = await post('/api/commissions', { text: $('#jobText').value, kind: $('#jobKind').value, offer: $('#jobOffer').value, from: $('#jobFrom').value }); myJobs.set(r.id, r.code); try { localStorage.setItem('percy-jobs', JSON.stringify([...myJobs])); } catch {} $('#jobText').value = ''; st.textContent = 'Sent. He\'ll see it next time he checks his inbox.' + (ST && ST.kofiUrl ? ' Want to pay real money too? Put ' + r.code + ' in a Ko-fi message.' : ''); refreshState(); }
+  try { const r = await post('/api/commissions', { text: $('#jobText').value, kind: $('#jobKind').value, offer: $('#jobOffer').value, from: $('#jobFrom').value }); myJobs.set(r.id, r.code); try { localStorage.setItem('percy-jobs', JSON.stringify([...myJobs])); } catch {} $('#jobText').value = ''; st.textContent = 'Posted. He\'ll find it next time he goes to the post office.' + (ST && ST.kofiUrl ? ' Want to pay real money too? Put ' + r.code + ' in a Ko-fi message.' : ''); refreshState(); }
   catch (err) { st.textContent = err.message; }
 });
 
@@ -289,7 +289,7 @@ $('#makeForm').addEventListener('submit', async e => {
 });
 $('#buildForm').addEventListener('submit', e => { e.preventDefault(); startPlacing('build', { kind: $('#buildKind').value, name: $('#buildName').value.trim(), desc: $('#buildDesc').value.trim() }, 'Tap an empty spot beside a road'); });
 $('#growBtn').onclick = async () => { try { const r = await kpost('grow', {}); $('#buildStatus').textContent = 'The fog pulled back along ' + (r.road || 'a road') + '.'; refreshState(); } catch (err) { $('#buildStatus').textContent = err.message; } };
-$('#giveForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#giveStatus'); try { await kpost('give', { coins: $('#giveCoins').value, from: $('#giveFrom').value, message: $('#giveMsg').value }); $('#giveMsg').value = ''; st.textContent = 'It\'s in his inbox. He\'ll see it next time he checks.'; refreshState(); } catch (err) { st.textContent = err.message; } });
+$('#giveForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#giveStatus'); try { await kpost('give', { coins: $('#giveCoins').value, from: $('#giveFrom').value, message: $('#giveMsg').value }); $('#giveMsg').value = ''; st.textContent = 'An envelope is waiting at the post office.'; refreshState(); } catch (err) { st.textContent = err.message; } });
 $('#bookForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#bookStatus'); try { await kpost('book', { topic: $('#bookTopic').value, text: $('#bookText').value }); $('#bookTopic').value = ''; $('#bookText').value = ''; st.textContent = 'On the shelf.'; refreshState(); } catch (err) { st.textContent = err.message; } });
 $('#stockForm').addEventListener('submit', async e => {
   e.preventDefault(); const st = $('#stockStatus');
@@ -328,6 +328,12 @@ function renderKeeper() {
   const rm = (what, id) => async () => { try { await kpost(what, { id }); refreshState(); } catch {} };
   const row = (title, sub, what, id) => { const li = el('li'); const d = el('div'); d.append(el('b', null, title), el('small', null, sub)); li.append(d); if (what) { const b = el('button', 'btn small', 'Remove'); b.type = 'button'; b.onclick = rm(what, id); li.append(b); } return li; };
   list($('#kThings'), ST.things, t => row(t.name, (t.status === 'building' ? 'being built… · ' : t.status === 'failed' ? 'couldn\'t be built, so it\'s a crate · ' : '') + (t.seen ? 'he\'s looked at it ' + t.inspections + '×' : t.noticed ? 'he\'s noticed it' : 'not noticed yet'), 'remove-thing', t.id));
+  list($('#kBuildings'), ST.town.places.filter(p => p.type !== 'home').sort((a, b) => a.name.localeCompare(b.name)), p => {
+    const li = row(p.name, (p.builtBy === 'keeper' ? 'you built it' : p.builtBy === 'growth' ? 'came out of the fog' : 'part of the old town') + ' · ' + (p.known ? 'he knows it' : 'not found yet'));
+    const b = el('button', 'btn small', 'Remove'); b.type = 'button';
+    b.onclick = async () => { if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Really remove?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Remove'; }, 4000); return; } b.disabled = true; try { await kpost('remove-building', { id: p.id }); refreshState(); } catch (err) { b.textContent = err.message; } };
+    li.append(b); return li;
+  });
   list($('#kGraffiti'), ST.graffiti, g => row(g.by === 'percy' ? 'Percy\'s own' : 'yours', (g.where || '') + ' · day ' + g.day + (g.by !== 'percy' ? (g.seen ? ' · he\'s seen it' : ' · not seen yet') : ''), 'remove-graffiti', g.id));
   list($('#kItems'), ST.items, i => row(i.name + ' · ' + i.price + ' coins', ((ST.town.places.find(p => p.id === i.shop) || {}).name || '') + ' · ' + (i.sold ? 'he bought it' : i.seen ? 'he\'s seen it' : 'not seen yet'), i.sold ? null : 'remove-item', i.id));
   const openShop = (ST.shop || []).filter(x => !x.sold); $('#kShopWrap').hidden = !openShop.length;

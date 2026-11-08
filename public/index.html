@@ -227,16 +227,16 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
       </div>
       <form class="card" id="jobForm">
         <h2 style="margin:0">Ask Percy to make something</h2>
-        <p class="hint">Your order goes into his shop inbox. He checks it on the computer at his desk now and then, and decides whether to take the job. He might say no. When he finishes, he's paid the coins you offered.</p>
+        <p class="hint">Your letter goes to the post office in Mossbrook. He reads his post when he goes there (it's open 9am to 5pm, town time) and decides whether to take the job. He might say no. When he finishes, he's paid the coins you offered.</p>
         <label class="fld">What would you like?<textarea id="jobText" maxlength="500" rows="4" required placeholder="a drawing of a lighthouse in a storm, for my dad"></textarea></label>
         <div class="row">
           <label class="fld" style="flex:2;min-width:160px">Kind of thing<select id="jobKind"><option value="drawing">A drawing</option><option value="page">Something written (a story, a poem, a guide)</option><option value="web">A web page (a page, a toy, a game)</option></select></label>
           <label class="fld" style="flex:1;min-width:110px">Coins you offer<input type="number" id="jobOffer" min="1" max="20" value="6"></label>
         </div>
         <label class="fld">Sign it (optional)<input type="text" id="jobFrom" maxlength="30"></label>
-        <div class="row"><button type="submit" class="btn primary">Send the order</button><span class="hint" id="jobStatus" role="status"></span></div>
+        <div class="row"><button type="submit" class="btn primary">Post the letter</button><span class="hint" id="jobStatus" role="status"></span></div>
       </form>
-      <div id="jobsWrap" hidden><h2>Orders</h2><div id="jobs" style="display:grid;gap:10px"></div></div>
+      <div id="jobsWrap" hidden><h2>Letters to Percy</h2><div id="jobs" style="display:grid;gap:10px"></div></div>
       <div class="card" id="kofiCard" hidden>
         <h2 style="margin:0">Send Percy real coins</h2>
         <p class="hint" id="kofiHow"></p>
@@ -307,15 +307,16 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         </form>
         <form class="card" id="giveForm">
           <h2 style="margin:0">Give Percy coins</h2>
-          <p class="hint">A payment appears in his shop inbox, with your message if you write one. Use this to record real money from somewhere other than Ko-fi too.</p>
+          <p class="hint">An envelope waits for him at the post office, with your message if you write one. Use this to record real money from somewhere other than Ko-fi too.</p>
           <div class="row"><label class="fld" style="flex:1;min-width:110px">Coins<input type="number" id="giveCoins" min="1" max="1000" value="10"></label><label class="fld" style="flex:2;min-width:150px">From (optional)<input type="text" id="giveFrom" maxlength="40"></label></div>
           <label class="fld">Message (optional)<textarea id="giveMsg" maxlength="500" rows="2"></textarea></label>
-          <div class="row"><button type="submit" class="btn">Send the coins</button><span class="hint" id="giveStatus" role="status"></span></div>
+          <div class="row"><button type="submit" class="btn">Send the envelope</button><span class="hint" id="giveStatus" role="status"></span></div>
           <p class="hint" id="kofiState"></p>
         </form>
         <div class="card" id="kShopWrap" hidden><h2 style="margin:0">Percy's shop</h2><p class="hint">If someone pays you some other way, record the sale here and the coins go to him.</p><ul class="list" id="kShop"></ul></div>
-        <div class="card" id="kJobsWrap" hidden><h2 style="margin:0">Commission orders</h2><ul class="list" id="kJobs"></ul></div>
+        <div class="card" id="kJobsWrap" hidden><h2 style="margin:0">Commission letters</h2><ul class="list" id="kJobs"></ul></div>
         <div class="card"><h2 style="margin:0">Things you've made</h2><ul class="list" id="kThings"></ul></div>
+        <div class="card"><h2 style="margin:0">Buildings</h2><p class="hint">Take a building out of Mossbrook. If he knew it, he'll notice it's gone. Without the bakery, library, market or Humming Stone he can't do the things he does there.</p><ul class="list" id="kBuildings"></ul></div>
         <div class="card"><h2 style="margin:0">Graffiti</h2><ul class="list" id="kGraffiti"></ul></div>
         <div class="card"><h2 style="margin:0">In the shops</h2><ul class="list" id="kItems"></ul></div>
         <div class="card" id="kPrintsWrap" hidden><h2 style="margin:0">Real print sales</h2><p class="hint">When someone buys a real print through your shop link, record it here so Percy finds coins in his tin.</p><ul class="list" id="kPrints"></ul></div>

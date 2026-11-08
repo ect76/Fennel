@@ -30,7 +30,7 @@ export const config = {
   printShopUrl: (env.PRINT_SHOP_URL || '').trim(),
   printCoins: num(env.PRINT_COINS, 10), // coins Percy finds in his tin when you record a real print sale
 
-  // Real money through Ko-fi: tips and purchases turn into coins in Percy's shop inbox
+  // Real money through Ko-fi: tips and purchases turn into coins that arrive at the post office
   kofiUrl: (env.KOFI_URL || '').trim(),          // your Ko-fi page, e.g. https://ko-fi.com/percythepenguin
   kofiToken: (env.KOFI_TOKEN || '').trim(),      // the verification token from Ko-fi's webhook settings
   coinsPerPound: num(env.COINS_PER_POUND, 10),   // how many coins one pound (or dollar, euro...) becomes

@@ -30,7 +30,7 @@ export const ACTIONS = {
   buy: { at: null, label: 'buying something', dur: 20, gain: { joy: 14 }, desc: 'buy something he has seen for sale (give the item id as "target"); only if he has the coins' },
   graffiti: { at: null, label: 'painting on a wall', dur: 40, gain: { joy: 10, wonder: -2 }, desc: 'paint graffiti on a wall somewhere in town (what to paint in "subject", a short tag of a few words in "title")' },
   inspect: { at: null, label: 'looking closely at something', dur: 45, gain: { wonder: 16, joy: 4 }, desc: 'go and look closely at an object visitors added to town (give its id as "target")' },
-  inbox: { at: 'home', label: 'checking his shop inbox', dur: 25, gain: { wonder: 4 }, desc: 'check the inbox of his shop on the computer at his desk: orders from people outside asking him to make things for coins (commissions), and payments from people who bought his things or just sent him money, with their messages' },
+  post: { at: 'post', label: 'checking the post', dur: 30, gain: { wonder: 4 }, desc: 'check the post office: letters from outside asking him to make things for coins (commissions) arrive there, and so do envelopes of money from people who bought his things or just wanted to send some' },
   job: { at: 'home', label: 'working on a commission', dur: 110, gain: { joy: 8, energy: -8 }, desc: 'work on a commission he has accepted, at his desk (give its id as "target"); when it is done he gets paid' },
   shopfront: { at: 'home', label: 'working on his shop', dur: 90, gain: { joy: 8, energy: -5 }, desc: 'work on his shop: choose which of his things to sell and for how much, and set up or redesign his shop page on his website, where people outside can buy them with real money' },
 };
@@ -102,7 +102,7 @@ export function newWorld() {
     dayMood: { score: 0.1, label: 'an ordinary day', causes: ['first morning in the cottage'], day: 1 }, moodCarry: 0, wishes: [], percyNotes: [], interests: [], lastContact: 1,
     knowledge: [], researchQueue: [], memories: [],
     diary: [], drawings: [], pages: [], webPages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
-    commissions: [], shop: [], post: [], payments: [], saving: null, advert: '', shopPage: null, earned: { work: 0, real: 0, stall: 0 }, wishLog: [],
+    commissions: [], shop: [], post: [], payments: [], vanished: [], saving: null, advert: '', shopPage: null, earned: { work: 0, real: 0, stall: 0 }, wishLog: [],
     dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
     weather: { kind: 'clear', until: 12 * 60 }, events: [],
     lastSeenReal: Date.now(),
@@ -135,7 +135,7 @@ export function leaveNotebook(old) {
   S.questions = S.questions.slice(0, 6);
 }
 
-const newStats = () => ({ ate: 0, fish: 0, drew: 0, painted: 0, saw: 0, wrote: 0, sold: 0, read: 0, fog: 0, notes: 0, things: 0, closed: 0, found: 0, jobs: 0, inbox: 0 });
+const newStats = () => ({ ate: 0, fish: 0, drew: 0, painted: 0, saw: 0, wrote: 0, sold: 0, read: 0, fog: 0, notes: 0, things: 0, closed: 0, found: 0, jobs: 0, post: 0 });
 
 /* ---------- time ---------- */
 export const dayOf = t => Math.floor(t / 1440) + 1;
@@ -338,7 +338,7 @@ function ruleScore(id, h) {
     case 'write': s = -1e9; break;
     case 'web': s = -1e9; break;
     case 'job': case 'shopfront': s = -1e9; break;
-    case 'inbox': s = 0.1 + (inboxWaiting() ? 1.6 : 0) + (S.coins < 5 ? 0.25 : 0); break;
+    case 'post': s = 0.1 + (postWaiting() ? 1.6 : 0) + (S.coins < 5 ? 0.25 : 0); break;
     case 'inspect': { const b = bestThing(); if (!b) return -1e9; return b.s - (night ? 0.5 : 0) + (Number(S.leanings.inspect) || 0) * 0.45; }
   }
   if (night && !['sleep', 'stargaze', 'pond'].includes(id)) s -= 1;
@@ -357,7 +357,7 @@ const RULE_THOUGHTS = {
   eat: ['hungry. bread.', 'i could eat a whole loaf.'], fish: ['fancy a fish. off to the pond.'],
   draw: ['want to draw something.'], sell: ['i wonder if anything has gone from the stall.'],
   read: ['want to know something new.'], pond: ['going to sit by the pond for a while.'], stargaze: ['clear night. up the hill to look at the stars.'],
-  shrine: ['going to see if anyone left a note.'], inbox: ['going to check my inbox.', 'i wonder if anyone ordered anything.'], fog: ['going to the end of the road to look at the fog.'],
+  shrine: ['going to see if anyone left a note.'], post: ['going to see if there\'s any post.', 'the post office lamp is on.'], fog: ['going to the end of the road to look at the fog.'],
   wander: ['going for a walk.', 'just walking for a bit.', 'stretching my legs.'], explore: ['going somewhere i haven\'t been for a while.'], tidy: ['the cottage needs tidying.'],
   visit: ['going to have a look inside somewhere.'], buy: ['i have enough coins. i\'m going to buy it.'], graffiti: ['want to paint something on a wall.'], inspect: ['going to look at that new thing.'],
 };
@@ -440,10 +440,10 @@ function fail(why, thought) {
   S.act = null; bump();
 }
 
-let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {}, onWake: () => {}, onInbox: () => {} };
+let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {}, onWake: () => {}, onPost: () => {}, onVanished: () => {} };
 export const setHooks = h => { hooks = { ...hooks, ...h }; };
 
-const INDOOR = new Set(['visit', 'read', 'eat', 'draw', 'write', 'web', 'tidy', 'nap', 'sleep', 'buy', 'inbox', 'job', 'shopfront']);
+const INDOOR = new Set(['visit', 'read', 'eat', 'draw', 'write', 'web', 'tidy', 'nap', 'sleep', 'buy', 'post', 'job', 'shopfront']);
 function arrive(a) {
   const h = hourOf(S.t), p = a.place ? placeById(a.place) : null;
   if (p && !p.known) discover(p);
@@ -537,7 +537,7 @@ function finish(a) {
     case 'inspect': { const th = thingById(a.thing); if (th) { th.inspections++; S.stats.things++; if (th.inspections >= 3) th.liked = true; } break; }
     case 'sleep': log('woke up'); { const h0 = hourOf(S.t); if (h0 >= 5 && h0 < 11) { newDayMood(); hooks.onWake(S.dayMood); } } break;
     case 'nap': log('took a nap'); break;
-    case 'inbox': S.stats.inbox++; a.collected = checkInbox(); break;
+    case 'post': S.stats.post++; a.collected = collectPost(); break;
     case 'job': S.stats.jobs++; break;
   }
   hooks.onFinish(a);
@@ -571,6 +571,25 @@ export function growTown(by = 'time') {
   remember('day ' + dayOf(S.t) + ': ' + text, 3); hooks.onGrow(g, by); bump();
   return g;
 }
+// The keeper takes a building away. If he knew it, he'll notice it's gone next time he's near.
+export function removeBuilding(id) {
+  const p = placeById(id); if (!p) return { error: 'That building isn\'t there any more.' };
+  if (p.type === 'home') return { error: 'That\'s Percy\'s cottage. He needs somewhere to live.' };
+  if (S.act && (S.act.place === p.id || S.act.inside === p.id)) S.act = null;
+  Town.removePlace(S.town, p.id);
+  S.items = S.items.filter(i => i.shop !== p.id || i.sold);
+  if (p.known) vanished({ name: p.name, x: p.door.x, z: p.door.z, kind: 'building' });
+  log('something was taken away near ' + nearPlace(p.x, p.z)); bump();
+  return { place: p };
+}
+export function removeThing(id) {
+  const th = thingById(id); if (!th) return;
+  S.things = S.things.filter(t => t !== th);
+  if (S.act && S.act.thing === th.id) S.act = null;
+  if (th.noticed) vanished({ name: 'the ' + plainName(th.name), x: th.x, z: th.z, kind: 'thing' });
+  log('something vanished from town'); bump();
+}
+function vanished(v) { S.vanished = (S.vanished || []).concat([{ ...v, day: dayOf(S.t), noticed: false }]).slice(-20); }
 export function addBuilding({ kind, name, desc, x, z }) {
   if (!BUILDABLE.includes(kind)) return { error: 'Pick one of the building types.' };
   if (!Number.isFinite(x) || !Number.isFinite(z)) return { error: 'Pick a spot.' };
@@ -633,6 +652,12 @@ function noticeThings() {
   }
   for (const p of S.town.places) if (!p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 9) discover(p);
   for (const p of S.town.places) if (p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 5) seeItems(p, true);
+  for (const v of S.vanished || []) if (!v.noticed && Math.hypot(v.x - S.pos.x, v.z - S.pos.z) < 9) {
+    v.noticed = true; emo('anxiety', 10); emo('curiosity', 12); emo('sadness', 4); feel('calm', -6);
+    log('noticed ' + v.name + ' has gone'); setThought(pick([v.name + ' is gone. just ' + (v.kind === 'building' ? 'grass' : 'cobbles') + ' where it was.', 'wasn\'t ' + v.name + ' right here?', v.name + '. gone. like it was never there.']));
+    remember('day ' + dayOf(S.t) + ': ' + v.name + ' disappeared from Mossbrook. nobody saw it go.', 4);
+    hooks.onVanished(v); bump();
+  }
   for (const g of S.graffiti) if (!g.seen && Math.hypot(g.x - S.pos.x, g.z - S.pos.z) < 8) { g.seen = true; S.stats.saw++; feel('wonder', 6); emo('curiosity', 15); if (g.by !== 'percy') contact(15); log('noticed new graffiti ' + (g.where || 'on a wall')); setThought(pick(['someone painted on that wall.', 'that wasn\'t on the wall yesterday.'])); hooks.onGraffitiSeen(g); bump(); }
 }
 
@@ -679,17 +704,17 @@ function examineNext(p) {
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function newCode() { let c; do { c = 'PCY-' + Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join(''); } while ((S.shop || []).some(x => x.code === c) || (S.commissions || []).some(x => x.code === c)); return c; }
 export const COMMISSION_KINDS = { drawing: 'a drawing', page: 'something written', web: 'a web page' };
-export function inboxWaiting() { const d = dayOf(S.t); return S.post.some(p => !p.collected) || S.commissions.some(c => c.status === 'posted' && c.waitDay !== d); }
+export function postWaiting() { const d = dayOf(S.t); return S.post.some(p => !p.collected) || S.commissions.some(c => c.status === 'posted' && c.waitDay !== d); }
 export function postCommission({ text, kind, from, offer }) {
   text = str(text, 500); if (!text) return { error: 'Say what you would like him to make.' };
   if (!COMMISSION_KINDS[kind]) kind = 'drawing';
-  if (S.commissions.filter(c => c.status === 'posted').length >= 10) return { error: 'His inbox is already full of orders he hasn\'t read. Try again after he has checked it.' };
+  if (S.commissions.filter(c => c.status === 'posted').length >= 10) return { error: 'There is already a pile of letters waiting for him. Try again after he has been to the post office.' };
   const c = { id: uid(), code: newCode(), text, kind, from: str(from, 30), offer: clamp(Math.round(Number(offer) || 5), 1, 20), paidReal: 0, day: dayOf(S.t), status: 'posted', reply: '' };
   S.commissions.unshift(c); if (S.commissions.length > 60) S.commissions.length = 60;
-  log('an order came into his shop inbox'); bump();
+  log('a letter arrived at the post office'); bump();
   return { commission: c };
 }
-// Money from the outside world (a Ko-fi payment, or the keeper). It shows up in his shop inbox; the coins are his once he has seen it.
+// Money from the outside world (a Ko-fi payment, or the keeper). It waits at the post office as an envelope.
 export function receivePayment({ coins, from = '', message = '', code = '', amount = '', source = 'kofi', ref = '', isPublic = true }) {
   coins = Math.max(1, Math.round(Number(coins) || 0));
   if (ref && S.payments.some(p => p.ref === ref)) return { duplicate: true };
@@ -701,15 +726,15 @@ export function receivePayment({ coins, from = '', message = '', code = '', amou
   if (job) { job.paidReal = (job.paidReal || 0) + coins; env.forTitle = 'the commission: ' + job.text.slice(0, 60); }
   S.post.push(env); if (S.post.length > 80) S.post.shift();
   S.payments.push({ ref: str(ref, 80), day: dayOf(S.t), coins, amount: str(amount, 20), source, code, from: env.from }); if (S.payments.length > 200) S.payments.shift();
-  S.earned.real += coins; log('a payment came into his shop inbox'); bump();
+  S.earned.real += coins; log('an envelope arrived at the post office'); bump();
   return { envelope: env, listing, job };
 }
 function markSoldThing(l) {
   if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d) { d.sold = true; d.soldDay = dayOf(S.t); d.onStall = false; d.shopSold = true; } }
   if (l.kind === 'thing') { S.inventory = S.inventory.filter(i => i.id !== l.ref); }
 }
-// What he finds when he checks his shop inbox: payments (with messages) and orders asking for work.
-function checkInbox() {
+// What he finds when he goes to the post office: envelopes (money, messages) and letters asking for work.
+function collectPost() {
   const envs = S.post.filter(p => !p.collected), letters = S.commissions.filter(c => c.status === 'posted');
   let coins = 0;
   for (const e of envs) { e.collected = true; e.collectedDay = dayOf(S.t); coins += e.coins; }
@@ -718,15 +743,15 @@ function checkInbox() {
   if (envs.length) {
     contact(14 + envs.length * 6); emo('excitement', 18); emo('contentment', 12); feel('joy', 8);
     const sold = envs.filter(e => e.forShop).map(e => e.forTitle);
-    log('found ' + envs.length + ' payment' + (envs.length > 1 ? 's' : '') + ' in his inbox, ' + coins + ' coins' + (sold.length ? ' (someone bought ' + sold.join(', ') + ')' : ''));
-    remember('day ' + dayOf(S.t) + ': ' + coins + ' coins came into his shop from outside' + (sold.length ? ' for ' + sold.join(', ') : ''), 4);
+    log('found ' + envs.length + ' envelope' + (envs.length > 1 ? 's' : '') + ' at the post office with ' + coins + ' coins' + (sold.length ? ' (someone bought ' + sold.join(', ') + ')' : ''));
+    remember('day ' + dayOf(S.t) + ': ' + coins + ' coins came in the post from outside' + (sold.length ? ' for ' + sold.join(', ') : ''), 4);
   }
-  if (letters.length) { emo('curiosity', 12); contact(8 * letters.length); log('found ' + letters.length + ' order' + (letters.length > 1 ? 's' : '') + ' asking him to make things'); }
-  if (!envs.length && !letters.length) { log('nothing new in his inbox'); S.lastFail = 'there was nothing new in his inbox'; }
-  hooks.onInbox(envs, letters, coins);
+  if (letters.length) { emo('curiosity', 12); contact(8 * letters.length); log('found ' + letters.length + ' letter' + (letters.length > 1 ? 's' : '') + ' asking him to make things'); }
+  if (!envs.length && !letters.length) { log('the post office was empty'); S.lastFail = 'there was no post'; }
+  hooks.onPost(envs, letters, coins);
   return { envs, letters, coins };
 }
-// He has decided about an order.
+// He has decided about a letter.
 export function answerCommission(c, { accept, reply, offerNote }) {
   c.status = accept ? 'accepted' : 'declined'; c.reply = str(reply, 400); c.decidedDay = dayOf(S.t); if (offerNote) c.note = str(offerNote, 200);
   log((accept ? 'took on' : 'turned down') + ' a commission: ' + c.text.slice(0, 60)); bump();
