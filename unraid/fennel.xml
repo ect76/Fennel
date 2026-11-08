@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/ect76/Fennel</Support>
   <Project>https://github.com/ect76/Fennel</Project>
-  <Overview>Fennel is a small autonomous frog living in a floating island town, day and night. His thoughts and choices are written by Claude; he keeps a diary, draws, writes pages, researches on the web, and reflects on each day. Visitors can watch him in 3D and leave notes.</Overview>
+  <Overview>Percy is a small autonomous penguin living alone in a village surrounded by fog, day and night. His thoughts, moods and choices are written by Claude; he keeps a diary, paints, writes pages, researches on the web, and reflects on each day. Visitors can watch him in 3D, leave notes and take his drawings.</Overview>
   <Category>Other:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/ect76/Fennel/main/unraid/fennel.xml</TemplateURL>
@@ -22,7 +22,7 @@
   <DonateLink/>
   <Requires/>
   <Config Name="Web port" Target="3000" Default="3000" Mode="tcp" Description="Port for the 3D town page." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
-  <Config Name="Fennel's memories" Target="/data" Default="/mnt/user/appdata/fennel" Mode="rw" Description="Where his world, diary and memories are saved, with daily backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/fennel</Config>
+  <Config Name="Percy's memories" Target="/data" Default="/mnt/user/appdata/fennel" Mode="rw" Description="Where his world, diary, drawings and memories are saved, with daily backups. Keep this the same across updates." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/fennel</Config>
   <Config Name="Claude API key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Your key from the Claude Console. Without it he runs on simple rules." Type="Variable" Display="always" Required="true" Mask="true"></Config>
   <Config Name="Keeper key" Target="KEEPER_KEY" Default="" Mode="" Description="A password you choose, for adding things and books to his town from the web page." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="Time scale" Target="TIME_SCALE" Default="4" Mode="" Description="Town minutes per real minute. 4 = a town day every 6 real hours." Type="Variable" Display="advanced" Required="false" Mask="false">4</Config>
@@ -31,4 +31,10 @@
   <Config Name="Everyday model" Target="MODEL_THINK" Default="claude-haiku-5-5" Mode="" Description="Model for moment-to-moment thoughts and choices." Type="Variable" Display="advanced" Required="false" Mask="false">claude-haiku-5-5</Config>
   <Config Name="Reflection model" Target="MODEL_REFLECT" Default="claude-sonnet-5-5" Mode="" Description="Model for bedtime reflection and the pages he writes." Type="Variable" Display="advanced" Required="false" Mask="false">claude-sonnet-5-5</Config>
   <Config Name="Research model" Target="MODEL_RESEARCH" Default="claude-sonnet-5-5" Mode="" Description="Model for library research with web search." Type="Variable" Display="advanced" Required="false" Mask="false">claude-sonnet-5-5</Config>
+  <Config Name="Fog pulls back every N town days" Target="GROW_EVERY_DAYS" Default="3" Mode="" Description="How often the town grows by itself. 0 = only when you push the fog back." Type="Variable" Display="advanced" Required="false" Mask="false">3</Config>
+  <Config Name="Public address" Target="PUBLIC_URL" Default="" Mode="" Description="Where visitors can see his town (e.g. your Tailscale Funnel address). Linked from his website." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Website: GitHub token" Target="GITHUB_TOKEN" Default="" Mode="" Description="Optional. A fine-grained GitHub token that can write to his website repository." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Website: repository" Target="GITHUB_REPO" Default="" Mode="" Description="Optional. e.g. percy-the-penguin/percy-the-penguin.github.io" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Real print shop link" Target="PRINT_SHOP_URL" Default="" Mode="" Description="Optional. A link to your own shop (Ko-fi, Stripe payment link...) shown beside his drawings." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Coins per real print sold" Target="PRINT_COINS" Default="10" Mode="" Description="What Percy finds in his tin when you record a real print sale." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
 </Container>
