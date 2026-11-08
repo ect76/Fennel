@@ -12,6 +12,11 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const MOBILE = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+const LOWMEM = MOBILE && (navigator.deviceMemory || 4) <= 4; // phones short on memory skip shadows
+// Graphics level: 0 full, 1 no shadows or sky reflections, 2 also fewer lights and details.
+// If the 3D view crashes, the page steps down a level and remembers it for this device. ?gfx=0 resets it.
+let GFX = 0; try { GFX = Number(localStorage.getItem('percy-gfx')) || 0; } catch {}
+{ const q = new URLSearchParams(location.search).get('gfx'); if (q != null && q !== '') { GFX = Math.max(0, Math.min(2, Number(q) || 0)); try { localStorage.setItem('percy-gfx', String(GFX)); } catch {} const u = new URL(location.href); u.searchParams.delete('gfx'); history.replaceState(null, '', u.pathname + u.search + u.hash); } }
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* =========================================================
@@ -454,10 +459,21 @@ function placeholder(failed) {
    ========================================================= */
 export function createWorld({ canvas, stage, onTap }) {
   makeTextures(); makeMaterials();
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !MOBILE, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, MOBILE ? 1.5 : 2));
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !MOBILE, powerPreference: MOBILE ? 'default' : 'high-performance' });
+  renderer.setPixelRatio(GFX >= 1 ? 1 : Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 2));
+  // If the phone runs out of graphics memory the view is lost; offer a way back instead of a blank box.
+  let lost = false;
+  canvas.addEventListener('webglcontextlost', e => {
+    e.preventDefault(); lost = true;
+    if (GFX < 2) { try { localStorage.setItem('percy-gfx', String(GFX + 1)); location.reload(); return; } catch {} } // try again, lighter
+    if (stage.querySelector('.nogl')) return;
+    const d = document.createElement('button'); d.type = 'button'; d.className = 'nogl'; d.style.cursor = 'pointer';
+    d.textContent = 'The town view stopped (your device ran short of graphics memory). Tap to bring it back. Closing other tabs helps.';
+    d.onclick = () => location.reload(); stage.append(d);
+  });
+  canvas.addEventListener('webglcontextrestored', () => location.reload());
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = !LOWMEM && GFX < 1; renderer.shadowMap.type = MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0xcfdde6, 0.006);
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1500);
 
@@ -477,6 +493,7 @@ export function createWorld({ canvas, stage, onTap }) {
   // environment reflections from the sky (refreshed every so often)
   const pmrem = new THREE.PMREMGenerator(renderer); const envScene = new THREE.Scene(); const envSky = new Sky(); envSky.scale.setScalar(1000); envScene.add(envSky); let envRT = null, envAt = -1;
   function refreshEnv(sunDir) {
+    if (GFX >= 1) return; // skipped on the lighter levels: it is the heaviest thing the GPU does here
     const u = envSky.material.uniforms; for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG']) u[k].value = su[k].value; u.sunPosition.value.copy(sunDir);
     const rt = pmrem.fromScene(envScene, 0.04); if (envRT) envRT.dispose(); envRT = rt; scene.environment = rt.texture;
   }
@@ -486,13 +503,13 @@ export function createWorld({ canvas, stage, onTap }) {
 
   // post-processing (desktop): a soft glow on lamps and windows at night
   let composer = null, bloom = null;
-  if (!MOBILE) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.4, 0.92); composer.addPass(bloom); composer.addPass(new OutputPass()); }
+  if (!MOBILE && GFX < 1) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.4, 0.92); composer.addPass(bloom); composer.addPass(new OutputPass()); }
 
   // groups that get rebuilt when the town changes
   const townGroup = new THREE.Group(), thingGroup = new THREE.Group(), graffitiGroup = new THREE.Group(), itemGroup = new THREE.Group(), boardGroup = new THREE.Group();
   scene.add(townGroup, thingGroup, graffitiGroup, itemGroup, boardGroup);
   let wallMeshes = [], clockFaces = [], lampSpots = [], fogParts = null, pondMesh = null, stoneFx = null, extras = {}, townR = 50, placesById = {}, labelsData = [];
-  const lampLights = []; for (let i = 0; i < (MOBILE ? 3 : 6); i++) { const l = new THREE.PointLight(0xffc77a, 0, 16, 2); scene.add(l); lampLights.push(l); }
+  const lampLights = []; for (let i = 0; i < (GFX >= 2 ? 0 : MOBILE ? 3 : 6); i++) { const l = new THREE.PointLight(0xffc77a, 0, 16, 2); scene.add(l); lampLights.push(l); }
 
   // Percy
   const percy = makePenguin(); percy.scale.setScalar(1.0); scene.add(percy);
@@ -506,7 +523,7 @@ export function createWorld({ canvas, stage, onTap }) {
   const walker = { x: 0, z: 6, bob: 0 };
 
   // rain & snow
-  const PN = MOBILE ? 1200 : 3000, pGeo = new THREE.BufferGeometry(), pArr = new Float32Array(PN * 3);
+  const PN = GFX >= 2 ? 300 : MOBILE ? 1200 : 3000, pGeo = new THREE.BufferGeometry(), pArr = new Float32Array(PN * 3);
   for (let i = 0; i < PN; i++) { pArr[i * 3] = (Math.random() - 0.5) * 70; pArr[i * 3 + 1] = Math.random() * 35; pArr[i * 3 + 2] = (Math.random() - 0.5) * 70; }
   pGeo.setAttribute('position', new THREE.BufferAttribute(pArr, 3));
   const pMat = new THREE.PointsMaterial({ color: 0xd6e6f5, size: 0.12, transparent: true, opacity: 0, depthWrite: false }); const precip = new THREE.Points(pGeo, pMat); precip.frustumCulled = false; scene.add(precip);
@@ -574,7 +591,7 @@ export function createWorld({ canvas, stage, onTap }) {
       return false;
     };
     const R = town.R + 14;
-    for (let i = 0; i < 2600 && trees.trunk.length < (MOBILE ? 140 : 260); i++) {
+    for (let i = 0; i < 2600 && trees.trunk.length < (GFX >= 2 ? 70 : MOBILE ? 140 : 260); i++) {
       const a = r() * 6.283, rr = Math.sqrt(r()) * R, x = Math.cos(a) * rr, z = Math.sin(a) * rr;
       if (blocked(x, z, 0.8)) continue;
       const s = 0.8 + r() * 0.7, pine = r() < 0.3;
@@ -589,7 +606,7 @@ export function createWorld({ canvas, stage, onTap }) {
     inst(G.ico, leafMat, trees.leaf); inst(G.cone, new THREE.MeshStandardMaterial({ color: 0x2f5e3a, roughness: 0.9, flatShading: true }), trees.pine);
     // grass tufts and wild flowers
     const tufts = [], blooms = [];
-    for (let i = 0; i < (MOBILE ? 1800 : 5000); i++) { const a = r() * 6.283, rr = Math.sqrt(r()) * (town.R + 4), x = Math.cos(a) * rr, z = Math.sin(a) * rr; if (blocked(x, z, -0.6)) continue; (r() < 0.12 ? blooms : tufts).push(M4(x, 0.18, z, 0, r() * 3, 0, 0.18, 0.4 + r() * 0.3, 0.18)); }
+    for (let i = 0; i < (GFX >= 2 ? 500 : MOBILE ? 1800 : 5000); i++) { const a = r() * 6.283, rr = Math.sqrt(r()) * (town.R + 4), x = Math.cos(a) * rr, z = Math.sin(a) * rr; if (blocked(x, z, -0.6)) continue; (r() < 0.12 ? blooms : tufts).push(M4(x, 0.18, z, 0, r() * 3, 0, 0.18, 0.4 + r() * 0.3, 0.18)); }
     const tuftMat = new THREE.MeshStandardMaterial({ color: 0x5f8f3e, roughness: 1 });
     const tm = inst(G.cone, tuftMat, tufts); tm.castShadow = false;
     const bm = new THREE.InstancedMesh(G.ico, new THREE.MeshStandardMaterial({ roughness: 0.8 }), blooms.length); blooms.forEach((mx, i) => { bm.setMatrixAt(i, mx.clone().multiply(M4(0, 0.2, 0, 0, 0, 0, 0.8, 0.4, 0.8))); bm.setColorAt(i, new THREE.Color(FLOWERS[i % FLOWERS.length])); }); townGroup.add(bm);
@@ -739,7 +756,7 @@ export function createWorld({ canvas, stage, onTap }) {
     if (moonUp) { sun.position.set(-60, 90, -70).add(camT); sun.color.setHex(0xaecbff); sun.intensity = 0.35 * (1 - overcast * 0.7); }
     else { sun.position.copy(sunDir).multiplyScalar(120).add(camT); sun.color.setHex(0xfff1dc).lerp(cA.setHex(0xffa36b), golden); sun.intensity = 2.6 * day * (1 - overcast * 0.65); }
     sun.target.position.copy(camT);
-    hemi.intensity = 0.25 + 0.55 * day; hemi.color.setHex(moonUp ? 0x6b7fb3 : 0xcfe6ff);
+    hemi.intensity = (0.25 + 0.55 * day) * (GFX >= 1 ? 2.1 : 1); // no sky reflections on the lighter levels: more fill light instead hemi.color.setHex(moonUp ? 0x6b7fb3 : 0xcfe6ff);
     starMat.opacity = (1 - day) * (1 - overcast); moon.material.opacity = (1 - day) * (1 - overcast * 0.8); moon.position.set(-420, 520, -600);
     MAT.glass.emissiveIntensity = (1 - day) * 1.4; MAT.lampGlass.emissiveIntensity = 0.2 + (1 - day) * 4;
     if ((envTimer -= dt) <= 0 && sky.visible) { envTimer = 20; refreshEnv(sunDir); }
@@ -793,6 +810,7 @@ export function createWorld({ canvas, stage, onTap }) {
       camP.set(camT.x + Math.sin(ang) * Math.cos(tl) * dist, camT.y + Math.sin(tl) * dist + 0.5, camT.z + Math.cos(ang) * Math.cos(tl) * dist);
       camera.position.lerp(camP, 0.1); camera.lookAt(camT);
     }
+    if (lost) return;
     if (composer) composer.render(); else renderer.render(scene, camera);
     if (api.onFrame) api.onFrame();
   }

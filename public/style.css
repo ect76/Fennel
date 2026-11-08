@@ -145,3 +145,4 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 .pagelinks{display:flex;gap:8px;flex-wrap:wrap}
 .pagelinks a{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:13.5px;font-weight:700;color:var(--ink);text-decoration:none}
 .pagelinks a:hover{border-color:var(--accent)}
+button.nogl{border:0;background:rgba(255,255,255,.94);font:inherit;font-weight:700;width:100%;z-index:6}
