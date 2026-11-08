@@ -106,7 +106,7 @@ export async function decide() {
   const query = [pdesc, active.map(i => i.text).join(' '), lastOutcome ? lastOutcome.text : ''].join('\n');
   const ids = [S.inside, ...(percept.places || []).map(p => p.id), ...(percept.things || []).map(t => t.id), ...active.map(i => i.project)];
   const mem = Mem.recall(query, ids);
-  const journal = { id: 'j' + uid(), t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), trigger: lastTrigger, perceived: pdesc.slice(0, 1500), newly: percept.newly,
+  const journal = { id: 'j' + uid(), t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), trigger: lastTrigger, perceived: pdesc.slice(0, 6000), newly: percept.newly,
     memories: [...mem.recent, ...mem.episodes, ...mem.semantic, ...mem.personal, ...mem.procedural].map(x => x.id), intentions: active.map(i => i.id) };
   const p = pace();
   if (Date.now() < retryAfter || p === 'none' || (p === 'scarce' && Math.random() < 0.5)) return continuity(journal, p === 'none' ? (canCall() ? 'budget' : 'no thinking budget left today, or paused') : Date.now() < retryAfter ? 'waiting after an error' : 'saving thinking budget');
