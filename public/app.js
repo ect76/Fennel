@@ -357,7 +357,7 @@ function renderKeeper() {
     if (r.kind === 'object') { const a = el('a', 'btn small', 'Make this'); a.href = '/?make=' + encodeURIComponent(r.what) + '&request=' + r.id; bar.append(a); }
     c.append(note, bar); kr.append(c);
   }
-  list($('#kThings'), ST.things, t => row(t.name, (t.status === 'building' ? 'being built… · ' : t.status === 'failed' ? 'couldn\'t be built · ' : '') + (t.known ? 'he has seen it' + (t.hisName ? ' and calls it "' + t.hisName + '"' : '') : 'he hasn\'t seen it'), 'remove-thing', t.id));
+  list($('#kThings'), ST.things, t => { const li = row(t.name, (t.status === 'building' ? 'being built… · ' : t.status === 'failed' ? 'couldn\'t be built · ' : '') + (t.known ? 'he has seen it' + (t.hisName ? ' and calls it "' + t.hisName + '"' : '') : 'he hasn\'t seen it'), 'remove-thing', t.id); if (t.status === 'failed') { const b = el('button', 'btn small', 'Try again'); b.type = 'button'; b.onclick = async () => { b.disabled = true; try { await kpost('retry-thing', { id: t.id }); refreshState(); } catch (err) { b.textContent = err.message; } }; li.append(b); } return li; });
   list($('#kBuildings'), ST.town.places.filter(p => p.type !== 'home').sort((a, b) => a.name.localeCompare(b.name)), p => {
     const li = row(p.name, (p.builtBy === 'keeper' ? 'you built it' : p.builtBy === 'growth' ? 'came out of the fog' : 'part of the old town') + ' · ' + (p.known ? 'he has seen it' : 'not seen yet'));
     const b = el('button', 'btn small', 'Remove'); b.type = 'button';

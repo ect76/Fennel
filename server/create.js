@@ -43,7 +43,7 @@ Shapes and "size": box [width,height,depth]; sphere [radius] (stretch with "scal
 Each part: {"shape","size","pos":[x,y,z] centre,"rot":[x,y,z] degrees,"scale":[x,y,z] optional,"color":"#rrggbb","finish":"matte"|"shiny"|"metal"|"glass"|"glow"}. Use 12 to 70 parts.
 Also describe it the way it would appear to someone who has never seen such a thing and doesn't know what it is called: shapes, colours, materials, size compared with a small penguin, any moving parts. Do NOT name what it is or what it's for in "look". If there is visible writing on it, put the exact words in "label" (else empty).
 Reply with only JSON: {"name": "what it is (for the keeper's list)", "look": "the appearance, 15-45 words, no name", "label": "", "parts": [ ... ]}`;
-  const r = await ask({ model: modelFor('work'), system: 'You are a meticulous 3D toy designer. Reply with JSON only.', prompt, maxTokens: 8000, images: image ? [image] : [], purpose: 'world', timeoutMs: 180000 });
+  const r = await ask({ model: modelFor('work'), system: 'You are a meticulous 3D toy designer. Reply with JSON only.', prompt, maxTokens: 8000, images: image ? [image] : [], purpose: 'world', keeper: true, timeoutMs: 180000 });
   if (!r || !Array.isArray(r.parts) || !r.parts.length) throw new Error('no usable model');
   const num = (v, d, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
   const vec = (v, d, lo, hi) => [0, 1, 2].map(i => num(Array.isArray(v) ? v[i] : undefined, d[i], lo, hi));

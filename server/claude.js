@@ -88,9 +88,10 @@ let fetchBeta = false;     // set if the API says web fetch needs its beta heade
 
 // One request (following pause_turn continuations). Returns { content, stop, usage, cost }.
 // cache: put cache breakpoints on the system prompt, the tools, and the newest message, so long sittings stay cheap.
-export async function chat({ model, system, messages, tools = [], toolChoice = null, maxTokens = 1500, timeoutMs = 120000, purpose = 'other', cache = true }) {
+export async function chat({ model, system, messages, tools = [], toolChoice = null, maxTokens = 1500, timeoutMs = 120000, purpose = 'other', cache = true, keeper = false }) {
   rollDay();
-  if (!canCall()) throw new Error(budget().paused ? 'paused by the keeper' : 'daily budget reached');
+  // the keeper's own requests (making things) go ahead even when Percy's daily budget is used up; they still count
+  if (!keeper && !canCall()) throw new Error(budget().paused ? 'paused by the keeper' : 'daily budget reached');
   const sys = typeof system === 'string' ? [{ type: 'text', text: system, ...(cache ? { cache_control: { type: 'ephemeral' } } : {}) }] : system;
   const tl = tools.map((t, i) => (cache && i === tools.length - 1 && !t.type ? { ...t, cache_control: { type: 'ephemeral' } } : t));
   let msgs = messages.map(m => ({ ...m }));
@@ -134,10 +135,10 @@ export async function chat({ model, system, messages, tools = [], toolChoice = n
 }
 
 // A one-shot answer as data: Claude fills in a 'respond' tool (or, failing that, writes JSON we can parse).
-export async function ask({ model, system, prompt, images = [], maxTokens = 1200, purpose = 'other', schema = null, timeoutMs }) {
+export async function ask({ model, system, prompt, images = [], maxTokens = 1200, purpose = 'other', schema = null, timeoutMs, keeper = false }) {
   const content = images.length ? [...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })), { type: 'text', text: prompt }] : prompt;
   const tool = { name: 'respond', description: 'Give your answer by calling this tool with the JSON the prompt asks for.', input_schema: schema || { type: 'object', additionalProperties: true } };
-  const r = await chat({ model, system, messages: [{ role: 'user', content }], tools: [tool], toolChoice: { type: 'tool', name: 'respond' }, maxTokens, purpose, timeoutMs });
+  const r = await chat({ model, system, messages: [{ role: 'user', content }], tools: [tool], toolChoice: { type: 'tool', name: 'respond' }, maxTokens, purpose, timeoutMs, keeper });
   const use = r.content.find(b => b.type === 'tool_use' && b.name === 'respond');
   if (use) return use.input;
   return parseJSON(r.content.filter(b => b.type === 'text').map(b => b.text).join('\n'));

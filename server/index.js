@@ -154,6 +154,13 @@ function doingText() {
   if (a.phase === 'walk') return a.caption && /^walking|^going/.test(a.caption) ? a.caption : 'walking' + (p ? ' to ' + (S.mind.knownPlaces[p.id] ? p.name : 'somewhere') : '') + (a.caption ? ' (' + a.caption + ')' : '');
   return a.caption || a.type;
 }
+function buildThing(th, desc, img) {
+  if (!config.apiKey) { th.status = 'failed'; W.bump(); return; }
+  C.buildModel(desc || 'the thing in this picture', img ? { mediaType: img.mediaType, data: img.data } : null, th.size)
+    .then(mm => { th.model = mm.parts; if (mm.name) th.name = mm.name; th.look = mm.look; th.label = mm.label; th.status = 'ready'; const q = th.forRequest && S.requests.find(r => r.id === th.forRequest); if (q) { q.status = 'fulfilled'; q.updatedDay = W.dayOf(S.t); } })
+    .catch(e => { th.status = 'failed'; th.error = String(e.message || e).slice(0, 200); console.warn('[percy] building a model failed:', th.error); })
+    .finally(() => { W.bump(); save(); });
+}
 const actId = a => a.type === 'paint_wall' ? 'graffiti' : a.type;
 function live() {
   return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
@@ -286,12 +293,12 @@ async function keeper(req, res, what) {
       const th = W.addThing({ name: desc || 'something from a picture', desc, x, z, size, forRequest: str(b.forRequest, 20) });
       if (img) { th.file = 'uploads/' + th.id + '.' + img.ext; writeMedia(th.file, img.buf); }
       save(); send(res, 200, { ok: true, id: th.id });
-      if (!canCall()) { th.status = 'failed'; W.bump(); return; }
-      C.buildModel(desc || 'the thing in this picture', img ? { mediaType: img.mediaType, data: img.data } : null, size)
-        .then(mm => { th.model = mm.parts; if (mm.name) th.name = mm.name; th.look = mm.look; th.label = mm.label; th.status = 'ready'; const q = th.forRequest && S.requests.find(r => r.id === th.forRequest); if (q) { q.status = 'fulfilled'; q.updatedDay = W.dayOf(S.t); } })
-        .catch(e => { th.status = 'failed'; console.warn('[percy] building a model failed:', e.message); })
-        .finally(() => { W.bump(); save(); });
-      return;
+      buildThing(th, desc, img); return;
+    }
+    case 'retry-thing': { // try building a model again (e.g. after the budget ran out)
+      const th = S.things.find(t => t.id === b.id); if (!th) return send(res, 400, { error: 'It isn\'t there any more.' });
+      let img = null; if (th.file) { try { const buf = fs.readFileSync(path.join(MEDIA, th.file)); img = { mediaType: /\.png$/.test(th.file) ? 'image/png' : /\.webp$/.test(th.file) ? 'image/webp' : 'image/jpeg', data: buf.toString('base64') }; } catch {} }
+      th.status = 'building'; W.bump(); send(res, 200, { ok: true }); buildThing(th, th.desc || th.name, img); return;
     }
     case 'graffiti': {
       const img = parseDataURL(b.image); if (!img) return send(res, 400, { error: 'Draw something or add a picture first.' });
