@@ -131,7 +131,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); B.stop(
 function publicState() {
   const m = S.mind, day = W.dayOf(S.t);
   return {
-    t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: config.timeScale, rev: S.rev,
+    t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: W.timeScale(), rev: S.rev,
     pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, caption: S.act.caption, place: S.act.place, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
     doing: doingText(), thought: S.thought, feeling: S.feeling, feelings: (S.feelings || []).slice(-80), body: S.body, coins: S.coins, pantry: S.pantry,
     town: W.publicTown(), things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, size: t.size, model: t.model, status: t.status, day: t.day, known: !!m.knownThings[t.id], hisName: (m.knownThings[t.id] || {}).name || '' })),
@@ -157,7 +157,7 @@ function doingText() {
 const actId = a => a.type === 'paint_wall' ? 'graffiti' : a.type;
 function live() {
   return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
-    doing: doingText(), thought: S.thought, feeling: S.feeling, body: S.body, coins: S.coins, weather: S.weather.kind, season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: config.timeScale };
+    doing: doingText(), thought: S.thought, feeling: S.feeling, body: S.body, coins: S.coins, weather: S.weather.kind, season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: W.timeScale() };
 }
 setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
@@ -252,7 +252,7 @@ async function keeper(req, res, what) {
   switch (what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
-      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
+      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep !== false, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
         journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
@@ -260,6 +260,8 @@ async function keeper(req, res, what) {
       if ('searchesPerDay' in b) s.searchesPerDay = n(b.searchesPerDay, 0, 500);
       if ('spendPerDay' in b) s.spendPerDay = n(b.spendPerDay, 0, 200);
       if ('paused' in b) s.paused = !!b.paused;
+      if ('fastSleep' in b) s.fastSleep = !!b.fastSleep;
+      if ('timeScale' in b) s.timeScale = n(b.timeScale, 0.25, 60);
       if ('sessionSteps' in b) s.sessionSteps = n(b.sessionSteps, 2, 20);
       if ('quality' in b) s.quality = b.quality === 'better' ? 'better' : 'economy';
       if ('searchVia' in b) s.searchVia = ['auto', 'searxng', 'browser', 'claude'].includes(b.searchVia) ? b.searchVia : 'auto';

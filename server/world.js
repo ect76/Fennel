@@ -64,6 +64,13 @@ export function newWorld() {
 // Fill in anything a newer v3 build expects without touching what's there.
 // the green carries the village's name, so anyone walking past can learn where they are
 function nameTheVillage(town) { const g = town && town.places.find(p => p.type === 'green'); if (g && !g.signText) g.signText = 'Welcome to Mossbrook'; }
+// town minutes per real minute: the keeper's setting on the page, or TIME_SCALE
+export function timeScale() {
+  const v = S && S.settings && S.settings.timeScale, base = Number.isFinite(v) && v > 0 ? v : config.timeScale;
+  // asleep, nothing is decided (so nothing is spent): the keeper can let the night pass quickly
+  const asleep = S && S.act && S.act.phase === 'do' && (S.act.type === 'sleep' || S.act.type === 'nap');
+  return asleep && S.settings.fastSleep !== false ? Math.max(base, 60) : base;
+}
 export function migrate(saved) {
   const fresh = newWorld();
   for (const k in fresh) if (!(k in saved) || saved[k] === undefined) saved[k] = fresh[k];
@@ -245,7 +252,7 @@ function finish(a) {
 
 /* ---------- the clock: called several times a second with real seconds ---------- */
 export function tick(dt, onIdle) {
-  const mins = dt * config.timeScale / 60, before = S.t;
+  const mins = dt * timeScale() / 60, before = S.t;
   S.t += mins;
   const d = dayOf(S.t); if (d !== S.lastDay) newDay(d);
   const h = Math.floor(hourOf(S.t)); if (h !== S.lastHour) { S.lastHour = h; onHour(h, d); }
