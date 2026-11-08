@@ -21,7 +21,7 @@ export const TYPES = {
   museum:   { label: 'museum', w: 10, d: 7, h: 5, open: [10, 17], acts: ['visit'], feel: { wonder: 14 } },
   hall:     { label: 'hall', w: 10, d: 7, h: 5, acts: ['visit'], feel: { wonder: 6 } },
 };
-export const BUILDABLE = ['house', 'shop', 'cafe', 'workshop', 'garden', 'museum', 'tower', 'hall'];
+export const BUILDABLE = ['house', 'shop', 'cafe', 'bakery', 'market', 'workshop', 'garden', 'museum', 'tower', 'hall', 'station', 'lookout', 'library'];
 
 const ROAD_NAMES = ['Thistle Lane', 'Bellwether Row', 'Copper Street', 'Lantern Walk', 'Wren Close', 'Orchard Rise', 'Moth Lane', 'Salt Street', 'Quill Way', 'Hollow Lane', 'Kettle Row', 'Button Street', 'Mallow Walk', 'Fernside', 'Tinker\'s Way', 'Starling Road'];
 const PLACE_NAMES = {
@@ -160,34 +160,31 @@ export function findPlot(town, type, { near, edges, random } = {}) {
 }
 
 /* ---------- the starting village ---------- */
+// Deliberately small and cramped: a crossroads, a handful of buildings, fog close on every side.
+// Everything else (the market stall, a café, the station, the lookout...) comes later, when the keeper
+// pushes the fog back or builds it.
 export function initialTown() {
-  const town = { ver: 1, nodes: {}, edges: [], places: [], things: [], R: 40, grown: 0, usedNames: [] };
-  const N = { A: [-34, 0], B: [-17, 1], C: [0, 0], D: [17, -1], E: [34, 1], F: [-1, -15], G: [-3, -32], H: [1, 15], I: [-7, 31], J: [19, 16], K: [26, 31], L: [-24, -15], M: [-33, -28], O1: [15, -18], O: [30, -25] };
+  const town = { ver: 2, nodes: {}, edges: [], places: [], things: [], R: 30, grown: 0, usedNames: [] };
+  const N = { B: [-17, 1], C: [0, 0], D: [20, -1], F: [-1, -19], H: [1, 14], I: [-6, 26] };
   for (const k in N) town.nodes[k] = { x: N[k][0], z: N[k][1] };
-  const E = [['A', 'B', 'High Street'], ['B', 'C', 'High Street'], ['C', 'D', 'High Street'], ['D', 'E', 'High Street'], ['C', 'F', 'Church Lane'], ['F', 'G', 'Church Lane'], ['C', 'H', 'Pond Lane'], ['H', 'I', 'Pond Lane'], ['D', 'J', 'Mill Lane'], ['J', 'K', 'Mill Lane'], ['B', 'L', 'Hill Path'], ['L', 'M', 'Hill Path'], ['F', 'O1', 'Station Road'], ['O1', 'O', 'Station Road']];
+  const E = [['B', 'C', 'High Street'], ['C', 'D', 'High Street'], ['C', 'F', 'Church Lane'], ['C', 'H', 'Pond Lane'], ['H', 'I', 'Pond Lane']];
   for (const [a, b, name] of E) town.edges.push({ id: a + b, a, b, name });
   const edge = id => town.edges.filter(e => e.id === id);
+  const r = rng(1234);
   const put = (type, name, near, edgeIds, desc) => {
     const spot = findPlot(town, type, { near, edges: edgeIds.flatMap(edge) });
     if (spot) return addPlace(town, { type, name, desc, x: spot.x, z: spot.z, rot: spot.rot, seed: Math.floor(r() * 1e9) });
+    console.warn('[percy] no room for ' + name);
   };
-  const r = rng(1234);
-  put('green', 'the village green', { x: 10, z: 10 }, ['CH', 'DJ', 'CD']);
-  put('home', 'Percy\'s cottage', { x: -9, z: 22 }, ['HI']);
-  put('bakery', 'Crumb\'s Bakery', { x: 8, z: -5 }, ['CD']);
-  put('market', 'the market stall', { x: -5, z: 4 }, ['BC']);
-  put('library', 'the library', { x: -9, z: -7 }, ['BC', 'CF']);
-  put('cafe', 'The Copper Kettle', { x: -10, z: 6 }, ['BC']);
-  put('post', 'the post office', { x: 25, z: -5 }, ['DE']);
-  put('station', 'Mossbrook Station', { x: 24, z: -27 }, ['O1O']);
-  put('tower', 'the clock tower', { x: -6, z: -22 }, ['FG']);
-  put('stone', 'the Humming Stone', { x: 4, z: -27 }, ['FG']);
-  put('lookout', 'the lookout hill', { x: -33, z: -16 }, ['LM']);
-  for (let i = 0; i < 9; i++) {
-    const e = town.edges[Math.floor(r() * town.edges.length)];
-    const spot = findPlot(town, 'house', { edges: [e], near: { x: (town.nodes[e.a].x + town.nodes[e.b].x) / 2 + (r() - 0.5) * 10, z: (town.nodes[e.a].z + town.nodes[e.b].z) / 2 + (r() - 0.5) * 10 } });
-    if (spot) addPlace(town, { type: 'house', name: 'a house on ' + e.name, x: spot.x, z: spot.z, rot: spot.rot, seed: Math.floor(r() * 1e9) });
-  }
+  put('home', 'Percy\'s cottage', { x: -9, z: 21 }, ['HI']);
+  put('green', 'the village green', { x: 9, z: 9 }, ['CH', 'CD']);
+  put('bakery', 'Crumb\'s Bakery', { x: 5, z: -6 }, ['CD']);
+  put('post', 'the post office', { x: 15, z: -6 }, ['CD']);
+  put('library', 'the library', { x: -8, z: -6 }, ['BC']);
+  put('stone', 'the Humming Stone', { x: 6, z: -15 }, ['CF']);
+  put('house', 'a house on High Street', { x: -9, z: 6 }, ['BC']);
+  put('house', 'a house on Church Lane', { x: -7, z: -16 }, ['CF']);
+  put('house', 'a house on Pond Lane', { x: 5, z: 22 }, ['HI']);
   updateR(town);
   return town;
 }

@@ -317,7 +317,7 @@ export function addBuilding({ kind, name, desc, x, z }) {
   if (Math.hypot(x, z) > S.town.R + 12) return { error: 'That\'s too deep in the fog. Try nearer the edge of town.' };
   const T = TYPES[kind]; const rot = Town.facingRot(S.town, x, z);
   if (!Town.fits(S.town, x, z, T.w, T.d, rot)) return { error: 'Not enough room there. Try a bit further from the road and other buildings.' };
-  const p = Town.addPlace(S.town, { type: kind, name: str(name, 50), desc, x, z, rot, known: false, builtBy: 'keeper', day: dayOf(S.t) });
+  const p = Town.addPlace(S.town, { type: kind, name: str(name, 50) || (kind === 'house' ? 'a house' : 'the ' + T.label), desc, x, z, rot, known: false, builtBy: 'keeper', day: dayOf(S.t) });
   wlog('the keeper built ' + p.name); bump(); return { place: p };
 }
 export function removeBuilding(id) {

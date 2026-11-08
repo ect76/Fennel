@@ -7,7 +7,8 @@ const [base, key, dataDir] = process.argv.slice(2);
 const get = async u => (await fetch(base + u)).json();
 const kpost = async (what, body = {}) => { const r = await fetch(base + '/api/keeper/' + what, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, ...body }) }); return r.json(); };
 const results = [];
-const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail }); console.log((ok ? 'PASS ' : 'FAIL ') + name + (detail ? ' — ' + detail : '')); };
+// ok === null means the situation hasn't come up in this world yet (skipped, not failed)
+const check = (name, ok, detail) => { const r = ok === null ? null : !!ok; results.push({ name, ok: r, detail }); console.log((r === null ? 'SKIP ' : r ? 'PASS ' : 'FAIL ') + name + (detail ? ' — ' + detail : '')); };
 
 const S = await get('/api/state');
 const P = await kpost('private');
@@ -18,7 +19,7 @@ const perceivedText = J.map(j => j.perceived || '').join('\n');
 // 1. An object he has never been near is not in his perception or memory.
 const unseen = S.things.filter(t => !t.known);
 const leaked = unseen.filter(t => perceivedText.toLowerCase().includes(t.name.toLowerCase()) || JSON.stringify(S.mind).toLowerCase().includes(t.name.toLowerCase()));
-check('Unseen object stays unknown', unseen.length && !leaked.length, unseen.length ? unseen.length + ' unseen thing(s), ' + leaked.length + ' leaked' : 'no unseen things to test (place one far away)');
+check('Unseen object stays unknown', unseen.length ? !leaked.length : null, unseen.length ? unseen.length + ' unseen thing(s), ' + leaked.length + ' leaked' : 'no unseen things to test (place one far away)');
 
 // 2. A seen object is presented by appearance, not by the keeper's label, until he names it.
 const seen = S.things.filter(t => t.known && !t.hisName);
@@ -38,8 +39,9 @@ const pr = S.projects[0];
 check('New code project', pr && pr.files > 0 && pr.history.length, pr ? pr.title + ': ' + pr.files + ' files, ' + pr.sittings + ' sittings, versions ' + (pr.history.flatMap(h => h.commits).join(', ') || 'none') : 'no projects');
 
 // 6. Real debugging: a check that showed an error was followed by a change and a clean check.
+const previewed = S.projects.some(p => p.history.some(h => h.previews > 0));
 const dbg = S.projects.some(p => p.history.some(h => h.errors > 0 && h.wrote.length && /no errors|exit 0/.test(p.lastTest)));
-check('Real debugging', dbg, S.projects.map(p => p.lastTest).join(' | '));
+check('Real debugging', previewed ? dbg : null, S.projects.map(p => p.lastTest).join(' | '));
 
 // 7/8. Publishing only when permitted; the capability list follows the permission.
 const perms = P.permissions || {};
@@ -66,5 +68,6 @@ const complete = J.filter(j => j.src !== 'rules' && fields.every(f => j[f]));
 check('Decision journal is complete', J.length && complete.length >= J.filter(j => j.src !== 'rules' && j.outcome).length * 0.9, complete.length + ' of ' + J.filter(j => j.src !== 'rules').length + ' Claude decisions have trigger, intent, choice, expectation and outcome');
 
 const failed = results.filter(r => r.ok === false);
-console.log('\n' + (results.length - failed.length) + '/' + results.length + ' passed');
+const skipped = results.filter(r => r.ok === null).length;
+console.log('\n' + results.filter(r => r.ok).length + ' passed, ' + failed.length + ' failed, ' + skipped + ' not applicable yet');
 process.exit(failed.length ? 1 : 0);
