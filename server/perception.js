@@ -45,7 +45,8 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
     const km = mind().knownPlaces[inside.id]; km.entered = (km.entered || 0) + (km.lastInT === S.t ? 0 : 1); km.lastInT = S.t;
     if (inside.type === 'home') {
       out.room = [S.initial.cottage, 'tins left in the cupboard: ' + S.pantry, ...(S.inventory.length ? ['things he keeps here: ' + S.inventory.map(i => i.name).join(', ')] : []),
-        ...(S.drawings.filter(d => !d.sold).length ? [S.drawings.filter(d => !d.sold).length + ' of his drawings lying about'] : [])];
+        ...(S.drawings.filter(d => !d.sold).length ? [S.drawings.filter(d => !d.sold).length + ' of his drawings lying about'] : []),
+        ...(W.postWaiting() ? ['a card on the doormat: "There is post waiting for you at the post office."'] : [])];
     } else if (inside.inside && inside.inside.items) {
       out.room = [inside.inside.feel || ''].concat(inside.inside.items.filter(i => !i.taken).map(i => 'item ' + i.id + ': ' + (i.examined && i.name ? i.name + ' (' + i.look + ')' : i.look) + (i.text && i.examined ? ' [writing on it: "' + i.text + '"]' : i.text ? ' [there is writing on it]' : '')));
     } else out.room = ['he has not looked around in here yet'];
@@ -62,7 +63,8 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       const d = Math.hypot(p.door.x - pos.x, p.door.z - pos.z); if (d > seeR + Math.max(p.w, p.d) / 2) continue;
       const fresh = noteSeen(p, 'knownPlaces', p.id, { name: p.name }); if (!p.known) { p.known = true; S.town.ver++; }
       if (fresh) out.newly.push('place:' + p.id);
-      const lit = W.TYPES[p.type].open ? (W.isOpen(p, h) ? 'lights on' : 'dark, door shut') : '';
+      const o = W.TYPES[p.type].open, near = Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 12;
+      const lit = o ? (W.isOpen(p, h) ? 'lights on, door open' : 'dark, door locked') + (near ? '; a sign on the door: open ' + o[0] + ':00 to ' + o[1] + ':00' : '') : '';
       out.places.push({ id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
     }
     if (!inside) {
@@ -84,7 +86,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       const market = S.town.places.find(p => p.type === 'market');
       if (market && Math.hypot(market.door.x - pos.x, market.door.z - pos.z) < 6) { const on = S.drawings.filter(d => d.onStall && !d.sold).length; out.stall = 'the stall has ' + (on ? on + ' of his drawings on it' : 'nothing on it') + ' and the honesty tin'; }
       const post = S.town.places.find(p => p.type === 'post');
-      if (post && Math.hypot(post.door.x - pos.x, post.door.z - pos.z) < 16 && W.postWaiting()) out.postLamp = 'the lamp in the post office window is lit';
+      if (post && Math.hypot(post.door.x - pos.x, post.door.z - pos.z) < 16 && W.postWaiting()) out.postLamp = 'the lamp in the post office window is lit, and a card beneath it reads: "Lamp lit: post waiting to be collected"';
       for (const v of S.vanished) if (!v.noticed && Math.hypot(v.x - pos.x, v.z - pos.z) < 10 && (mind().knownPlaces[v.id] || mind().knownThings[v.id])) { v.noticed = true; (out.absences = out.absences || []).push((v.name || 'the ' + (thingName(v) || 'object he had seen there')) + ' is no longer where it was'); }
     }
   }

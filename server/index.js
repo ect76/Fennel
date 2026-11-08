@@ -345,7 +345,7 @@ async function keeper(req, res, what) {
     case 'build': { const r = W.addBuilding({ kind: b.kind, name: b.name, desc: b.desc, x: Number(b.x), z: Number(b.z) }); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.place.id }); }
     case 'skip-sleep': { // fast-forward this one sleep (asleep he decides nothing, so it costs nothing)
       if (!(S.act && S.act.phase === 'do' && ['sleep', 'nap'].includes(S.act.type))) return send(res, 400, { error: 'He isn\'t asleep.' });
-      S.act.fast = true; W.wlog('the keeper let the night pass quickly'); return ok();
+      W.skipSleep(); W.wlog('the keeper skipped to the end of his sleep'); W.bump(); return ok();
     }
     case 'grow': { const g = W.growTown('keeper'); return ok({ road: g.road }); }
   }

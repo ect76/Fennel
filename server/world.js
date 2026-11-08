@@ -251,6 +251,13 @@ function finish(a) {
 }
 
 /* ---------- the clock: called several times a second with real seconds ---------- */
+// the keeper's "Skip to morning": run the rest of this sleep straight through, ten town minutes at a time,
+// so his body, the weather and the town all advance exactly as they would have (he decides nothing while asleep)
+export function skipSleep() {
+  const a = S.act; if (!(a && a.phase === 'do' && (a.type === 'sleep' || a.type === 'nap'))) return false;
+  for (let i = 0; i < 200 && S.act === a; i++) tick(600 / timeScale(), () => {});
+  return true;
+}
 export function tick(dt, onIdle) {
   const mins = dt * timeScale() / 60, before = S.t;
   S.t += mins;

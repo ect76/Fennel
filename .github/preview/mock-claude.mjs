@@ -10,6 +10,7 @@ const PLAN = ['look', 'go', 'enter', 'look', 'research', 'code', 'write', 'draw'
 
 function decide(prompt) {
   const tr = String(prompt).split('\n').find(l => l.startsWith('How his recent efforts')); if (tr) console.log('[mock] saw: ' + tr);
+  if (process.env.MOCK_LOG) for (const l of String(prompt).split('\n')) if (/^intention |^Recent investigations|^Buildings in view|^PERCEPTION|card on the doormat/.test(l) || /door (open|locked)|post waiting/.test(l)) console.log('[mock] ' + l.slice(0, 400));
   const places = ids(prompt, /place (\w+): /g), things = ids(prompt, /thing (\w+): /g), projects = ids(prompt, /project (pr\w+) /g), inv = ids(prompt, /(R\w+) "/g);
   const step = PLAN[plan++ % PLAN.length];
   const FEEL = [['curious', 0.4], ['tired', -0.3], ['pleased', 0.6], ['uneasy', -0.5], ['calm', 0.1]][plan % 5];

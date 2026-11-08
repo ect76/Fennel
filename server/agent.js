@@ -41,7 +41,7 @@ export function capabilities() {
   add('read', 'what: "notes" (papers under the standing stone, when he is there), "letters" (post he has collected), or an item in this room that has writing (id or name)', '');
   const foodNotes = ['home: ' + S.pantry + ' tins left'].concat(known('bakery').concat(known('cafe')).map(p => p.id + ' (' + p.name + ', 2 coins, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') + ')'));
   add('eat', 'where: ' + foodNotes.join('; '), 'he has ' + S.coins + ' coins');
-  if (known('green').length) add('fish', '', 'the pond on the green; daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
+  if (known('green').length) add('fish', '', 'dive for fish in the pond on the green and eat what he catches: free food, daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
   add('sleep', '', 'in his bed at home; ends in the morning'); add('nap', 'minutes', 'at home'); add('rest', 'minutes', 'wherever he is'); add('wait', 'minutes', 'stay and watch what happens');
   add('think', 'about; minutes', 'nothing changes in the world');
   add('research', 'question; why; continue (optional: the id of an earlier investigation to carry on); where: ' + computers.join(' or '), perms.web_search ? (canSearch() ? 'searches the web and opens pages; a few steps per sitting, continued another time' : 'no web searches left today: only notes and anything already found') : 'web search is not available');
@@ -51,7 +51,7 @@ export function capabilities() {
   const paint = S.inventory.some(i => /paint/i.test(i.name));
   add('paint_wall', 'subject; tag (a few words, optional)', paint ? 'he has paint' : 'needs paint (he has none)');
   add('buy', 'item: an item id seen for sale', '');
-  if (known('post').length) add('check_post', '', 'at the post office (' + known('post').map(p => W.isOpen(p, h) ? 'open now' : 'shut now').join('') + ')');
+  if (known('post').length) add('check_post', '', 'collect any letters or parcels waiting for him at the post office (' + known('post').map(p => W.isOpen(p, h) ? 'open now' : 'shut now').join('') + ')');
   if (known('market').length) add('stall', '', 'the market stall: drawings he offered at the stall are left out, and the honesty tin is emptied');
   const orders = S.commissions.filter(c => c.status === 'read' || c.status === 'accepted');
   if (orders.length) { add('answer_order', 'order: id; accept: true/false; reply', ''); add('deliver_order', 'order: id; work: a drawing id, page id or project id he made for it', 'paid on delivery'); }
@@ -148,12 +148,16 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
   if (mem.procedural.length) L.push('Things he knows how to do:\n' + mem.procedural.map(x => x.skill + ': ' + x.text + (x.worked ? '' : ' (this did not work)')).join('\n'));
   const named = Object.entries(S.mind.knownThings).filter(([, k]) => k.name).map(([id, k]) => id + ' = "' + k.name + '"');
   if (named.length) L.push('Names he has given things: ' + named.join(', '));
-  L.push('\nINTENTIONS\n' + (active.length ? active.map(i => 'intention ' + i.id + ' (' + i.horizon + ', since day ' + i.day + '): ' + i.text + (i.why ? ' (because ' + i.why + ')' : '') + (i.history.length ? ' [last: ' + JSON.stringify(i.history[i.history.length - 1]).slice(0, 160) + ']' : '')).join('\n') : 'none right now'));
+  L.push('\nINTENTIONS\n' + (active.length ? active.map(i => 'intention ' + i.id + ' (' + i.horizon + ', since day ' + i.day + '): ' + i.text + (i.why ? ' (because ' + i.why + ')' : '') + (i.history.length ? ' [last: ' + JSON.stringify(i.history[i.history.length - 1]).slice(0, 160) + ']' : '') + effortOn(i)).join('\n') : 'none right now'));
   const paused = S.mind.intentions.filter(i => i.status === 'paused').slice(-4);
   if (paused.length) L.push('Paused: ' + paused.map(i => i.id + ': ' + i.text).join('; '));
   if (mem.questions.length) L.push('Open questions: ' + mem.questions.map(q => q.id + ': ' + q.text).join('; '));
-  const inv = S.researchLog.filter(l => l.kind === 'research').slice(-6);
-  if (inv.length) L.push('Recent investigations: ' + inv.map(l => l.id + ' "' + l.question + '" (day ' + l.day + ', ' + l.status + (l.leads && l.leads.length ? ', leads: ' + l.leads.map(x => x.what).join(' / ') : '') + ')').join('; '));
+  { // investigations, with repeats of the same question counted rather than listed again and again
+    const inv = S.researchLog.filter(l => l.kind === 'research').slice(-12), byQ = new Map();
+    for (const l of inv) { const k = l.question.toLowerCase().trim(); const g = byQ.get(k) || { n: 0, first: l.day }; g.n++; g.last = l; byQ.set(k, g); }
+    const rows = [...byQ.values()].slice(-5).map(({ n, first, last: l }) => l.id + ' "' + l.question + '" (' + (n > 1 ? n + ' sittings since day ' + first + ', latest' : 'day ' + l.day) + ': ' + l.status + (l.leads && l.leads.length ? ', leads: ' + l.leads.map(x => x.what).join(' / ') : '') + ')');
+    if (rows.length) L.push('Recent investigations: ' + rows.join('; '));
+  }
   { const tr = trackRecord(); if (tr.length) L.push('How his recent efforts have gone (plain record, not advice): ' + tr.join('; ')); }
   if (projects.length) L.push('Projects: ' + projects.map(x => 'project ' + x.id + ' "' + x.title + '" (' + x.status + ', ' + x.files + ' files, ' + x.sittings + ' sittings' + (x.lastTest ? ', last check: ' + x.lastTest : '') + (x.url ? ', published' : '') + (x.next ? ', next: ' + x.next : '') + ')').join('; '));
   if (S.drawings.length) L.push('His drawings: ' + S.drawings.slice(-8).map(d => d.id + ' "' + d.title + '"' + (d.sold ? ' (gone)' : d.onStall ? ' (on the stall)' : d.listed ? ' (in his shop)' : '')).join('; '));
@@ -238,6 +242,15 @@ function trackRecord() {
   for (const j of fails) { const k = (j.choice && j.choice.type || '?') + ': ' + String((j.outcome.facts || [])[0] || '').slice(0, 90); byErr[k] = (byErr[k] || 0) + 1; }
   for (const [k, n] of Object.entries(byErr)) if (n >= 2) out.push(n + ' recent attempts ended the same way (' + k + ')');
   return out.slice(0, 5);
+}
+
+// how much he has actually done for an intention so far (counted from his decision journal), shown beside it
+function effortOn(i) {
+  const days = W.dayOf(S.t) - i.day; if (days < 1) return '';
+  const js = S.journal.filter(j => j.intent && j.intent.id === i.id && j.choice); if (js.length < 5) return '';
+  const by = {}; for (const j of js) by[j.choice.type] = (by[j.choice.type] || 0) + 1;
+  const sittings = S.researchLog.filter(l => l.kind === 'research' && l.day >= i.day).length;
+  return ' [pursued for ' + days + ' day' + (days === 1 ? '' : 's') + ': ' + js.length + ' decisions made for it (' + Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => k + ' ' + n).join(', ') + ')' + (sittings ? ', ' + sittings + ' research sittings since it began' : '') + '; not yet done]';
 }
 
 function resolveGo(to) {
