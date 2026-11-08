@@ -18,7 +18,7 @@ export function budget() {
     callsPerDay: Number.isFinite(b.callsPerDay) ? b.callsPerDay : config.maxCallsPerDay,
     searchesPerDay: Number.isFinite(b.searchesPerDay) ? b.searchesPerDay : config.maxSearchesPerDay,
     spendPerDay: Number.isFinite(b.spendPerDay) ? b.spendPerDay : config.maxSpendPerDay,
-    paused: !!b.paused, quality: b.quality === 'better' ? 'better' : 'economy',
+    paused: !!b.paused, quality: ['better', 'mixed'].includes(b.quality) ? b.quality : 'economy',
     sessionSteps: Number.isFinite(b.sessionSteps) ? b.sessionSteps : config.sessionSteps,
   };
 }

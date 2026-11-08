@@ -7,7 +7,7 @@ import * as W from './world.js';
 import * as P from './perception.js';
 import * as Mem from './memory.js';
 import * as C from './create.js';
-import { chat, canCall, canSearch, modelFor, pace, callsLeft } from './claude.js';
+import { chat, canCall, canSearch, modelFor, pace, callsLeft, budget } from './claude.js';
 import { uid, str, clamp, plain } from './util.js';
 
 let S = null, hooks = { save: () => {}, research: null, code: null, writePage: null, publishPage: null, saveDrawing: null, saveWall: null, permissions: () => ({}), watchers: () => 0 };
@@ -115,7 +115,8 @@ export async function decide() {
   const prompt = buildPrompt({ pdesc, mem, active, caps, pace: p });
   let r;
   try {
-    const res = await chat({ model: modelFor('decide'), system: SYSTEM, messages: [{ role: 'user', content: prompt }], tools: [DECIDE_TOOL], toolChoice: { type: 'tool', name: 'decide' }, maxTokens: 900, purpose: 'decide', timeoutMs: 90000 });
+    const pick = chooseModel(); journal.model = pick.model; if (pick.why) journal.modelWhy = pick.why;
+    const res = await chat({ model: pick.model, system: SYSTEM, messages: [{ role: 'user', content: prompt }], tools: [DECIDE_TOOL], toolChoice: { type: 'tool', name: 'decide' }, maxTokens: 900, purpose: 'decide', timeoutMs: 90000 });
     const use = res.content.find(b => b.type === 'tool_use' && b.name === 'decide');
     r = use ? use.input : null; journal.cost = Math.round(res.cost * 10000) / 10000;
     if (!r || !r.action || !r.action.type) throw new Error('no decision in the reply');
@@ -251,6 +252,24 @@ function effortOn(i) {
   const by = {}; for (const j of js) by[j.choice.type] = (by[j.choice.type] || 0) + 1;
   const sittings = S.researchLog.filter(l => l.kind === 'research' && l.day >= i.day).length;
   return ' [pursued for ' + days + ' day' + (days === 1 ? '' : 's') + ': ' + js.length + ' decisions made for it (' + Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => k + ' ' + n).join(', ') + ')' + (sittings ? ', ' + sittings + ' research sittings since it began' : '') + '; not yet done]';
+}
+
+// "Mixed" thinking: the everyday model for routine moments, the better model where judgement matters:
+// waking and planning the day, when his body is in trouble, when he keeps choosing the same thing or keeps failing,
+// and otherwise as a periodic check-in. Nothing about this is shown to him.
+let lastBetterT = -1e9;
+function chooseModel() {
+  const b = budget();
+  if (b.quality !== 'mixed') return { model: modelFor('decide') };
+  const better = config.modelBetter, why = [];
+  if (/wak|woke|slept/i.test(lastTrigger)) why.push('waking');
+  if (S.body.fullness < 15 || S.body.energy < 15) why.push('body in trouble');
+  const recent = S.journal.slice(-5).filter(j => j.choice && j.src !== 'body');
+  if (recent.length >= 4 && recent.every(j => j.choice.type === recent[0].choice.type)) why.push('same choice ' + recent.length + ' times');
+  if (recent.slice(-3).filter(j => j.outcome && j.outcome.ok === false).length >= 2) why.push('recent attempts failed');
+  if (S.t - lastBetterT > 120) why.push('check-in');
+  if (!why.length) return { model: modelFor('decide') };
+  lastBetterT = S.t; return { model: better, why: why.join(', ') };
 }
 
 function resolveGo(to) {

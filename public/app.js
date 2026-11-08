@@ -314,7 +314,7 @@ function renderPrivate() {
   const jw = $('#kJournal'); jw.textContent = '';
   for (const j of PRIV.journal.slice().reverse().slice(0, 40)) {
     const d = el('details', 'jentry'); const ch = j.choice || {};
-    d.append(el('summary', null, 'Day ' + j.day + ' ' + j.time + ' · ' + (ch.type || '?') + (j.src === 'rules' ? ' (simple rules: ' + (j.reason || '') + ')' : '') + (j.outcome ? (j.outcome.ok ? '' : ' · didn\'t work') : ' · in progress')));
+    d.append(el('summary', null, 'Day ' + j.day + ' ' + j.time + ' · ' + (ch.type || '?') + (j.src === 'rules' ? ' (simple rules: ' + (j.reason || '') + ')' : '') + (j.modelWhy ? ' · Sonnet (' + j.modelWhy + ')' : '') + (j.outcome ? (j.outcome.ok ? '' : ' · didn\'t work') : ' · in progress')));
     const lines = [['Trigger', j.trigger], ['Intent', j.intent && j.intent.text ? j.intent.op + ': ' + j.intent.text : j.intent && j.intent.op], ['Choice', ch.type ? ch.type + ' ' + JSON.stringify(ch.args || {}) : ''], ['Expected', j.expectation], ['Thought', j.thought], ['Outcome', j.outcome ? j.outcome.facts.join('; ') + (j.outcome.error ? ' (error: ' + j.outcome.error + ')' : '') : ''], ['Memories used', (j.memories || []).length + ''], ['Learning', (j.learning || []).length ? (j.learning || []).join(', ') : ''], ['Perceived', j.perceived]];
     for (const [k, v] of lines) if (v) { const p = el('p', 'hint'); p.append(el('b', null, k + ': '), document.createTextNode(v)); d.append(p); }
     jw.append(d);

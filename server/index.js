@@ -263,7 +263,7 @@ async function keeper(req, res, what) {
       if ('fastSleep' in b) s.fastSleep = !!b.fastSleep;
       if ('timeScale' in b) s.timeScale = n(b.timeScale, 0.25, 60);
       if ('sessionSteps' in b) s.sessionSteps = n(b.sessionSteps, 2, 20);
-      if ('quality' in b) s.quality = b.quality === 'better' ? 'better' : 'economy';
+      if ('quality' in b) s.quality = ['better', 'mixed'].includes(b.quality) ? b.quality : 'economy';
       if ('searchVia' in b) s.searchVia = ['auto', 'searxng', 'browser', 'claude'].includes(b.searchVia) ? b.searchVia : 'auto';
       if ('publishApproved' in b) s.publishApproved = !!b.publishApproved;
       for (const k of Object.keys(s)) if (s[k] === undefined) delete s[k];
