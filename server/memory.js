@@ -116,7 +116,8 @@ export function recall(query, ids = []) {
     semantic: rank(M.semantic.filter(s => !s.superseded), s => s.text + ' ' + s.about, query, { ids, k: 10, recency: 90 }),
     personal: rank(M.personal.filter(p => !p.revisedBy), p => p.text + ' ' + p.kind, query, { ids, k: 6, recency: 120 }).concat(M.personal.filter(p => p.kind === 'self' && !p.revisedBy).slice(-2)).filter((x, i, a) => a.indexOf(x) === i),
     procedural: rank(M.procedural, p => p.skill + ' ' + p.text, query, { ids, k: 5, recency: 120 }),
-    questions: rank(M.questions.filter(q => q.status === 'open'), q => q.text, query, { ids, k: 6, recency: 60, minScore: 0 }),
+    // like a person: today's questions are on his mind; older ones come back when something brings them up
+    questions: rank(M.questions.filter(q => q.status === 'open'), q => q.text + ' ' + (q.origin || ''), query, { ids, k: 6, recency: 2, minScore: 0.9 }),
     summaries: M.summaries.slice(-3),
   };
 }

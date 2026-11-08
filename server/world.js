@@ -37,6 +37,7 @@ export function setState(s) {
 export function newWorld() {
   const town = Town.initialTown();
   for (const p of town.places) p.known = p.type === 'home'; // he has seen only his cottage
+  nameTheVillage(town);
   const home = town.places.find(p => p.type === 'home');
   const post = town.places.find(p => p.type === 'post'), cafe = town.places.find(p => p.type === 'cafe');
   const items = [];
@@ -61,11 +62,14 @@ export function newWorld() {
   };
 }
 // Fill in anything a newer v3 build expects without touching what's there.
+// the green carries the village's name, so anyone walking past can learn where they are
+function nameTheVillage(town) { const g = town && town.places.find(p => p.type === 'green'); if (g && !g.signText) g.signText = 'Welcome to Mossbrook'; }
 export function migrate(saved) {
   const fresh = newWorld();
   for (const k in fresh) if (!(k in saved) || saved[k] === undefined) saved[k] = fresh[k];
   for (const k in fresh.mind) if (!(k in saved.mind)) saved.mind[k] = fresh.mind[k];
   for (const k in fresh.earned) if (!(k in saved.earned)) saved.earned[k] = fresh.earned[k];
+  nameTheVillage(saved.town);
   return saved;
 }
 

@@ -63,7 +63,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       const fresh = noteSeen(p, 'knownPlaces', p.id, { name: p.name }); if (!p.known) { p.known = true; S.town.ver++; }
       if (fresh) out.newly.push('place:' + p.id);
       const lit = W.TYPES[p.type].open ? (W.isOpen(p, h) ? 'lights on' : 'dark, door shut') : '';
-      out.places.push({ id: p.id, sign: SIGN[p.type] === '' ? '' : p.name, look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
+      out.places.push({ id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
     }
     if (!inside) {
       out.things = [];
