@@ -10,11 +10,13 @@ function rollDay() {
 export function canCall() { rollDay(); return !!config.apiKey && usage.calls < config.maxCallsPerDay; }
 export function canSearch() { rollDay(); return config.webResearch && usage.searches < config.maxSearchesPerDay; }
 
-export async function callClaude({ model, system, prompt, maxTokens = 800, webSearches = 0, timeoutMs = 120000 }) {
+export async function callClaude({ model, system, prompt, maxTokens = 800, webSearches = 0, timeoutMs = 120000, images = [] }) {
   rollDay();
   if (!canCall()) throw new Error('daily limit reached');
   usage.calls++;
-  const messages = [{ role: 'user', content: prompt }];
+  // images: [{ mediaType: 'image/png', data: '<base64>' }] are shown to Claude alongside the prompt
+  const content0 = images.length ? [...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })), { type: 'text', text: prompt }] : prompt;
+  const messages = [{ role: 'user', content: content0 }];
   const tools = webSearches > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: webSearches }] : null;
   const content = [];
   for (let round = 0; round < 4; round++) {

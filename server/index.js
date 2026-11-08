@@ -1,4 +1,4 @@
-// Fennel's server: runs his world nonstop, serves the 3D town page, and takes visitors' notes.
+// Percy's server: runs his world nonstop, serves the 3D town page, and takes visitors' notes.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,24 +17,24 @@ const SAVE = path.join(config.dataDir, 'world.json');
 
 /* ---------- load or create the world ---------- */
 let S = loadJSON(SAVE);
-if (!S || S.v !== 1) {
+if (!S || S.v !== 2) {
   S = W.newWorld(); W.setState(S);
   W.addDiary('event', 'day 1. woke up in the cottage. the stone was humming before the birds started.');
-  console.log('[fennel] a new world begins');
+  console.log('[percy] a new world begins');
 } else {
   W.setState(S);
   S.deciding = false;
   const gapMin = (Date.now() - (S.lastSeenReal || Date.now())) / 60000;
   if (gapMin > 10) { W.addDiary('event', 'the world went quiet for a while. i don\'t remember any of it. the clock says it\'s still ' + W.hhmm(S.t) + '.'); W.log('the world paused'); }
-  console.log('[fennel] world loaded: day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t));
+  console.log('[percy] world loaded: day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t));
 }
-function save() { S.lastSeenReal = Date.now(); try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[fennel] save failed:', e.message); } }
+function save() { S.lastSeenReal = Date.now(); try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
 
 /* ---------- things that need Claude and finish later ---------- */
 // Results are attached to the activity; whichever comes last (the activity ending or Claude answering) publishes it.
 function later(a, kind, promise) {
   a.job = { kind, done: false, ended: false };
-  promise.then(r => { a.job.result = r; }).catch(e => { a.job.error = String(e.message || e); console.warn('[fennel] ' + kind + ' failed:', a.job.error); })
+  promise.then(r => { a.job.result = r; }).catch(e => { a.job.error = String(e.message || e); console.warn('[percy] ' + kind + ' failed:', a.job.error); })
     .finally(() => { a.job.done = true; if (a.job.ended) publish(a); });
 }
 function publish(a) {
@@ -89,13 +89,21 @@ W.setHooks({
       W.addDiary('drawing', 'drew "' + dr.title + '". ' + pick(['it came out wobbly. i like it anyway.', 'not sure about the left side.', 'pinned it on the wall.', 'it looks like how it felt.']));
       W.log('drew "' + dr.title + '"');
     }
-    if (a.id === 'rim' && (S.rimTests <= 3 || S.rimTests % 3 === 0)) {
-      W.addDiary('rim', pick(['walked east until my feet stopped. not tired. just stopped.', 'pushed into the mist with one hand. soft, like a wall made of pillows.', 'threw a pebble into the mist. no sound when it landed.', 'stood at the rim a long time. nothing out there looked back.']) + ' test #' + S.rimTests + '.');
+    if (a.id === 'fog' && (S.fogTests <= 3 || S.fogTests % 3 === 0)) {
+      W.addDiary('fog', pick(['walked to the end of ' + (a.road || 'the road') + ' until my feet stopped. not tired. just stopped.', 'pushed into the fog with one hand. soft, like a wall made of pillows.', 'threw a pebble into the fog. no sound when it landed.', 'stood where ' + (a.road || 'the road') + ' runs out for a long time. nothing out there looked back.']) + ' test #' + S.fogTests + '.');
     }
+  },
+  onDiscover(p) {
+    const plain = { first_sight: 'found ' + p.name + '. nobody there. the door ' + pick(['was open', 'was locked', 'had a bell that didn\'t ring']) + '.', question: 'who built ' + p.name + '?', wonder: 8 };
+    const done = (r, src) => { W.applyFeel(r); W.addDiary('found', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
+    if (canCall()) M.reactToPlace(p).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
+  },
+  onGrow(g, by) {
+    W.addDiary('event', by === 'keeper' ? 'woke up with the feeling the town had got bigger in the night.' : 'the fog looks thinner down ' + (g.road || 'one of the roads') + ' today.');
   },
   onBedtime(day) {
     if (!canCall()) return;
-    M.reflect(day).then(() => { W.bump(); save(); }).catch(e => console.warn('[fennel] reflection failed:', e.message));
+    M.reflect(day).then(() => { W.bump(); save(); }).catch(e => console.warn('[percy] reflection failed:', e.message));
   },
 });
 
@@ -141,7 +149,7 @@ function requestDecision() {
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('took too long')), 75000));
   Promise.race([M.decide(), timeout])
     .then(dec => { if (token === decisionToken && !S.act) W.startAct(dec); })
-    .catch(e => { if (token === decisionToken && !S.act) { if (config.apiKey) console.warn('[fennel] decision fell back to rules:', e.message); W.startAct(W.ruleDecision()); } })
+    .catch(e => { if (token === decisionToken && !S.act) { if (config.apiKey) console.warn('[percy] decision fell back to rules:', e.message); W.startAct(W.ruleDecision()); } })
     .finally(() => { if (token === decisionToken) S.deciding = false; });
 }
 
@@ -221,6 +229,12 @@ const server = http.createServer(async (req, res) => {
       }
       if (what === 'remove-thing') { S.things = S.things.filter(t => t.id !== b.id); W.log('something vanished from town'); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-note') { S.notes = S.notes.filter(n => n.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
+      if (what === 'build') {
+        const r = W.addBuilding({ kind: b.kind, name: b.name, desc: b.desc, x: Number(b.x), z: Number(b.z) });
+        if (r.error) return send(res, 400, { error: r.error });
+        save(); return send(res, 200, { ok: true, id: r.place.id });
+      }
+      if (what === 'grow') { const g = W.growTown('keeper'); save(); return send(res, 200, { ok: true, road: g.road }); }
       if (what === 'book') {
         const topic = str(b.topic, 60); if (!topic) return send(res, 400, { error: 'What is the book about?' });
         S.researchQueue.unshift({ topic, question: '' }); S.researchQueue = S.researchQueue.slice(0, 6);
@@ -244,7 +258,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 server.listen(config.port, () => {
-  console.log(`[fennel] Mossbrook is open on port ${config.port}`);
-  console.log('[fennel] mind: ' + (config.apiKey ? `Claude (${config.modelThink} / ${config.modelReflect})` : 'simple rules only (no ANTHROPIC_API_KEY set)'));
-  console.log('[fennel] keeper tools: ' + (config.keeperKey ? 'on' : 'off (set KEEPER_KEY to turn on)'));
+  console.log(`[percy] Mossbrook is open on port ${config.port}`);
+  console.log('[percy] mind: ' + (config.apiKey ? `Claude (${config.modelThink} / ${config.modelReflect})` : 'simple rules only (no ANTHROPIC_API_KEY set)'));
+  console.log('[percy] keeper tools: ' + (config.keeperKey ? 'on' : 'off (set KEEPER_KEY to turn on)'));
 });

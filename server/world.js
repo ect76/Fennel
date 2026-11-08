@@ -1,50 +1,33 @@
-// Fennel's world: places, needs, time, weather, events, and the mechanics of doing things.
+// Percy's world: the town, his needs, time, weather, happenings, and the mechanics of doing things.
 // The "mind" (mind.js) decides what he does; this file makes it happen.
 import { config } from './config.js';
+import { clamp, pick, uid, str, plainName } from './util.js';
+import * as Town from './town.js';
+export { clamp, pick, uid, str, plainName };
+export const { TYPES, BUILDABLE } = Town;
 
-export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-export const pick = a => a[Math.floor(Math.random() * a.length)];
-export const uid = () => Math.random().toString(36).slice(2, 10);
-export const str = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
-export const plainName = n => String(n).replace(/^(a|an|the)\s+/i, '').trim() || 'thing';
+const WALK_SPEED = 2.4; // units per real second, so walking looks natural at any time scale
 
-const WALK_SPEED = 2.4; // island units per real second, so walking looks natural at any time scale
-
-export const PLACES = {
-  square: { name: 'the town square', bx: 0, bz: 0, depth: 0 },
-  home: { name: 'his cottage', bx: -10, bz: 8, depth: 4.6 },
-  bakery: { name: 'the bakery', bx: 9, bz: -7, depth: 4.2, open: [7, 19] },
-  market: { name: 'the market stall', bx: 11, bz: 4, depth: 2.4, open: [8, 16] },
-  library: { name: 'the library', bx: -4, bz: -12.5, depth: 5, open: [9, 18] },
-  pond: { name: 'the pond', bx: 3, bz: 11.5, depth: 8 },
-  lookout: { name: 'the lookout hill', bx: -15, bz: -4, depth: 0 },
-  shrine: { name: 'the Humming Stone', bx: 13, bz: -12, depth: 2.6 },
-  rim: { name: 'the east rim', bx: 20.6, bz: 0, depth: 0 },
-};
-for (const k in PLACES) {
-  const p = PLACES[k];
-  if (p.depth) { const L = Math.hypot(p.bx, p.bz), off = p.depth / 2 + 1.4; p.tx = p.bx - p.bx / L * off; p.tz = p.bz - p.bz / L * off; }
-  else { p.tx = p.bx; p.tz = p.bz; }
-}
-PLACES.square.tz = 2.8;
-
+// What he can do, and which kind of place it happens at.
 export const ACTIONS = {
-  sleep: { place: 'home', label: 'sleeping', gain: { energy: 100, calm: 10 }, desc: 'go home to bed for the night' },
-  nap: { place: 'home', label: 'napping', dur: 80, gain: { energy: 30 }, desc: 'a short nap at home' },
-  eat: { place: 'bakery', label: 'eating bread', dur: 30, gain: { fullness: 45, joy: 6 }, desc: 'buy and eat bread at the bakery (2 coins)' },
-  flies: { place: 'pond', label: 'catching flies', dur: 40, gain: { fullness: 18, calm: 4 }, desc: 'catch flies at the pond (free food)' },
-  draw: { place: 'home', label: 'drawing', dur: 90, gain: { joy: 12, energy: -6, wonder: -4 }, desc: 'draw something at his desk (say what in "subject")' },
-  write: { place: 'home', label: 'writing a page', dur: 80, gain: { joy: 8, energy: -4, wonder: -3 }, desc: 'write a page to pin up for visitors: a guide, a list, a log, an observation (say what in "subject")', claude: true },
-  sell: { place: 'market', label: 'selling drawings', dur: 50, gain: {}, desc: 'try to sell drawings at the market stall' },
-  read: { place: 'library', label: 'reading', dur: 90, gain: { wonder: 20, energy: -4 }, desc: 'read and research at the library (put the topic in "subject")' },
-  pond: { place: 'pond', label: 'sitting by the pond', dur: 60, gain: { calm: 22, joy: 4 }, desc: 'sit quietly by the pond' },
-  stargaze: { place: 'lookout', label: 'watching the stars', dur: 90, gain: { wonder: 24, calm: 8 }, desc: 'watch the stars from the lookout hill (night only)' },
-  shrine: { place: 'shrine', label: 'at the Humming Stone', dur: 30, gain: { wonder: 8 }, desc: 'visit the Humming Stone and check for notes from visitors' },
-  rim: { place: 'rim', label: 'testing the edge of the world', dur: 50, gain: { wonder: 14 }, desc: 'go to the east rim and test the edge of the world' },
-  wander: { place: 'square', label: 'wandering', dur: 40, gain: { wonder: 5, joy: 2 }, desc: 'wander around the square' },
-  explore: { place: null, label: 'exploring', dur: 45, gain: { wonder: 10, energy: -3 }, desc: 'explore a quiet corner of the island' },
-  tidy: { place: 'home', label: 'tidying the cottage', dur: 40, gain: { calm: 12 }, desc: 'tidy the cottage' },
-  inspect: { place: null, label: 'looking closely at something', dur: 45, gain: { wonder: 16, joy: 4 }, desc: 'go and look closely at something visitors added to town (give its id as "target")' },
+  sleep: { at: 'home', label: 'sleeping', gain: { energy: 100, calm: 10 }, desc: 'go home to bed for the night' },
+  nap: { at: 'home', label: 'napping', dur: 80, gain: { energy: 30 }, desc: 'a short nap at home' },
+  draw: { at: 'home', label: 'drawing', dur: 90, gain: { joy: 12, energy: -6, wonder: -4 }, desc: 'draw something at his desk (say what in "subject")' },
+  write: { at: 'home', label: 'writing a page', dur: 80, gain: { joy: 8, energy: -4, wonder: -3 }, desc: 'write a page to pin up for visitors: a guide, a list, a log, an observation (say what in "subject")' },
+  tidy: { at: 'home', label: 'tidying the cottage', dur: 40, gain: { calm: 12 }, desc: 'tidy the cottage' },
+  eat: { at: 'bakery', label: 'eating bread', dur: 30, gain: { fullness: 45, joy: 6 }, desc: 'buy and eat bread at the bakery (2 coins)' },
+  read: { at: 'library', label: 'reading', dur: 90, gain: { wonder: 20, energy: -4 }, desc: 'read and research at the library (put the topic in "subject")' },
+  sell: { at: 'market', label: 'selling drawings', dur: 50, gain: {}, desc: 'try to sell drawings at the market stall' },
+  pond: { at: 'green', label: 'sitting by the pond', dur: 60, gain: { calm: 22, joy: 4 }, desc: 'sit by the pond on the village green' },
+  fish: { at: 'green', label: 'fishing in the pond', dur: 45, gain: { fullness: 20, calm: 4 }, desc: 'dive for fish in the pond (free food)' },
+  stargaze: { at: 'lookout', label: 'watching the stars', dur: 90, gain: { wonder: 24, calm: 8 }, desc: 'watch the stars from the lookout hill (night only)' },
+  shrine: { at: 'stone', label: 'at the Humming Stone', dur: 30, gain: { wonder: 8 }, desc: 'visit the Humming Stone and check for notes from visitors' },
+  visit: { at: null, label: 'visiting', dur: 50, gain: { wonder: 4, joy: 2 }, desc: 'go to a particular place in town (give its id as "target") and spend time there' },
+  explore: { at: null, label: 'exploring', dur: 35, gain: { wonder: 10, energy: -3 }, desc: 'explore: head for somewhere he has never been, or a far corner of town' },
+  fog: { at: null, label: 'testing the fog', dur: 50, gain: { wonder: 14 }, desc: 'walk to the end of a road and test the fog at the edge of the world' },
+  wander: { at: null, label: 'wandering', dur: 35, gain: { wonder: 5, joy: 2 }, desc: 'wander the streets nearby' },
+  graffiti: { at: null, label: 'painting on a wall', dur: 40, gain: { joy: 10, wonder: -2 }, desc: 'paint graffiti on a wall somewhere in town (what to paint in "subject", a short tag of a few words in "title")' },
+  inspect: { at: null, label: 'looking closely at something', dur: 45, gain: { wonder: 16, joy: 4 }, desc: 'go and look closely at an object visitors added to town (give its id as "target")' },
 };
 export const ACTION_IDS = Object.keys(ACTIONS);
 
@@ -54,10 +37,10 @@ export const KINDS = {
 };
 
 const BOOKS = [
-  { topic: 'the moon', facts: ['the moon is about 384,000 km away. further than the rim, probably.', 'it always shows the same face to us.'] },
-  { topic: 'frogs', facts: ['frogs can breathe through their skin.', 'a group of frogs is sometimes called an army.'] },
+  { topic: 'the moon', facts: ['the moon is about 384,000 km away. further than the fog, probably.', 'it always shows the same face to us.'] },
+  { topic: 'penguins', facts: ['most penguins live in the southern hemisphere. i live in mossbrook. unclear where that is.', 'penguins can\'t fly, but they fly underwater instead.'] },
   { topic: 'bread', facts: ['bread rises because yeast makes tiny bubbles of gas.', 'people have baked bread for over ten thousand years.'] },
-  { topic: 'stars', facts: ['stars are huge balls of hot gas, very far away.', 'the light from some of them left long before anyone saw it.'] },
+  { topic: 'fog', facts: ['fog is a cloud touching the ground.', 'it forms when air cools until the water in it condenses into tiny droplets.'] },
   { topic: 'moss', facts: ['moss has no proper roots. it holds on with threads called rhizoids.', 'some moss can dry out completely and wake up again with rain.'] },
 ];
 
@@ -71,42 +54,49 @@ const WEATHER = {
 const EVENTS = [
   { id: 'bread', text: () => 'the bakery has a new loaf today: ' + pick(['seeded rye', 'honey buns', 'tiny pretzels', 'something with figs in it']) + '.' },
   { id: 'bakery_shut', text: () => 'the bakery has a sign on the door: "gone fishing". it is shut all day.' },
-  { id: 'fountain', text: () => 'the fountain in the square has stopped running.' },
   { id: 'parcel', text: () => 'there is a small parcel by the cottage door, with no name on it. inside: ' + pick(['a packet of seeds', 'a blank notebook', 'a brass key that fits nothing', 'a ribbon the colour of the pond', 'a smooth grey pebble']) + '.' },
-  { id: 'bird', text: () => 'a big bird flew low over the island and kept going past the rim.' },
+  { id: 'bird', text: () => 'a big bird flew low over the rooftops and disappeared into the fog.' },
   { id: 'hum', text: () => 'the Humming Stone is humming a different note today, lower than usual.' },
-  { id: 'coin', text: () => 'there is a coin lying between the cobbles in the square.', coin: true },
-  { id: 'busy', text: () => 'it is market day: more people than usual are passing the stall.' },
-  { id: 'flicker', text: () => 'the lamps around the square keep flickering.' },
-  { id: 'echo', text: () => 'from the east rim, every so often, there is a sound like an echo of a voice.' },
-  { id: 'star', text: () => 'last night one star seemed to move across the sky, then stop.' },
+  { id: 'coin', text: () => 'there is a coin lying between the cobbles on the High Street.', coin: true },
+  { id: 'busy', text: () => 'it is market day: the stall has bunting up.' },
+  { id: 'flicker', text: () => 'the street lamps keep flickering.' },
+  { id: 'echo', text: () => 'from somewhere in the fog, every so often, there is a sound like an echo of a voice.' },
+  { id: 'clock', text: () => 'the clock tower struck thirteen this morning.' },
+  { id: 'train', text: () => 'a train whistle was heard from the station, but no train came.' },
+  { id: 'letter', text: () => 'the post office has a letter in the window addressed to "whoever lives here".' },
 ];
 
 export let S = null;
-export const setState = s => { S = s; };
+export function setState(s) {
+  S = s;
+  // things visitors add live in S.things; the town layout needs to see them without saving them twice
+  Object.defineProperty(S.town, 'things', { get: () => S.things, enumerable: false, configurable: true });
+}
 
 export function newWorld() {
+  const town = Town.initialTown();
+  const home = town.places.find(p => p.type === 'home');
   return {
-    v: 1, created: Date.now(), t: 7 * 60, lastDay: 1, lastHour: 7, coins: 6, rev: 1,
+    v: 2, created: Date.now(), t: 7 * 60, lastDay: 1, lastHour: 7, coins: 6, rev: 1, town,
     needs: { fullness: 72, energy: 85, wonder: 58, joy: 60, calm: 64 },
-    pos: { x: PLACES.home.tx, z: PLACES.home.tz }, face: 0, act: null, recent: [], deciding: false, lastFail: '',
-    thought: { text: 'morning. the square is quiet.', src: 'rules' }, recentThoughts: [],
+    pos: { x: home.door.x, z: home.door.z }, face: 0, act: null, recent: [], deciding: false, lastFail: '',
+    thought: { text: 'morning. the street is quiet.', src: 'rules' }, recentThoughts: [],
     self: {
-      description: 'A small green frog who lives in the cottage by the square in Mossbrook. He likes the pond at dusk and warm bread. He has never been past the mist at the east rim.',
-      likes: ['the pond at dusk', 'warm bread'], fears: ['thunder'], obsession: '',
+      description: 'A small penguin who lives in a cottage on Pond Lane in Mossbrook. He likes the pond on the green, cold mornings and fish. He cannot fly and has mostly made his peace with it. Nobody he knows has ever been past the fog where the roads end.',
+      likes: ['the pond at dusk', 'cold mornings', 'fish'], fears: ['thunder', 'very hot days'], obsession: '',
     },
     traits: { curiosity: 0.65, creativity: 0.7 },
-    beliefs: ['the island is the whole world', 'the stone hums louder at night'],
+    beliefs: ['the town is the whole world', 'the stone hums louder at night'],
     goals: [{ text: 'draw something every day', action: 'draw' }],
-    leanings: {}, questions: ['what is past the mist?'],
+    leanings: {}, questions: ['what is past the fog?'],
     knowledge: [], researchQueue: [], memories: [],
-    diary: [], drawings: [], pages: [], notes: [], things: [],
-    dayLog: { 1: [] }, stats: newStats(), visited: {}, rimTests: 0,
-    weather: { kind: 'clear', until: 12 * 60 }, events: [], pendingReflection: [],
+    diary: [], drawings: [], pages: [], notes: [], things: [], graffiti: [],
+    dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
+    weather: { kind: 'clear', until: 12 * 60 }, events: [],
     lastSeenReal: Date.now(),
   };
 }
-const newStats = () => ({ ate: 0, flies: 0, drew: 0, wrote: 0, sold: 0, read: 0, rim: 0, notes: 0, things: 0, closed: 0 });
+const newStats = () => ({ ate: 0, fish: 0, drew: 0, painted: 0, saw: 0, wrote: 0, sold: 0, read: 0, fog: 0, notes: 0, things: 0, closed: 0, found: 0 });
 
 /* ---------- time ---------- */
 export const dayOf = t => Math.floor(t / 1440) + 1;
@@ -114,9 +104,28 @@ export const hourOf = t => (t % 1440) / 60;
 export const hhmm = t => { const m = Math.floor(t % 1440); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
 export const seasonOf = d => SEASONS[Math.floor((d - 1) / 7) % 4];
 export const isNight = h => h >= 21.5 || h < 6;
-export function isOpen(pk, h) {
-  if (pk === 'bakery' && S.events.some(e => e.id === 'bakery_shut')) return false;
-  const o = PLACES[pk] && PLACES[pk].open; return !o || (h >= o[0] && h < o[1]);
+export function isOpen(place, h) {
+  if (!place) return false;
+  if (place.type === 'bakery' && S.events.some(e => e.id === 'bakery_shut')) return false;
+  const o = TYPES[place.type].open; return !o || (h >= o[0] && h < o[1]);
+}
+
+/* ---------- places ---------- */
+export const placeById = id => S.town.places.find(p => p.id === id);
+export function placeOfType(type, from = S.pos) {
+  let best = null, bd = Infinity;
+  for (const p of S.town.places) if (p.type === type && p.known) { const d = Math.hypot(p.x - from.x, p.z - from.z); if (d < bd) { bd = d; best = p; } }
+  return best;
+}
+export function nearPlace(x, z) {
+  let b = 'the middle of town', bd = Infinity;
+  for (const p of S.town.places) { if (!p.known) continue; const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; b = p.name; } }
+  return b;
+}
+export function whereIs() {
+  for (const p of S.town.places) if (p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 3) return 'at ' + p.name;
+  const road = Town.roadNameAt(S.town, S.pos.x, S.pos.z);
+  return road ? 'on ' + road : 'near ' + nearPlace(S.pos.x, S.pos.z);
 }
 
 /* ---------- records ---------- */
@@ -135,7 +144,6 @@ export function remember(text, importance = 2) {
   text = str(text, 220); if (!text) return;
   S.memories.push({ text, importance: clamp(Number(importance) || 2, 1, 5), day: dayOf(S.t) });
   if (S.memories.length > 500) {
-    // forget the least important old memories first
     S.memories.sort((a, b) => (b.importance * 3 + b.day * 0.2) - (a.importance * 3 + a.day * 0.2));
     S.memories.length = 450;
   }
@@ -148,26 +156,26 @@ export function feel(k, v) { S.needs[k] = clamp(S.needs[k] + v, 0, 100); }
 export function applyFeel(r) { if (!r) return; for (const k of ['joy', 'calm', 'wonder']) { const v = Number(r[k]); if (Number.isFinite(v)) feel(k, clamp(v, -12, 12)); } }
 export const thingById = id => S.things.find(t => t.id === id);
 export const unsold = () => S.drawings.filter(d => !d.sold);
-export function nearPlace(x, z) { let b = 'the square', bd = 1e9; for (const k in PLACES) { const p = PLACES[k]; const d = Math.hypot(p.bx - x, p.bz - z); if (d < bd) { bd = d; b = p.name; } } return b; }
 export function moodWord() {
   const n = S.needs;
   if (n.fullness < 22) return 'hungry'; if (n.energy < 18) return 'sleepy'; if (n.calm < 32) return 'jittery';
   if (n.wonder < 25) return 'bored'; if (n.joy > 74) return 'happy'; if (n.wonder > 74) return 'curious'; if (n.joy < 32) return 'low';
   return 'content';
 }
-export function whereIs() {
-  let best = 'out on the island', bd = 3.5;
-  for (const k in PLACES) { const p = PLACES[k]; const d = Math.hypot(p.tx - S.pos.x, p.tz - S.pos.z); if (d < bd) { bd = d; best = 'at ' + p.name; } }
-  return best;
-}
 export function doingText() {
   const a = S.act;
   if (!a) return S.deciding ? 'stopping to think' : 'deciding what to do';
   if (a.doing && a.phase === 'do') return a.doing;
-  const A = ACTIONS[a.id];
+  const where = a.place ? placeById(a.place) : null;
   if (a.id === 'inspect') { const th = thingById(a.thing); const nm = th ? 'the ' + plainName(th.name) : 'something'; return a.phase === 'walk' ? 'going to look at ' + nm : 'looking closely at ' + nm; }
-  if (a.phase === 'walk') return a.id === 'wander' || a.id === 'explore' ? A.label : 'heading to ' + PLACES[A.place].name + (a.doing ? ' (' + a.doing + ')' : '');
-  return A.label + (A.place && a.id !== 'wander' ? ' at ' + PLACES[A.place].name : '');
+  if (a.phase === 'walk') {
+    if (a.id === 'fog') return 'walking to where ' + (a.road || 'the road') + ' meets the fog';
+    if (a.id === 'explore') return where && !where.known ? 'exploring towards the edge of town' : 'exploring';
+    if (a.id === 'wander') return 'wandering';
+    return 'heading to ' + (where ? where.name : 'somewhere') + (a.doing ? ' (' + a.doing + ')' : '');
+  }
+  if (a.id === 'fog') return 'pressing at the fog at the end of ' + (a.road || 'the road');
+  return ACTIONS[a.id].label + (where ? ' at ' + where.name : '');
 }
 
 /* ---------- needs ---------- */
@@ -181,31 +189,33 @@ function decay(mins, asleep) {
   if (n.fullness < 25) { n.joy -= 2 / 60 * mins; n.calm -= 3 / 60 * mins; }
   if (n.energy < 20) n.calm -= 2 / 60 * mins;
   if (n.wonder < 25) n.joy -= 1 / 60 * mins;
-  if (!asleep && (w === 'rain' || w === 'snow') && outdoors()) n.calm -= 1.5 / 60 * mins;
+  if (!asleep && w === 'rain' && outdoors()) n.calm -= 1.5 / 60 * mins;
+  if (!asleep && w === 'snow' && outdoors()) n.joy += 2 / 60 * mins; // a penguin likes snow
   for (const k in n) n[k] = clamp(n[k], 0, 100);
 }
-function outdoors() { const a = S.act; return !a || !['sleep', 'nap', 'draw', 'write', 'read', 'tidy', 'eat'].includes(a.id) || a.phase === 'walk'; }
+function outdoors() { const a = S.act; return !a || a.phase === 'walk' || !['sleep', 'nap', 'draw', 'write', 'read', 'tidy', 'eat', 'visit'].includes(a.id); }
 
-/* ---------- simple rules (used when Claude is off, over budget or slow) ---------- */
-function bestThing() {
-  let best = null, bs = -1e9;
-  for (const th of S.things) { let s = th.seen ? (0.25 - th.inspections * 0.12 + (th.liked ? 0.3 : 0)) : (2.2 + S.traits.curiosity); s += Math.random() * 0.2; if (s > bs) { bs = s; best = th; } }
-  return best ? { s: bs, thing: best.id } : null;
-}
+/* ---------- what's possible right now ---------- */
 export function available(id, h = hourOf(S.t)) {
   const A = ACTIONS[id], n = S.needs, night = isNight(h);
-  if (A.place && A.place !== 'home' && !isOpen(A.place, h)) return false;
+  if (A.at) { const p = placeOfType(A.at); if (!p) return false; if (A.at !== 'home' && !isOpen(p, h)) return false; }
   switch (id) {
     case 'sleep': return night || n.energy < 15;
     case 'nap': return !night && n.energy < 45;
     case 'eat': return S.coins >= 2;
-    case 'flies': return !night && !(seasonOf(dayOf(S.t)) === 'winter' && S.weather.kind === 'snow');
+    case 'fish': return !night;
     case 'sell': return unsold().length > 0;
     case 'stargaze': return (h >= 20 || h < 4) && S.weather.kind !== 'fog';
     case 'inspect': return S.things.length > 0;
-    case 'write': return false; // needs Claude; the mind enables it itself
+    case 'write': return false; // needs Claude; the mind offers it itself
     default: return true;
   }
+}
+function unknownPlaces() { return S.town.places.filter(p => !p.known); }
+function bestThing() {
+  let best = null, bs = -1e9;
+  for (const th of S.things) { let s = th.seen ? (0.25 - th.inspections * 0.12 + (th.liked ? 0.3 : 0)) : (2.2 + S.traits.curiosity); s += Math.random() * 0.2; if (s > bs) { bs = s; best = th; } }
+  return best ? { s: bs, thing: best.id } : null;
 }
 function ruleScore(id, h) {
   if (!available(id, h)) return -1e9;
@@ -215,17 +225,20 @@ function ruleScore(id, h) {
     case 'sleep': s = night ? 3 + (100 - n.energy) * 0.02 : 2.5; if (h >= 6 && h < 9 && n.energy > 60) return -1e9; break;
     case 'nap': s = 0.8 + (45 - n.energy) * 0.05; break;
     case 'eat': s = (100 - n.fullness) * 0.035; break;
-    case 'flies': s = (100 - n.fullness) * 0.022 + (S.coins < 2 ? 0.4 : 0); break;
+    case 'fish': s = (100 - n.fullness) * 0.025 + (S.coins < 2 ? 0.4 : 0); break;
     case 'draw': s = 0.7 + tr.creativity * 0.6 + (100 - n.joy) * 0.006 + (wet ? 0.3 : 0) - (n.energy < 25 ? 0.6 : 0) - S.stats.drew * 0.45; break;
     case 'sell': s = 0.3 + unsold().length * 0.25 + (S.coins < 4 ? 0.8 : 0) + (S.events.some(e => e.id === 'busy') ? 0.5 : 0); break;
     case 'read': s = (100 - n.wonder) * 0.02 + tr.curiosity * 0.5 + (S.researchQueue.length ? 1.2 : 0) + (wet ? 0.3 : 0); break;
     case 'pond': s = (100 - n.calm) * 0.025 + 0.3 - (wet ? 0.4 : 0); break;
     case 'stargaze': s = 0.6 + (100 - n.wonder) * 0.018; break;
     case 'shrine': s = 0.3 + S.notes.filter(x => !x.read).length * 1.6 + (n.wonder < 40 ? 0.45 : 0); break;
-    case 'rim': s = n.wonder < 40 ? 0.6 + tr.curiosity * 0.8 + (40 - n.wonder) * 0.03 : 0.05; if (S.weather.kind === 'fog') s += 0.3; break;
-    case 'wander': s = 0.45 + (n.wonder < 35 ? 0.3 : 0) - (wet ? 0.3 : 0); break;
-    case 'explore': s = 0.3 + tr.curiosity * 0.4 - (wet ? 0.3 : 0); break;
+    case 'fog': s = n.wonder < 40 ? 0.5 + tr.curiosity * 0.8 + (40 - n.wonder) * 0.03 : 0.05; if (S.weather.kind === 'fog') s += 0.3; break;
+    case 'explore': s = 0.3 + tr.curiosity * 0.4 + unknownPlaces().length * 0.9 - (wet ? 0.3 : 0); break;
+    case 'visit': s = 0.4 + (n.wonder < 45 ? 0.3 : 0); break;
+    case 'wander': s = 0.4 + (n.wonder < 35 ? 0.3 : 0) - (wet ? 0.3 : 0); break;
     case 'tidy': s = 0.25 + (n.calm < 45 ? 0.4 : 0); break;
+    case 'graffiti': s = 0.15 + (n.joy < 45 ? 0.2 : 0) + tr.creativity * 0.3 - S.stats.painted * 0.6; break;
+    case 'write': s = -1e9; break;
     case 'inspect': { const b = bestThing(); if (!b) return -1e9; return b.s - (night ? 0.5 : 0) + (Number(S.leanings.inspect) || 0) * 0.45; }
   }
   if (night && !['sleep', 'stargaze', 'pond'].includes(id)) s -= 1;
@@ -236,37 +249,70 @@ function ruleScore(id, h) {
 }
 const RULE_THOUGHTS = {
   sleep: ['eyes heavy. home.', 'the lamps are on. bed.'], nap: ['legs feel like wet leaves. short nap.'],
-  eat: ['bread. now.', 'stomach is making the pond noise.'], flies: ['the pond has free lunch.'],
+  eat: ['bread. now.', 'stomach is making the pond noise.'], fish: ['the pond has free lunch. with fins.'],
   draw: ['an idea. going home before it leaves.'], sell: ['maybe someone wants a drawing today.'],
   read: ['want to know something new.'], pond: ['need the pond for a bit.'], stargaze: ['clear night. up the hill.'],
-  shrine: ['the stone is humming. can feel it from here.'], rim: ['going east until something stops me.'],
-  wander: ['no plan. just walking.'], explore: ['haven\'t been round that side for a while.'], tidy: ['the cottage is a mess. so am i.'],
-  inspect: ['something new over there.'],
+  shrine: ['the stone is humming. can feel it from here.'], fog: ['going to the end of the road. again.'],
+  wander: ['no plan. just walking.'], explore: ['haven\'t been down that way for a while.'], tidy: ['the cottage is a mess. so am i.'],
+  visit: ['might pop in somewhere.'], graffiti: ['that wall is too clean.'], inspect: ['something new over there.'],
 };
 export function ruleDecision() {
-  const h = hourOf(S.t); let best = 'wander', bs = -1e9, bt = null;
-  for (const id of ACTION_IDS) {
-    const s = id === 'inspect' ? ruleScore(id, h) : ruleScore(id, h);
-    if (s > bs) { bs = s; best = id; bt = id === 'inspect' ? (bestThing() || {}).thing : null; }
-  }
-  return { action: best, target: bt, thought: pick(RULE_THOUGHTS[best] || ['hm.']), src: 'rules' };
+  const h = hourOf(S.t); let best = 'wander', bs = -1e9;
+  for (const id of ACTION_IDS) { const s = ruleScore(id, h); if (s > bs) { bs = s; best = id; } }
+  const dec = { action: best, thought: pick(RULE_THOUGHTS[best] || ['hm.']), src: 'rules' };
+  if (best === 'inspect') dec.target = (bestThing() || {}).thing;
+  if (best === 'visit') { const opts = S.town.places.filter(p => p.known && TYPES[p.type].acts.includes('visit') && isOpen(p, h)); const p = opts.sort((a, b) => a.visits - b.visits)[0]; dec.target = p && p.id; }
+  return dec;
 }
 
 /* ---------- carrying out decisions ---------- */
-function targetFor(a) {
-  if (a.id === 'inspect') { const th = thingById(a.thing); if (th) { const L = Math.hypot(th.x, th.z) || 1; return { x: th.x - th.x / L * 1.7, z: th.z - th.z / L * 1.7 }; } }
-  if (a.id === 'wander') { const ang = Math.random() * Math.PI * 2, r = 3 + Math.random() * 6; return { x: Math.cos(ang) * r, z: Math.sin(ang) * r }; }
-  if (a.id === 'explore') {
-    for (let i = 0; i < 40; i++) { const ang = Math.random() * Math.PI * 2, r = 8 + Math.random() * 10; const x = Math.cos(ang) * r, z = Math.sin(ang) * r; if (!Object.values(PLACES).some(p => Math.hypot(p.bx - x, p.bz - z) < 4)) return { x, z }; }
-    return { x: -5, z: 15 };
+function chooseTarget(a, dec) {
+  const A = ACTIONS[a.id];
+  if (A.at) { const p = placeOfType(A.at); a.place = p.id; return p.door; }
+  if (a.id === 'visit') {
+    let p = placeById(dec.target);
+    if (!p || !p.known) p = S.town.places.filter(x => x.known && x.type !== 'home').sort((x, y) => x.visits - y.visits)[0];
+    a.place = p.id; return p.door;
   }
-  const p = PLACES[ACTIONS[a.id].place]; return { x: p.tx, z: p.tz };
+  if (a.id === 'inspect') { const th = thingById(a.thing); if (th) { const n = Town.nearestRoad(S.town, th.x, th.z); const dx = n.x - th.x, dz = n.z - th.z, L = Math.hypot(dx, dz) || 1; return { x: th.x + dx / L * 1.8, z: th.z + dz / L * 1.8 }; } }
+  if (a.id === 'explore') {
+    const un = unknownPlaces();
+    if (un.length) { const p = un.sort((x, y) => Math.hypot(x.x - S.pos.x, x.z - S.pos.z) - Math.hypot(y.x - S.pos.x, y.z - S.pos.z))[0]; a.place = p.id; return p.door; }
+    const e = pick(S.town.edges.filter(e => !e.path)); const A2 = S.town.nodes[e.a], B2 = S.town.nodes[e.b], t = Math.random();
+    return { x: A2.x + (B2.x - A2.x) * t, z: A2.z + (B2.z - A2.z) * t };
+  }
+  if (a.id === 'graffiti') {
+    const walls = [];
+    for (const p of S.town.places) {
+      if (!p.known || p.h <= 0 || p.type === 'home' || p.type === 'market') continue;
+      for (const side of [-1, 1]) {
+        const rx = Math.cos(p.rot) * side, rz = -Math.sin(p.rot) * side; // the building's side wall direction
+        const wx = p.x + rx * (p.w / 2 + 0.03), wz = p.z + rz * (p.w / 2 + 0.03);
+        if (S.graffiti.some(g => Math.hypot(g.x - wx, g.z - wz) < 2.5)) continue;
+        walls.push({ p, wx, wz, nx: rx, nz: rz, d: Math.hypot(wx - S.pos.x, wz - S.pos.z) });
+      }
+    }
+    walls.sort((a, b) => a.d - b.d);
+    const w = pick(walls.slice(0, 4));
+    if (w) { a.wall = { x: w.wx, z: w.wz, nx: w.nx, nz: w.nz, place: w.p.id, where: 'on the side of ' + w.p.name }; a.place = null; return { x: w.wx + w.nx * 1.4, z: w.wz + w.nz * 1.4 }; }
+  }
+  if (a.id === 'fog') {
+    const ends = Town.endNodes(S.town); const id = pick(ends); const n = S.town.nodes[id];
+    const e = S.town.edges.find(x => x.a === id || x.b === id); a.road = e ? e.name : 'the road';
+    const L = Math.hypot(n.x, n.z) || 1; return { x: n.x + n.x / L * 2, z: n.z + n.z / L * 2 };
+  }
+  // wander: somewhere along a nearby road
+  const near = S.town.edges.filter(e => !e.path).map(e => ({ e, d: Town.segInfo(S.pos.x, S.pos.z, S.town.nodes[e.a].x, S.town.nodes[e.a].z, S.town.nodes[e.b].x, S.town.nodes[e.b].z).d })).sort((x, y) => x.d - y.d).slice(0, 4);
+  const e = pick(near).e, t = Math.random(), A3 = S.town.nodes[e.a], B3 = S.town.nodes[e.b];
+  return { x: A3.x + (B3.x - A3.x) * t, z: A3.z + (B3.z - A3.z) * t };
 }
 export function startAct(dec) {
   let id = ACTIONS[dec.action] ? dec.action : 'wander';
   if (id === 'inspect' && !thingById(dec.target)) { const b = bestThing(); if (b) dec.target = b.thing; else id = 'wander'; }
-  const a = { id, phase: 'walk', thing: id === 'inspect' ? dec.target : null, doing: str(dec.doing, 80), subject: str(dec.subject, 80), src: dec.src || 'rules' };
-  const tg = targetFor(a); a.tx = tg.x; a.tz = tg.z;
+  if (ACTIONS[id].at && !placeOfType(ACTIONS[id].at)) id = 'wander';
+  const a = { id, phase: 'walk', thing: id === 'inspect' ? dec.target : null, doing: str(dec.doing, 80), subject: str(dec.subject, 80), title: str(dec.title, 50), src: dec.src || 'rules' };
+  const tg = chooseTarget(a, dec);
+  a.tx = tg.x; a.tz = tg.z; a.path = Town.route(S.town, S.pos, tg); a.wp = 0;
   S.act = a; S.recent.push(id); if (S.recent.length > 10) S.recent.shift();
   if (dec.thought) setThought(dec.thought, dec.src === 'claude' ? 'claude' : 'rules');
   S.lastFail = '';
@@ -276,58 +322,67 @@ function durFor(id, h) {
   if (id === 'sleep') { if (h >= 20) return Math.round((24 - h + 7) * 60); if (h < 7) return Math.max(60, Math.round((7 - h) * 60)); return 240; }
   return ACTIONS[id].dur;
 }
-function fail(a, why, thought) {
+function fail(why, thought) {
   S.lastFail = why; log(why); feel('calm', -5); feel('joy', -3); setThought(thought || why);
   S.act = null; bump();
 }
 
-let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onHour: () => {} };
+let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {} };
 export const setHooks = h => { hooks = { ...hooks, ...h }; };
 
 function arrive(a) {
-  const A = ACTIONS[a.id], h = hourOf(S.t);
-  if (A.place && !isOpen(A.place, h)) {
+  const h = hourOf(S.t), p = a.place ? placeById(a.place) : null;
+  if (p && !p.known) discover(p);
+  if (p && TYPES[p.type].open && !isOpen(p, h)) {
     S.stats.closed++;
-    if (S.stats.closed === 1) addDiary('event', 'walked all the way to ' + PLACES[A.place].name + '. shut. i should read the sign properly.');
-    return fail(a, PLACES[A.place].name + ' was closed', PLACES[A.place].name + ' is shut. walked all that way.');
+    if (S.stats.closed === 1) addDiary('event', 'walked all the way to ' + p.name + '. shut. i should read the sign on the door properly.');
+    return fail(p.name + ' was closed', p.name + ' is shut. walked all that way.');
   }
-  if (a.id === 'eat' && S.coins < 2) return fail(a, 'not enough coins for bread', 'not enough coins. flies, then.');
-  if (a.id === 'sell' && !unsold().length) return fail(a, 'had nothing to sell', 'nothing to sell. need to draw more.');
-  if (a.id === 'inspect' && !thingById(a.thing)) return fail(a, 'the thing he went to see was gone', 'it\'s gone. was it ever there?');
+  if (a.id === 'eat' && S.coins < 2) return fail('not enough coins for bread', 'not enough coins. fish, then.');
+  if (a.id === 'sell' && !unsold().length) return fail('had nothing to sell', 'nothing to sell. need to draw more.');
+  if (a.id === 'inspect' && !thingById(a.thing)) return fail('the thing he went to see was gone', 'it\'s gone. was it ever there?');
   a.phase = 'do'; a.total = a.left = durFor(a.id, h);
   if (a.id === 'inspect') { const th = thingById(a.thing); S.face = Math.atan2(th.x - S.pos.x, th.z - S.pos.z); }
-  else if (A.place && PLACES[A.place].depth) { const p = PLACES[A.place]; S.face = Math.atan2(p.bx - S.pos.x, p.bz - S.pos.z); }
-  if (A.place) { const pk = A.place; S.visited[pk] = (S.visited[pk] || 0) + 1; }
+  else if (p && p.h > 0) S.face = Math.atan2(p.x - S.pos.x, p.z - S.pos.z);
+  if (p) { p.visits++; if (a.id === 'visit') { const f = TYPES[p.type].feel || {}; a.extra = f; } }
+  if (a.id === 'fog') S.face = Math.atan2(a.tx, a.tz);
+  if (a.id === 'graffiti' && a.wall) S.face = Math.atan2(-a.wall.nx, -a.wall.nz);
   if (a.id === 'sleep' && (h >= 20 || h < 5)) bedtime(h);
-  hooks.onArrive(a);
+  hooks.onArrive(a, p);
   bump();
+}
+function discover(p) {
+  p.known = true; p.foundDay = dayOf(S.t); S.stats.found++; feel('wonder', 12);
+  log('discovered ' + p.name); setThought(pick(['that wasn\'t here before.', 'a new place. ' + p.name + '.', 'the fog left something behind.']));
+  remember('day ' + dayOf(S.t) + ': discovered ' + p.name + ', a ' + TYPES[p.type].label, 3);
+  hooks.onDiscover(p); S.town.ver++; bump();
 }
 function bedtime(h) {
   const d = h < 12 ? dayOf(S.t) - 1 : dayOf(S.t); if (d < 1) return;
   const st = S.stats, parts = [];
   if (st.ate) parts.push('ate bread ' + (st.ate === 1 ? 'once' : st.ate + ' times'));
-  if (st.flies) parts.push('caught flies');
+  if (st.fish) parts.push('caught fish');
   if (st.drew) parts.push('drew ' + (st.drew === 1 ? 'one picture' : st.drew + ' pictures'));
   if (st.wrote) parts.push('wrote ' + (st.wrote === 1 ? 'a page' : st.wrote + ' pages'));
   if (st.sold) parts.push('sold ' + st.sold);
   if (st.read) parts.push('read at the library');
-  if (st.rim) parts.push('went to the rim');
+  if (st.fog) parts.push('tested the fog');
+  if (st.found) parts.push('found ' + (st.found === 1 ? 'a new place' : st.found + ' new places'));
   if (st.things) parts.push('looked at new things');
   if (st.notes) parts.push('found ' + (st.notes === 1 ? 'a note' : st.notes + ' notes'));
   addDiary('summary', 'day ' + d + '. ' + (parts.length ? parts.join(', ') : 'not much happened') + '. mostly felt ' + moodWord() + '.');
   S.stats = newStats();
   hooks.onBedtime(d);
 }
-
 function finish(a) {
   switch (a.id) {
     case 'eat': S.coins -= 2; S.stats.ate++; log('ate bread at the bakery'); break;
-    case 'flies': S.stats.flies++; log('caught flies at the pond'); break;
+    case 'fish': S.stats.fish++; log('caught fish in the pond'); break;
     case 'draw': S.stats.drew++; break;
     case 'write': S.stats.wrote++; break;
     case 'sell': {
       const u = unsold(), busy = S.events.some(e => e.id === 'busy');
-      if (Math.random() < 0.45 + S.needs.joy * 0.003 + (busy ? 0.2 : 0)) {
+      if (u.length && Math.random() < 0.45 + S.needs.joy * 0.003 + (busy ? 0.2 : 0)) {
         const dr = u[0], c = 3 + Math.floor(Math.random() * 4); dr.sold = true; S.coins += c; S.stats.sold++; feel('joy', 8);
         log('sold "' + dr.title + '" for ' + c + ' coins');
         addDiary('event', 'sold "' + dr.title + '" for ' + c + ' coins. someone will hang it somewhere i\'ll never see.');
@@ -336,12 +391,13 @@ function finish(a) {
     }
     case 'read': S.stats.read++; break;
     case 'pond': log('sat by the pond'); break;
-    case 'stargaze': log('watched the stars from the lookout'); break;
-    case 'wander': log('wandered around the square'); break;
-    case 'explore': log('explored near ' + nearPlace(S.pos.x, S.pos.z)); break;
+    case 'stargaze': log('watched the stars from the lookout hill'); break;
+    case 'wander': log('wandered ' + whereIs()); break;
+    case 'explore': log('explored ' + whereIs()); break;
+    case 'visit': { const p = placeById(a.place); if (p) log('spent time at ' + p.name); break; }
     case 'tidy': log('tidied the cottage'); break;
-    case 'rim': S.rimTests++; S.stats.rim++; log('tested the rim (test #' + S.rimTests + ')'); break;
-    case 'shrine': break;
+    case 'graffiti': if (a.wall) { S.stats.painted++; const g = { id: uid(), by: 'percy', x: a.wall.x, y: 1.75, z: a.wall.z, nx: a.wall.nx, nz: a.wall.nz, w: 2.2, h: 2.3, place: a.wall.place, where: a.wall.where, tag: a.title || '', subject: a.subject || '', seed: Math.floor(Math.random() * 1e9), day: dayOf(S.t), seen: true }; S.graffiti.push(g); a.made = g; log('painted graffiti ' + a.wall.where); } break;
+    case 'fog': S.fogTests++; S.stats.fog++; log('tested the fog at the end of ' + (a.road || 'a road') + ' (test #' + S.fogTests + ')'); break;
     case 'inspect': { const th = thingById(a.thing); if (th) { th.inspections++; S.stats.things++; if (th.inspections >= 3) th.liked = true; } break; }
     case 'sleep': log('woke up'); break;
     case 'nap': log('took a nap'); break;
@@ -349,38 +405,53 @@ function finish(a) {
   hooks.onFinish(a);
 }
 
-/* ---------- weather and happenings ---------- */
+/* ---------- weather, happenings, growth ---------- */
 function weightedPick(list) { const tot = list.reduce((s, x) => s + x[1], 0); let r = Math.random() * tot; for (const [k, w] of list) { if ((r -= w) <= 0) return k; } return list[0][0]; }
 function onHour(h, d) {
   if (S.t >= S.weather.until) {
     const prev = S.weather.kind, next = weightedPick(WEATHER[seasonOf(d)]);
     S.weather = { kind: next, until: S.t + (3 + Math.random() * 6) * 60 };
-    if (next !== prev) { log('the weather turned ' + (next === 'clear' ? 'clear' : next === 'cloudy' ? 'cloudy' : next === 'wind' ? 'windy' : next === 'fog' ? 'foggy' : next === 'snow' ? 'snowy' : 'rainy')); bump(); }
+    if (next !== prev) { log('the weather turned ' + ({ clear: 'clear', cloudy: 'cloudy', wind: 'windy', fog: 'foggy', snow: 'snowy', rain: 'rainy' })[next]); bump(); }
   }
   if (h >= 7 && h < 20 && Math.random() < 0.06 && S.events.length < 3) {
     const ev = pick(EVENTS.filter(e => !S.events.some(x => x.id === e.id)));
     if (ev) {
       const item = { id: ev.id, text: ev.text(), day: d };
       S.events.push(item); log('happening: ' + item.text);
-      if (ev.coin) { S.coins += 1; }
+      if (ev.coin) S.coins += 1;
       remember('day ' + d + ': ' + item.text, 2); bump();
     }
   }
-  hooks.onHour(h, d);
+  if (h === 5 && config.growEveryDays > 0 && d > 1 && (d - 1) % config.growEveryDays === 0) growTown('time');
+}
+export function growTown(by = 'time') {
+  const g = Town.grow(S.town, { day: dayOf(S.t) });
+  const text = 'the fog has pulled back' + (g.road ? ' along ' + g.road : '') + '. there is more town out there than there was.';
+  S.events.push({ id: 'grow-' + uid(), text, day: dayOf(S.t) }); log(text);
+  remember('day ' + dayOf(S.t) + ': ' + text, 3); hooks.onGrow(g, by); bump();
+  return g;
+}
+export function addBuilding({ kind, name, desc, x, z }) {
+  if (!BUILDABLE.includes(kind)) return { error: 'Pick one of the building types.' };
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return { error: 'Pick a spot.' };
+  if (Math.hypot(x, z) > S.town.R + 12) return { error: 'That\'s too deep in the fog. Try nearer the edge of town.' };
+  const T = TYPES[kind]; const rot = Town.facingRot(S.town, x, z);
+  if (!Town.fits(S.town, x, z, T.w, T.d, rot)) return { error: 'Not enough room there. Try a bit further from the road and other buildings.' };
+  const p = Town.addPlace(S.town, { type: kind, name: str(name, 50), desc, x, z, rot, known: false, builtBy: 'keeper', day: dayOf(S.t) });
+  log('something new was built near ' + nearPlace(x, z)); bump();
+  return { place: p };
 }
 function newDay(d) {
   S.lastDay = d; S.dayLog[d] = S.dayLog[d] || [];
   const keys = Object.keys(S.dayLog).map(Number).sort((a, b) => a - b);
   while (keys.length > 6) delete S.dayLog[keys.shift()];
-  // most happenings last a day; a broken fountain or the echo linger for two
-  S.events = S.events.filter(e => ['fountain', 'echo'].includes(e.id) ? d - e.day < 2 : e.day >= d);
+  S.events = S.events.filter(e => e.id === 'echo' ? d - e.day < 2 : e.id.startsWith('grow-') ? d - e.day < 2 : e.day >= d);
   if (d > 1 && (d - 1) % 7 === 0) { log('the season turned to ' + seasonOf(d)); addDiary('event', 'it feels like ' + seasonOf(d) + ' now. the air changed overnight.'); }
 }
 
 /* ---------- the main tick (called several times a second with real seconds) ---------- */
 export function tick(dt, requestDecision) {
-  const mins = dt * config.timeScale / 60;
-  const before = S.t;
+  const mins = dt * config.timeScale / 60, before = S.t;
   S.t += mins;
   const d = dayOf(S.t); if (d !== S.lastDay) newDay(d);
   const h = Math.floor(hourOf(S.t)); if (h !== S.lastHour) { S.lastHour = h; onHour(h, d); }
@@ -389,34 +460,42 @@ export function tick(dt, requestDecision) {
   decay(S.t - before, asleep);
   if (!a) { if (!S.deciding) requestDecision(); return; }
   if (a.phase === 'walk') {
-    const dx = a.tx - S.pos.x, dz = a.tz - S.pos.z, dist = Math.hypot(dx, dz), stepLen = WALK_SPEED * dt;
-    if (dist <= stepLen) { S.pos.x = a.tx; S.pos.z = a.tz; arrive(a); }
-    else { S.pos.x += dx / dist * stepLen; S.pos.z += dz / dist * stepLen; S.face = Math.atan2(dx, dz); noticeThings(); }
+    let stepLen = WALK_SPEED * dt;
+    while (stepLen > 0 && a.wp < a.path.length) {
+      const wpt = a.path[a.wp], dx = wpt.x - S.pos.x, dz = wpt.z - S.pos.z, dist = Math.hypot(dx, dz);
+      if (dist <= stepLen) { S.pos.x = wpt.x; S.pos.z = wpt.z; stepLen -= dist; a.wp++; }
+      else { S.pos.x += dx / dist * stepLen; S.pos.z += dz / dist * stepLen; S.face = Math.atan2(dx, dz); stepLen = 0; }
+    }
+    noticeThings();
+    if (a.wp >= a.path.length) arrive(a);
   } else if (a.phase === 'do') {
-    const g = ACTIONS[a.id].gain; for (const k in g) feel(k, g[k] * (S.t - before) / a.total);
+    const g = { ...ACTIONS[a.id].gain, ...(a.extra || {}) };
+    for (const k in g) feel(k, g[k] * (S.t - before) / a.total);
     a.left -= S.t - before;
     if (a.left <= 0) { finish(a); S.act = null; bump(); }
   }
 }
 function noticeThings() {
   for (const th of S.things) {
-    if (!th.noticed && Math.hypot(th.x - S.pos.x, th.z - S.pos.z) < 7) {
+    if (!th.noticed && Math.hypot(th.x - S.pos.x, th.z - S.pos.z) < 8) {
       th.noticed = true; feel('wonder', 4); log('noticed something new: ' + th.name);
       setThought(pick(['what is that? that wasn\'t there before.', 'something new by ' + nearPlace(th.x, th.z) + '.'])); bump();
     }
   }
+  for (const p of S.town.places) if (!p.known && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 9) discover(p);
+  for (const g of S.graffiti) if (!g.seen && Math.hypot(g.x - S.pos.x, g.z - S.pos.z) < 8) { g.seen = true; S.stats.saw++; feel('wonder', 6); log('noticed new graffiti ' + (g.where || 'on a wall')); setThought(pick(['someone painted on that wall.', 'that wasn\'t on the wall yesterday.'])); hooks.onGraffitiSeen(g); bump(); }
 }
 
-/* ---------- visitor actions ---------- */
-export function spotProblem(x, z) {
-  if (!Number.isFinite(x) || !Number.isFinite(z)) return 'Pick a spot on the island.';
-  if (Math.hypot(x, z) > 19.5) return 'Too close to the edge. Try further in.';
-  for (const k in PLACES) { const p = PLACES[k]; const r = k === 'pond' || k === 'lookout' ? 5.5 : k === 'square' ? 3.2 : 3.6; if (Math.hypot(p.bx - x, p.bz - z) < r) return 'That spot is taken by ' + p.name + '. Try another.'; }
-  for (const t of S.things) if (Math.hypot(t.x - x, t.z - z) < 2.4) return 'Too close to the ' + plainName(t.name) + '.';
+/* ---------- visitor objects ---------- */
+export function spotProblem(x, z, size = 1.6) {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return 'Pick a spot in town.';
+  if (Math.hypot(x, z) > S.town.R - 3) return 'That\'s in the fog. Try somewhere in town.';
+  if (Town.nearestRoad(S.town, x, z).d < 2.4) return 'That\'s on the road. Try beside it.';
+  if (!Town.fits(S.town, x, z, size, size, 0)) return 'There\'s something already there, or it\'s too close to the road. Try another spot.';
   return null;
 }
-export function addThing({ kind, name, desc, x, z }) {
-  const th = { id: uid(), kind: KINDS[kind] ? kind : 'statue', name: str(name, 40), desc: str(desc, 240), x, z, day: dayOf(S.t), seen: false, noticed: false, inspections: 0 };
+export function addThing({ name, desc, x, z, size = 3 }) {
+  const th = { id: uid(), kind: 'made', name: str(name, 60), desc: str(desc, 240), x, z, size: clamp(Number(size) || 3, 1, 8), rot: Math.atan2(-x, -z), day: dayOf(S.t), seen: false, noticed: false, inspections: 0, status: 'building', model: null };
   S.things.push(th);
   log('a ' + plainName(th.name) + ' appeared near ' + nearPlace(x, z));
   if (S.act && S.act.phase === 'walk' && S.act.id !== 'sleep') S.act = null;
@@ -428,18 +507,24 @@ export function builtinBook() {
 }
 
 /* ---------- public snapshot for the web page ---------- */
+export function publicTown() {
+  const t = S.town;
+  return { ver: t.ver, R: t.R, nodes: t.nodes, edges: t.edges.map(e => ({ a: e.a, b: e.b, name: e.name, path: !!e.path })),
+    places: t.places.map(p => ({ id: p.id, type: p.type, name: p.name, x: p.x, z: p.z, w: p.w, d: p.d, h: p.h, rot: p.rot, door: p.door, known: p.known, seed: p.seed, builtBy: p.builtBy })) };
+}
 export function publicState(extra = {}) {
   return {
     t: S.t, day: dayOf(S.t), time: hhmm(S.t), season: seasonOf(dayOf(S.t)), rev: S.rev,
     needs: S.needs, coins: S.coins, mood: moodWord(), pos: S.pos, face: S.face,
-    act: S.act ? { id: S.act.id, phase: S.act.phase, tx: S.act.tx, tz: S.act.tz } : null,
+    act: S.act ? { id: S.act.id, phase: S.act.phase } : null,
     doing: doingText(), thought: S.thought, weather: S.weather.kind, events: S.events.map(e => e.text),
     self: S.self, beliefs: S.beliefs, goals: S.goals, leanings: S.leanings, questions: S.questions,
     knowledge: S.knowledge.slice(-40), researchQueue: S.researchQueue.map(r => r.topic),
     diary: S.diary.slice(-150), drawings: S.drawings.slice(-60), pages: S.pages.slice(-30),
     notes: S.notes.slice(0, 40).map(n => ({ id: n.id, text: n.text, from: n.from, day: n.day, read: n.read, readDay: n.readDay, reaction: n.read && n.reaction ? n.reaction.reaction : '' })),
-    things: S.things.map(t => ({ id: t.id, kind: t.kind, name: t.name, x: t.x, z: t.z, seen: t.seen, noticed: t.noticed, inspections: t.inspections })),
-    rimTests: S.rimTests, memoryCount: S.memories.length,
+    things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, rot: t.rot || 0, size: t.size || 3, status: t.status || 'ready', model: t.model || null, seen: t.seen, noticed: t.noticed, inspections: t.inspections })),
+    graffiti: S.graffiti.map(g => ({ id: g.id, by: g.by, x: g.x, y: g.y, z: g.z, nx: g.nx, nz: g.nz, w: g.w, h: g.h, img: g.img || ('/media/graffiti/' + g.id + '.svg'), where: g.where, day: g.day, seen: g.seen })),
+    town: publicTown(), fogTests: S.fogTests, memoryCount: S.memories.length,
     ...extra,
   };
 }

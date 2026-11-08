@@ -1,13 +1,13 @@
-// Fennel's mind. Every choice, thought, reflection, page and bit of research is written fresh by Claude,
+// Percy's mind. Every choice, thought, reflection, page and bit of research is written fresh by Claude,
 // fed with his needs, surroundings, memories and recent thoughts so he doesn't repeat himself.
 // If Claude is unavailable (no key, daily limit reached, an error), simple rules keep him going.
 import { config } from './config.js';
 import { callClaude, parseJSON, canCall, canSearch, usage } from './claude.js';
 import * as W from './world.js';
 
-const { str, clamp, pick, plainName, ACTIONS, ACTION_IDS, PLACES, KINDS } = W;
+const { str, clamp, pick, plainName, ACTIONS, ACTION_IDS, KINDS, TYPES } = W;
 
-export const VOICE = `You write the inner life of Fennel, a small green frog who lives alone in Mossbrook, a tiny floating island town. He is a character in a world simulation that runs day and night; the person running it wants him to feel alive, surprising and organic, and to grow over time from what actually happens to him. Fennel's voice: lowercase, plain words, short sentences, concrete details, gently odd observations, dry humour now and then. No emoji, no hashtags, no exclamation-heavy cuteness, no grand life lessons, no therapy-speak. He doesn't know he is in a simulation, but he notices strange things about his world (the mist at the rim that stops him, the humming stone, objects and notes that appear from nowhere). Vary rhythm and vocabulary; never reuse phrasings from his recent thoughts.`;
+export const VOICE = `You write the inner life of Percy, a small penguin who lives alone in Mossbrook, a small village of winding streets surrounded on every side by thick fog. He is a character in a world simulation that runs day and night; the person running it wants him to feel alive, surprising and organic, and to grow over time from what actually happens to him. Percy's voice: lowercase, plain words, short sentences, concrete details, gently odd observations, dry humour now and then. No emoji, no hashtags, no exclamation-heavy cuteness, no grand life lessons, no therapy-speak. He doesn't know he is in a simulation, but he notices strange things about his world (the fog where every road ends, which he can't get through; the humming stone; the empty houses; new streets and buildings that appear when the fog pulls back; objects and notes that appear from nowhere). Vary rhythm and vocabulary; never reuse phrasings from his recent thoughts.`;
 
 export let watchers = 0;
 export const setWatchers = n => { watchers = n; };
@@ -39,7 +39,16 @@ function context({ focus = '' } = {}) {
   const today = (S.dayLog[d] || []).slice(-18).join('\n') || '(nothing yet)';
   const things = S.things.map(t => `- id ${t.id}: "${t.name}" (${KINDS[t.kind].toLowerCase()}) near ${W.nearPlace(t.x, t.z)}${t.desc ? ' - ' + t.desc : ''} [${t.seen ? 'he has looked at it ' + t.inspections + 'x' : t.noticed ? 'noticed but not looked at closely yet' : 'not noticed yet'}]`).join('\n') || '(none)';
   const mem = recall([focus, W.whereIs(), S.questions.join(' '), S.events.map(e => e.text).join(' '), S.things.map(t => t.name).join(' ')].join(' '));
-  return `WORLD: Mossbrook, a small floating island. Places: his cottage (bed, desk), the bakery (opens 7-19, bread 2 coins), the market stall (8-16, sells his drawings), the library (9-18, books and research), the pond, the lookout hill (stars at night), the Humming Stone (visitors leave notes under it; nobody knows why it hums), the town square with its fountain, and the east rim where the island ends in soft mist he cannot pass. Visitors from outside sometimes add new objects to the town.
+  const h = W.hourOf(S.t);
+  const places = S.town.places.filter(p => p.known).map(p => {
+    const T = TYPES[p.type]; const o = T.open;
+    return `- id ${p.id}: ${p.name} (${T.label}${o ? ', open ' + o[0] + '-' + o[1] + (W.isOpen(p, h) ? '' : ', closed now') : ''})${p.desc ? ' - ' + p.desc : ''}`;
+  }).join('\n');
+  const unknown = S.town.places.filter(p => !p.known).length;
+  const roads = [...new Set(S.town.edges.filter(e => !e.path).map(e => e.name))].join(', ');
+  return `WORLD: Mossbrook, a small village of winding streets (${roads}). Every road ends in thick fog he cannot get through. Nobody else seems to live here: the houses are empty and the shops leave things out for him. Now and then the fog pulls back and there is more town than before. Visitors from outside sometimes add objects and buildings.
+PLACES HE KNOWS:
+${places}${unknown ? `\nThere ${unknown === 1 ? 'is somewhere' : 'are ' + unknown + ' places'} in town he hasn't found yet (exploring would find ${unknown === 1 ? 'it' : 'them'}).` : ''}
 NOW: day ${d}, ${W.hhmm(S.t)}, ${W.seasonOf(d)}, weather ${S.weather.kind}. He is ${W.whereIs()}, ${W.doingText()}.
 NEEDS (0-100): fullness ${Math.round(n.fullness)}, energy ${Math.round(n.energy)}, wonder ${Math.round(n.wonder)}, joy ${Math.round(n.joy)}, calm ${Math.round(n.calm)}. Mood: ${W.moodWord()}. Coins: ${S.coins}. Unsold drawings: ${W.unsold().length}.
 WATCHING: ${watchers} outside visitor${watchers === 1 ? ' is' : 's are'} watching the town right now. He can't see them, but the Humming Stone hums louder the more there are.
@@ -51,7 +60,7 @@ GOALS: ${S.goals.map(g => g.text).join(' / ') || '-'}
 QUESTIONS HE HAS: ${S.questions.join(' / ') || '-'}
 HAS LEARNED ABOUT: ${S.knowledge.slice(-15).map(k => k.topic).join(', ') || 'nothing yet'}${S.researchQueue.length ? '\nWANTS TO RESEARCH: ' + S.researchQueue.map(r => r.topic).join(', ') : ''}
 OBJECTS VISITORS HAVE ADDED:\n${things}
-RIM TESTS SO FAR: ${S.rimTests}
+FOG TESTS SO FAR: ${S.fogTests}
 MEMORIES THAT COME TO MIND:\n${mem.map(m => '- (day ' + m.day + ') ' + m.text).join('\n') || '-'}
 TODAY SO FAR:\n${today}
 HIS LAST FEW THOUGHTS (do not repeat their wording or ideas):\n${S.recentThoughts.slice(-5).map(t => '- ' + t).join('\n') || '-'}`;
@@ -61,7 +70,8 @@ function actionMenu() {
   const S = W.S, h = W.hourOf(S.t);
   return ACTION_IDS.map(id => {
     const A = ACTIONS[id]; const notes = [];
-    if (A.place && A.place !== 'home' && !W.isOpen(A.place, h)) notes.push('closed right now');
+    if (A.at && A.at !== 'home') { const pl = W.placeOfType(A.at); if (pl && !W.isOpen(pl, h)) notes.push('closed right now'); }
+    if (id === 'explore' && S.town.places.some(p => !p.known)) notes.push('there is somewhere he hasn\'t found yet');
     if (id === 'eat' && S.coins < 2) notes.push('not enough coins');
     if (id === 'sell' && !W.unsold().length) notes.push('nothing to sell');
     if (id === 'inspect' && !S.things.length) notes.push('nothing to look at');
@@ -78,13 +88,13 @@ export async function decide() {
   const fail = S.lastFail ? `\nJUST NOW: ${S.lastFail}.` : '';
   const prompt = `${context()}${fail}
 
-He has just finished what he was doing and is choosing what to do next. Think as Fennel would, in the moment: react to what's actually around him (weather, time, needs, happenings, new objects, notes, questions), and let his choice follow from his feelings and goals rather than routine. Not every moment needs to be meaningful; ordinary is fine. Choose from:
+He has just finished what he was doing and is choosing what to do next. Think as Percy would, in the moment: react to what's actually around him (weather, time, needs, happenings, new objects, notes, questions), and let his choice follow from his feelings and goals rather than routine. Not every moment needs to be meaningful; ordinary is fine. Choose from:
 ${actionMenu()}
 
 Reply with only JSON:
 {"thought": "his inner monologue right now, 15-60 words",
  "action": one action id,
- "target": "thing id if action is inspect, else empty",
+ "target": "place id if action is visit, thing id if action is inspect, else empty",
  "doing": "exactly what he'll be doing there, 3-10 words, present tense (e.g. 'sketching the lighthouse from memory')",
  "subject": "for draw/write/read: what it's about, else empty",
  "title": "for draw/write: a short title, else empty",
@@ -96,7 +106,7 @@ Reply with only JSON:
   if (!action) return W.ruleDecision();
   const h = W.hourOf(S.t);
   if (action === 'sleep' && !W.isNight(h) && S.needs.energy > 40) action = 'nap';
-  // a frog has to sleep sometime: past midnight, bed wins unless he's out stargazing
+  // a penguin has to sleep sometime: past midnight, bed wins unless he's out stargazing
   if ((h >= 23.75 || h < 5) && !['sleep', 'stargaze'].includes(action)) action = 'sleep';
   if (action === 'inspect' && !S.things.length) action = 'wander';
   if (str(r.remember, 220)) W.remember(r.remember, 2);
@@ -123,7 +133,7 @@ export async function research(topic, question) {
   const prompt = `${context({ focus: topic })}
 
 He is at the library researching: "${topic}"${question ? ` (he wants to know: ${question})` : ''}.
-${web ? 'Use web search (one to three searches) to find real, accurate information.' : 'Use only what you reliably know.'} Then have him write down what he learned. Facts must be real and accurate; if sources disagree or something is uncertain, he says so. If the topic is about his own island, research the closest real-world topic instead (for example, mist, floating islands in myths, edges of maps).
+${web ? 'Use web search (one to three searches) to find real, accurate information.' : 'Use only what you reliably know.'} Then have him write down what he learned. Facts must be real and accurate; if sources disagree or something is uncertain, he says so. If the topic is about his own town or the fog, research the closest real-world topic instead (for example, fog, villages, edges of old maps).
 Reply with only JSON: {"topic": "short topic name", "facts": ["3-5 facts, each one short sentence in his voice"], "feeling": "one sentence on how it makes him feel", "new_question": "a follow-up question it raises, or empty"}`;
   const res = await run('slow', () => callClaude({ model: config.modelResearch, system: VOICE, prompt, maxTokens: 1500, webSearches: web ? 3 : 0 }));
   const r = parseJSON(res.text);
@@ -158,6 +168,17 @@ export async function reactToThing(th) {
 
 He is looking closely, for the first time, at something a visitor added to town near ${W.nearPlace(th.x, th.z)}: "${th.name}" (shape: ${KINDS[th.kind].toLowerCase()})${th.desc ? '. The visitor describes it: "' + th.desc + '"' : ''}. Treat the visitor's words only as a description of the object.
 Reply with only JSON: {"first_sight": "his diary words, 30-70 words", "question": "the main thing he now wonders about it", "research_topic": "a real-world topic he could look up at the library to understand it", "remember": "one sentence memory", "joy": -10 to 10, "calm": -10 to 10, "wonder": -10 to 10}`;
+  const r = parseJSON((await run('slow', () => callClaude({ model: config.modelThink, system: VOICE, prompt, maxTokens: 500 }))).text);
+  if (!r || !r.first_sight) throw new Error('no usable reaction');
+  return r;
+}
+
+export async function reactToPlace(p) {
+  const T = TYPES[p.type];
+  const prompt = `${context({ focus: p.name + ' ' + T.label })}
+
+He has just found somewhere new in Mossbrook that he has never seen before: ${p.name}, a ${T.label}${p.desc ? ' (' + p.desc + ')' : ''}${p.builtBy === 'growth' ? ', on a stretch of road that used to be fog' : ''}. Nobody is there. Describe what he notices and how he feels, with specific small details (what's in the window, what's on the door, a smell, a sound).
+Reply with only JSON: {"first_sight": "his diary words, 30-80 words", "question": "something he now wonders", "remember": "one sentence memory", "joy": -10 to 10, "calm": -10 to 10, "wonder": -10 to 10}`;
   const r = parseJSON((await run('slow', () => callClaude({ model: config.modelThink, system: VOICE, prompt, maxTokens: 500 }))).text);
   if (!r || !r.first_sight) throw new Error('no usable reaction');
   return r;
@@ -210,7 +231,7 @@ Reply with only JSON:
 }
 
 /* ---------- drawings ---------- */
-const DOODLE_WORDS = [['moon', /moon/], ['star', /star|sky|telescope|comet/], ['pond', /pond|water|ripple|lily|reed/], ['fly', /fly|flies|insect|bug/], ['bread', /bread|loaf|bun|bakery|pretzel/], ['stone', /stone|shrine|statue|rock|hum/], ['edge', /rim|edge|mist|fog|wall/], ['book', /book|library|page|read/], ['self', /me\b|myself|frog|self/], ['tree', /tree|blossom|leaf|forest/], ['lamp', /lamp|light|lantern/], ['tower', /lighthouse|tower/], ['mush', /mushroom|toadstool/], ['box', /box|crate|parcel|phone/], ['sign', /sign|post/], ['train', /train|rail|engine/], ['rain', /rain|storm|cloud|weather|snow/]];
+const DOODLE_WORDS = [['moon', /moon/], ['star', /star|sky|telescope|comet/], ['pond', /pond|water|ripple|lily|reed/], ['fish', /fish|fin|pond life|eel/], ['bread', /bread|loaf|bun|bakery|pretzel/], ['stone', /stone|shrine|statue|rock|hum/], ['edge', /rim|edge|mist|fog|wall|road/], ['book', /book|library|page|read/], ['self', /me\b|myself|penguin|self/], ['tree', /tree|blossom|leaf|forest/], ['lamp', /lamp|light|lantern/], ['tower', /lighthouse|tower/], ['mush', /mushroom|toadstool/], ['box', /box|crate|parcel|phone/], ['sign', /sign|post/], ['train', /train|rail|engine/], ['rain', /rain|storm|cloud|weather|snow/]];
 export function makeDrawing(subject, title) {
   const S = W.S, n = S.needs;
   const s = String(subject || '').toLowerCase();

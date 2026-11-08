@@ -17,7 +17,14 @@ export const config = {
   timeScale: num(env.TIME_SCALE, 4),               // town minutes per real minute (4 = a town day every 6 real hours)
   maxCallsPerDay: num(env.MAX_CALLS_PER_DAY, 250), // hard cap on Claude calls per real day
   maxSearchesPerDay: num(env.MAX_SEARCHES_PER_DAY, 12),
+  growEveryDays: Number.isFinite(Number(env.GROW_EVERY_DAYS)) && env.GROW_EVERY_DAYS !== undefined && env.GROW_EVERY_DAYS !== '' ? Math.max(0, Number(env.GROW_EVERY_DAYS)) : 3, // the fog pulls back every N town days (0 = only when the keeper says)
   webResearch: (env.WEB_RESEARCH || 'on').toLowerCase() !== 'off',
+
+  // Percy's own website (optional): a GitHub repository with Pages turned on, and a token that can write to it
+  githubToken: (env.GITHUB_TOKEN || '').trim(),
+  githubRepo: (env.GITHUB_REPO || '').trim(),          // e.g. percy-the-penguin/percy-the-penguin.github.io
+  githubBranch: (env.GITHUB_BRANCH || 'main').trim(),
+  publicUrl: (env.PUBLIC_URL || '').trim(),            // where visitors can see his town, linked from his site
 
   // Password for adding things to town from the web page. Leave empty to turn those tools off.
   keeperKey: (env.KEEPER_KEY || '').trim(),
