@@ -7,24 +7,41 @@ import { str } from './util.js';
 export const local = { day: '', searches: 0, pages: 0, lastError: '' };
 function roll() { const d = new Date().toISOString().slice(0, 10); if (local.day !== d) Object.assign(local, { day: d, searches: 0, pages: 0 }); }
 // which way he searches: 'searxng' | 'browser' | 'claude' | 'none'
+// "auto" prefers free search, and steps down when a method keeps failing: SearXNG, then his browser, then
+// Claude's paid search (still capped by the keeper's paid-searches limit). A method is retried after 30 minutes.
+const health = { searxng: { fails: 0, since: 0 }, browser: { fails: 0, since: 0 } };
+const down = m => health[m].fails >= 2 && Date.now() - health[m].since < 30 * 60000;
+const failed = m => { const h = health[m]; if (!h.fails) h.since = Date.now(); h.fails++; if (h.fails === 2) console.warn('[percy] ' + m + ' search is failing; falling back for 30 minutes'); };
+const worked = m => { health[m].fails = 0; };
 export function via(setting = 'auto') {
   if (setting === 'claude') return 'claude';
   if (setting === 'searxng' && config.searxngUrl) return 'searxng';
   if (setting === 'browser' && B.available()) return 'browser';
-  if (config.searxngUrl) return 'searxng';
-  if (B.available()) return 'browser';
+  if (config.searxngUrl && !down('searxng')) return 'searxng';
+  if (B.available() && !down('browser')) return 'browser';
   return 'claude';
 }
+export const searchHealth = () => ({ searxng: config.searxngUrl ? (down('searxng') ? 'failing' : 'ok') : 'not set up', browser: B.available() ? (down('browser') ? 'failing' : 'ok') : 'not available' });
 export function canLocal() { roll(); return local.searches < config.maxLocalSearches; }
 export async function search(q, how) {
   roll(); if (!canLocal()) throw new Error('no more searches today');
   q = str(q, 200); if (!q) throw new Error('empty search');
   local.searches++;
-  try {
-    if (how === 'searxng') return await searxng(q);
-    if (how === 'browser') { const r = await B.searchBing(q); if (r.blocked) throw new Error('the search page did not show results (' + r.blocked + '); it may be blocking automated browsers. Setting up SearXNG avoids this.'); return r.list; }
-    throw new Error('no free search available');
-  } catch (e) { local.lastError = e.message; throw e; }
+  // try the chosen method; if it fails, fall back to the next free one within the same search
+  const order = how === 'searxng' ? ['searxng', 'browser'] : how === 'browser' ? ['browser'] : [];
+  if (!order.length) throw new Error('no free search available');
+  let lastErr = null;
+  for (const m of order) {
+    if (m === 'browser' && !B.available()) continue;
+    if (m !== how && down(m)) continue;
+    try {
+      let r;
+      if (m === 'searxng') r = await searxng(q);
+      else { const b = await B.searchBing(q); if (b.blocked) throw new Error('the search page did not show results (' + b.blocked + '); it may be blocking automated browsers'); r = b.list; }
+      worked(m); if (m === how) local.lastError = ''; else local.lastError = how + ' failed (' + (lastErr && lastErr.message) + '), used ' + m + ' instead'; return r;
+    } catch (e) { failed(m); lastErr = e; local.lastError = m + ': ' + e.message; }
+  }
+  throw lastErr || new Error('search failed');
 }
 // SearXNG: the JSON API when it's switched on, otherwise its ordinary results page (always available).
 const HEADERS = { 'accept-language': 'en-GB,en;q=0.8', 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 Percy/1.0' };

@@ -119,15 +119,17 @@ export async function read(url, maxChars = config.fetchTokens * 4) {
 // Search through the browser (Bing's results page) when there's no SearXNG
 export async function searchBing(q) {
   return withPage('https://www.bing.com/search?q=' + encodeURIComponent(q), async ({ evalJS }) => {
-    const out = await evalJS(`JSON.stringify([...document.querySelectorAll('li.b_algo')].slice(0, 8).map(li => { const a = li.querySelector('h2 a'); return a ? { title: (a.innerText || a.textContent || '').trim(), url: a.href, snippet: (li.querySelector('.b_caption p, p') || {}).innerText || '' } : null; }).filter(Boolean))`);
-    const list = JSON.parse(out || '[]');
-    if (!list.length) { // tell "no results" apart from a consent page or a bot check
-      const info = JSON.parse(await evalJS(`JSON.stringify({ title: document.title, text: (document.body && document.body.innerText || '').slice(0, 600), none: !!document.querySelector('.b_no, #b_results .b_no'), url: location.href })`) || '{}');
-      const why = /captcha|unusual traffic|verify|robot|challenge/i.test(info.text + info.title) ? 'a check for robots' : /consent|cookies|privacy|accept all/i.test(info.text) && !info.none ? 'a cookie consent page' : !info.none && !/no results/i.test(info.text) ? 'an unexpected page: "' + String(info.title || info.url).slice(0, 80) + '"' : '';
-      if (why) return { list, blocked: why };
-    }
+    const grab = async () => JSON.parse(await evalJS(`JSON.stringify([...document.querySelectorAll('li.b_algo')].slice(0, 8).map(li => { const a = li.querySelector('h2 a'); return a ? { title: (a.innerText || a.textContent || '').trim(), url: a.href, snippet: (li.querySelector('.b_caption p, p') || {}).innerText || '' } : null }).filter(Boolean))`) || '[]');
+    let list = await grab();
+    for (let tries = 0; !list.length && tries < 3; tries++) { await new Promise(r => setTimeout(r, 1200)); list = await grab(); } // results can arrive late
     for (const r of list) { // Bing wraps links in a redirect; the real address is base64 in "u"
       try { const u = new URL(r.url); const enc = u.searchParams.get('u'); if (u.hostname.endsWith('bing.com') && enc && enc.startsWith('a1')) r.url = Buffer.from(enc.slice(2).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch {}
+    }
+    if (!list.length) { // tell "no results" apart from a consent page or a robot check
+      const info = JSON.parse(await evalJS(`JSON.stringify({ title: document.title, text: (document.body && document.body.innerText || '').slice(0, 800) })`) || '{}');
+      const t = (info.text || '') + ' ' + (info.title || '');
+      const why = /captcha|unusual traffic|verify you are|are you a robot|challenge/i.test(t) ? 'a check for robots' : /accept all|cookie consent|before you continue/i.test(t) ? 'a cookie consent page' : '';
+      if (why) return { list, blocked: why };
     }
     return { list };
   }, { waitMs: 800 });
