@@ -19,6 +19,7 @@ function decide(prompt) {
     write: { type: 'write', args: { kind: 'page', about: 'the clock', title: 'Notes on the clock', publish: true } }, draw: { type: 'draw', args: { subject: 'the clock tower in fog', offer_at_stall: true } },
     request: { type: 'request', args: { kind: 'object', what: 'a small brass telescope', why: 'to see the clock face from home', missing: 'nothing to see far with', alternatives: 'walking there', dependencies: 'none', interest: 'medium' } },
     wait: { type: 'wait', args: { minutes: 30 } }, eat: { type: 'eat', args: { where: 'home' } }, think: { type: 'think', args: { about: 'the clock', minutes: 15 } } }[step];
+  if (process.env.MOCK_SEQ) { const seq = JSON.parse(process.env.MOCK_SEQ); return { ...base, action: seq[Math.min(plan - 1, seq.length - 1)], notes: [] }; }
   if (process.env.MOCK_NAMES) { // refer to things by name, the way Claude often does
     const seq = [{ type: 'look', args: { at: 'around' } }, { type: 'go', args: { to: 'the village green' } }, { type: 'look', args: { at: 'around' } }, { type: 'go', args: { to: 'the bakery' } }, { type: 'enter', args: { place: "Crumb's Bakery" } }, { type: 'look', args: { at: 'around' } }, { type: 'read', args: { what: 'the railway timetable' } }, { type: 'take', args: { item: 'mantel clock' } }, { type: 'eat', args: { where: 'the bakery' } }, { type: 'go', args: { to: 'my cottage' } }];
     return { ...base, action: seq[(plan - 1) % seq.length], notes: [] };

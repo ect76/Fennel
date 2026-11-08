@@ -365,7 +365,16 @@ function planLook(args) {
 function planRead(args) {
   const w = String(args.what || '');
   const inside = S.inside && W.placeById(S.inside); const it = inside && inside.inside && inside.inside.items.find(i => i.id === w && !i.taken);
-  if (it && it.text && it.text.length > 700 && hooks.readText) return { minutes: clamp(Math.round(it.text.length / 120), 20, 180), caption: 'reading', work: () => { it.examined = true; return hooks.readText({ title: it.book ? it.name.replace(/^a book: /, '') : it.look.slice(0, 60), text: it.text, where: 'in ' + inside.name }); } };
+  if (it && it.text && it.text.length > 700 && hooks.readText) { // long texts are read a part at a time, with a bookmark
+    let pos = it.readPos || 0; if (pos >= it.text.length) pos = 0;
+    let end = Math.min(it.text.length, pos + 15000); if (end < it.text.length) { const br = it.text.lastIndexOf('\n\n', end); if (br > pos + 5000) end = br; }
+    const part = it.text.slice(pos, end), total = Math.max(1, Math.ceil(it.text.length / 15000)), n = Math.min(total, Math.floor(pos / 15000) + 1);
+    const title = it.book ? it.name.replace(/^a book: /, '') : it.look.slice(0, 60);
+    return { minutes: clamp(Math.round(part.length / 120), 20, 150), caption: 'reading', work: async () => {
+      it.examined = true; const r = await hooks.readText({ title, text: part, where: 'in ' + inside.name, part: total > 1 ? { n, total, start: pos === 0, end: end >= it.text.length } : null });
+      it.readPos = end; if (r && r.facts && total > 1) r.facts.push(end >= it.text.length ? 'that was the end of it' : 'left a bookmark about ' + Math.round(100 * end / it.text.length) + '% of the way through');
+      return r; } };
+  }
   if (w === 'notes') { const p = known('stone')[0]; if (!p) return fail(null, 'he does not know of any notes'); return { place: p.id, minutes: 15 }; }
   if (w === 'letters') return { minutes: 10 };
   return { minutes: 12 };

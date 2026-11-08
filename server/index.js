@@ -310,11 +310,20 @@ async function keeper(req, res, what) {
     }
     case 'book': { // a book left in the library: an object he may or may not ever read
       const lib = S.town.places.find(pl => pl.type === 'library'); if (!lib) return send(res, 400, { error: 'There is no library.' });
-      const topic = str(b.topic, 80); if (!topic) return send(res, 400, { error: 'What is the book called?' });
-      const text = String(b.text || '').slice(0, 20000).trim();
-      lib.inside = lib.inside || { feel: 'tall shelves, dust in the light from the windows, the smell of old paper', items: [] };
-      lib.inside.items.push({ id: 'bk' + uid().slice(0, 5), name: 'a book: ' + topic, look: 'a book left on a reading table; the cover says "' + topic + '"', text: text || topic, canTake: true, examined: false, taken: false, book: true });
-      W.wlog('the keeper left a book in the library: ' + topic); return ok();
+      let topic = str(b.topic, 80), text = String(b.text || '').slice(0, 400000).trim();
+      const url = str(b.url, 500);
+      if (url && !text) { // fetch the page's text for him (the keeper's choice of material)
+        if (!/^https?:\/\//i.test(url)) return send(res, 400, { error: 'That link should start with https://' });
+        if (!B.available()) return send(res, 400, { error: 'The browser isn\'t available to fetch that page. Paste the text instead.' });
+        try { const r = await B.read(url, 400000); text = String(r.text || '').trim(); if (!topic) topic = str(String(r.title || '').replace(/\s+[-|–]\s+Wikipedia$/i, ''), 80); }
+        catch (e) { return send(res, 400, { error: 'Couldn\'t fetch that page: ' + e.message }); }
+        if (text.length < 200) return send(res, 400, { error: 'That page had almost no text to read.' });
+      }
+      if (!topic) return send(res, 400, { error: 'What is the book called?' });
+      lib.inside = lib.inside || { feel: 'tall shelves, light from the windows, the smell of paper', items: [] };
+      const parts = Math.max(1, Math.ceil(text.length / 15000));
+      lib.inside.items.push({ id: 'bk' + uid().slice(0, 5), name: 'a book: ' + topic, look: 'a book left on a reading table; the cover says "' + topic + '"' + (parts > 2 ? ', and it is ' + (parts > 6 ? 'thick' : 'fairly long') : ''), text: text || topic, canTake: true, examined: false, taken: false, book: true });
+      W.wlog('the keeper left a book in the library: ' + topic + (text ? ' (' + Math.round(text.length / 1000) + 'k characters)' : '')); return ok({ title: topic, chars: text.length, parts });
     }
     case 'print-sold': { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
     case 'remove-graffiti': S.graffiti = S.graffiti.filter(g => g.id !== b.id); return ok();

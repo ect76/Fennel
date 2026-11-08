@@ -112,7 +112,7 @@ details.know p,.notebook p{font-family:var(--f-voice);font-size:18px;line-height
 .gallery small{color:var(--muted);font-size:12px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px}
 label.fld{display:grid;gap:4px;font-size:13px;color:var(--muted)}
-input[type=text],input[type=search],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;color:var(--ink)}
+input[type=text],input[type=search],input[type=url],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;color:var(--ink)}
 textarea{resize:vertical;min-height:64px}
 .pad{width:100%;max-width:420px;aspect-ratio:2/1;background:repeating-linear-gradient(0deg,#cdbca6 0 22px,#c4b29a 22px 24px);border-radius:8px;touch-action:none;cursor:crosshair}
 .swatches{display:flex;gap:6px;flex-wrap:wrap}

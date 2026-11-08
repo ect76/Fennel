@@ -149,8 +149,9 @@
         <form class="card" id="bookForm">
           <h2 style="margin:0">Leave a book at the library</h2>
           <p class="hint">It sits on a reading table in the library. He may find it, read it, or never notice it.</p>
-          <label class="fld">Title<input type="text" id="bookTopic" maxlength="80" required></label>
-          <label class="fld">Text of the book (optional): paste an article or anything you want him to read<textarea id="bookText" maxlength="20000" rows="5"></textarea></label>
+          <label class="fld">Title (taken from the page if you give a link)<input type="text" id="bookTopic" maxlength="80"></label>
+          <label class="fld">A link to the text (optional): e.g. a Wikipedia article; the server fetches the page<input type="url" id="bookUrl" maxlength="500" placeholder="https://en.wikipedia.org/wiki/Concorde"></label>
+          <label class="fld">Or paste the text (optional; long texts are fine: he reads them a part at a time)<textarea id="bookText" maxlength="400000" rows="5"></textarea></label>
           <div class="row"><button type="submit" class="btn">Leave the book</button><span class="hint" id="bookStatus" role="status"></span></div>
         </form>
         <form class="card" id="giveForm">
