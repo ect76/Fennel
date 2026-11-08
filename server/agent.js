@@ -130,7 +130,7 @@ export async function decide() {
 }
 
 function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
-  const fmtE = e => 'day ' + e.day + ' ' + e.time + ': ' + e.what + (e.outcome ? ' → ' + e.outcome : '') + (e.words ? ' (he thought: "' + e.words + '")' : '');
+  const fmtE = e => 'day ' + e.day + ' ' + e.time + ': ' + e.what + (e.outcome ? ' → ' + e.outcome : '') + (e.words ? ' (what he thought at the time, which may be out of date: "' + e.words + '")' : '');
   const fmtS = s => s.text + ' [' + s.provenance + (s.sources && s.sources.length ? ': ' + s.sources.map(x => x.url).slice(0, 2).join(', ') : '') + (s.confidence < 0.5 ? ', unsure' : '') + ']';
   const projects = S.projects.filter(x => x.status !== 'abandoned').slice(-8);
   const orders = S.commissions.filter(c => ['read', 'accepted'].includes(c.status));
@@ -141,7 +141,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
   L.push('\nPERCEPTION\n' + pdesc);
   L.push('\nMEMORY');
   if (mem.summaries.length) L.push('Earlier days, summarised: ' + mem.summaries.map(s => 'day ' + s.day + ': ' + s.text).join(' | '));
-  L.push('Just before now:\n' + mem.recent.map(fmtE).join('\n'));
+  L.push('Just before now (what happened; PERCEPTION above is what is true now):\n' + mem.recent.map(fmtE).join('\n'));
   if (mem.episodes.length) L.push('Earlier experiences that seem relevant:\n' + mem.episodes.map(fmtE).join('\n'));
   if (mem.semantic.length) L.push('Things he knows or believes (with how he knows):\n' + mem.semantic.map(fmtS).join('\n'));
   if (mem.personal.length) L.push('About himself, his likes, opinions and associations (with evidence):\n' + mem.personal.map(x => x.kind + ': ' + x.text).join('\n'));
