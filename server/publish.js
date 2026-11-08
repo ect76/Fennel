@@ -45,10 +45,12 @@ export function pageHTML(p) {
 }
 export function indexHTML(S) {
   const pages = S.pages.slice().reverse().map(p => `<li><a href="pages/${slug(p.title)}.html">${esc(p.title)}</a> <span style="color:#999">· day ${p.day}</span></li>`).join('');
-  const drawings = S.drawings.slice().reverse().slice(0, 60).map(d => `<figure><img src="drawings/${d.id}.svg" alt="${esc(d.title)}" loading="lazy"><figcaption>${esc(d.title)} · day ${d.day}</figcaption></figure>`).join('');
+  const buyLink = d => d.onStall && !d.sold && config.publicUrl ? ` · <a href="${esc(config.publicUrl)}#drawings">on my stall</a>` : d.sold ? ' · taken' : '';
+  const printLink = config.printShopUrl ? ` · <a href="${esc(config.printShopUrl)}">print</a>` : '';
+  const drawings = S.drawings.slice().reverse().slice(0, 60).map(d => `<figure><img src="drawings/${d.id}.svg" alt="${esc(d.title)}" loading="lazy"><figcaption>${esc(d.title)} · day ${d.day}${buyLink(d)}${printLink}</figcaption></figure>`).join('');
   const graffiti = (S.graffiti || []).filter(g => g.by === 'percy').slice().reverse().slice(0, 30).map(g => `<figure><img src="graffiti/${g.id}.svg" alt="${esc(g.tag || 'graffiti')}" loading="lazy" style="background:#c9b9a6"><figcaption>${esc(g.where || '')} · day ${g.day}</figcaption></figure>`).join('');
   return wrap('percy', `<h1>percy</h1><p>things i am making.</p>
 <h2>pages</h2>${pages ? '<ul>' + pages + '</ul>' : '<p>nothing yet.</p>'}
-<h2>drawings</h2>${drawings ? '<div class="grid">' + drawings + '</div>' : '<p>nothing yet.</p>'}
+<h2>drawings</h2><p style=\"color:#777;font-size:14px\">i leave them out on the stall in town. sometimes they go and there are coins in the tin. i don't know who takes them.</p>${drawings ? '<div class="grid">' + drawings + '</div>' : '<p>nothing yet.</p>'}
 <h2>things i put on walls. still up.</h2>${graffiti ? '<div class="grid">' + graffiti + '</div>' : '<p>nothing yet.</p>'}`);
 }

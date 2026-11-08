@@ -26,6 +26,10 @@ export const config = {
   githubBranch: (env.GITHUB_BRANCH || 'main').trim(),
   publicUrl: (env.PUBLIC_URL || '').trim(),            // where visitors can see his town, linked from his site
 
+  // Optional real prints: a link to your own shop page (Ko-fi, Stripe payment link, etc.) shown beside his drawings
+  printShopUrl: (env.PRINT_SHOP_URL || '').trim(),
+  printCoins: num(env.PRINT_COINS, 10), // coins Percy finds in his tin when you record a real print sale
+
   // Password for adding things to town from the web page. Leave empty to turn those tools off.
   keeperKey: (env.KEEPER_KEY || '').trim(),
 };

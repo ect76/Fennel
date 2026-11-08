@@ -17,7 +17,7 @@ export const ACTIONS = {
   tidy: { at: 'home', label: 'tidying the cottage', dur: 40, gain: { calm: 12 }, desc: 'tidy the cottage' },
   eat: { at: 'bakery', label: 'eating bread', dur: 30, gain: { fullness: 45, joy: 6 }, desc: 'buy and eat bread at the bakery (2 coins)' },
   read: { at: 'library', label: 'reading', dur: 90, gain: { wonder: 20, energy: -4 }, desc: 'read and research at the library (put the topic in "subject")' },
-  sell: { at: 'market', label: 'selling drawings', dur: 50, gain: {}, desc: 'try to sell drawings at the market stall' },
+  sell: { at: 'market', label: 'tending the market stall', dur: 40, gain: {}, desc: 'take his drawings to the empty market stall, leave them out with prices, and collect any coins from the honesty tin' },
   pond: { at: 'green', label: 'sitting by the pond', dur: 60, gain: { calm: 22, joy: 4 }, desc: 'sit by the pond on the village green' },
   fish: { at: 'green', label: 'fishing in the pond', dur: 45, gain: { fullness: 20, calm: 4 }, desc: 'dive for fish in the pond (free food)' },
   stargaze: { at: 'lookout', label: 'watching the stars', dur: 90, gain: { wonder: 24, calm: 8 }, desc: 'watch the stars from the lookout hill (night only)' },
@@ -59,7 +59,7 @@ const EVENTS = [
   { id: 'bird', text: () => 'a big bird flew low over the rooftops and disappeared into the fog.' },
   { id: 'hum', text: () => 'the Humming Stone is humming a different note today, lower than usual.' },
   { id: 'coin', text: () => 'there is a coin lying between the cobbles on the High Street.', coin: true },
-  { id: 'busy', text: () => 'it is market day: the stall has bunting up.' },
+  { id: 'busy', text: () => 'bunting has appeared over the market stall overnight. nobody put it up.' },
   { id: 'flicker', text: () => 'the street lamps keep flickering.' },
   { id: 'echo', text: () => 'from somewhere in the fog, every so often, there is a sound like an echo of a voice.' },
   { id: 'clock', text: () => 'the clock tower struck thirteen this morning.' },
@@ -68,6 +68,9 @@ const EVENTS = [
 ];
 
 export let S = null;
+export let watchers = 0; // people outside, watching right now (Percy can't see them)
+export const setWatchers = n => { watchers = n; };
+export const fmtHour = h => (h % 12 || 12) + (h < 12 || h === 24 ? 'am' : 'pm');
 export function setState(s) {
   S = s;
   // things visitors add live in S.things; the town layout needs to see them without saving them twice
@@ -231,7 +234,7 @@ export function available(id, h = hourOf(S.t)) {
     case 'nap': return !night && n.energy < 45;
     case 'eat': return S.coins >= 2;
     case 'fish': return !night;
-    case 'sell': return unsold().length > 0;
+    case 'sell': return unsold().some(d => !d.onStall) || (S.tin || 0) > 0 || S.drawings.some(d => d.sold && !d.noticedSold);
     case 'stargaze': return (h >= 20 || h < 4) && S.weather.kind !== 'fog';
     case 'inspect': return S.things.length > 0;
     case 'write': return false; // needs Claude; the mind offers it itself
@@ -256,7 +259,7 @@ function ruleScore(id, h) {
     case 'eat': s = (100 - n.fullness) * 0.035; break;
     case 'fish': s = (100 - n.fullness) * 0.025 + (S.coins < 2 ? 0.4 : 0); break;
     case 'draw': s = 0.7 + tr.creativity * 0.6 + (100 - n.joy) * 0.006 + (wet ? 0.3 : 0) - (n.energy < 25 ? 0.6 : 0) - S.stats.drew * 0.45; break;
-    case 'sell': s = 0.3 + unsold().length * 0.25 + (S.coins < 4 ? 0.8 : 0) + (S.events.some(e => e.id === 'busy') ? 0.5 : 0); break;
+    case 'sell': s = 0.3 + unsold().filter(d => !d.onStall).length * 0.25 + (S.coins < 4 ? 0.8 : 0) + ((S.tin || 0) > 0 ? 0.3 : 0); break;
     case 'read': s = (100 - n.wonder) * 0.02 + tr.curiosity * 0.5 + (S.researchQueue.length ? 1.2 : 0) + (wet ? 0.3 : 0); break;
     case 'pond': s = (100 - n.calm) * 0.025 + 0.3 - (wet ? 0.4 : 0); break;
     case 'stargaze': s = 0.6 + (100 - n.wonder) * 0.018; break;
@@ -280,7 +283,7 @@ function ruleScore(id, h) {
 const RULE_THOUGHTS = {
   sleep: ['eyes heavy. home.', 'the lamps are on. bed.'], nap: ['legs feel like wet leaves. short nap.'],
   eat: ['bread. now.', 'stomach is making the pond noise.'], fish: ['the pond has free lunch. with fins.'],
-  draw: ['an idea. going home before it leaves.'], sell: ['maybe someone wants a drawing today.'],
+  draw: ['an idea. going home before it leaves.'], sell: ['wonder if the tin has anything in it.'],
   read: ['want to know something new.'], pond: ['need the pond for a bit.'], stargaze: ['clear night. up the hill.'],
   shrine: ['the stone is humming. can feel it from here.'], fog: ['going to the end of the road. again.'],
   wander: ['no plan. just walking.'], explore: ['haven\'t been down that way for a while.'], tidy: ['the cottage is a mess. so am i.'],
@@ -427,12 +430,20 @@ function finish(a) {
     case 'draw': S.stats.drew++; if (S.coins >= 1) S.coins -= 1; else a.scrap = true; break;
     case 'write': S.stats.wrote++; break;
     case 'sell': {
-      const u = unsold(), busy = S.events.some(e => e.id === 'busy');
-      if (u.length && Math.random() < 0.45 + S.needs.joy * 0.003 + (busy ? 0.2 : 0)) {
-        const dr = u[0], c = 2 + Math.floor(Math.random() * 4); dr.sold = true; S.coins += c; S.stats.sold++; feel('joy', 8);
-        log('sold "' + dr.title + '" for ' + c + ' coins');
-        addDiary('event', 'sold "' + dr.title + '" for ' + c + ' coins. someone will hang it somewhere i\'ll never see.');
-      } else { feel('calm', -5); feel('joy', -3); log('nobody bought a drawing'); S.lastFail = 'nobody bought a drawing'; }
+      // Nobody else lives here. He leaves drawings out; later some are gone and there are coins in the tin.
+      const gone = S.drawings.filter(d => d.sold && !d.noticedSold);
+      const coins = S.tin || 0; S.tin = 0; S.coins += coins;
+      for (const d of gone) d.noticedSold = true;
+      const placed = unsold().filter(d => !d.onStall).slice(0, Math.max(0, 6 - unsold().filter(d => d.onStall).length));
+      for (const d of placed) { d.onStall = true; d.price = d.price || 2 + Math.floor(Math.random() * 4); }
+      if (gone.length) {
+        S.stats.sold += gone.length; feel('joy', 6); feel('wonder', 6);
+        const names = gone.map(d => '"' + d.title + '"').join(', ');
+        log('found ' + names + ' gone from the stall and ' + coins + ' coins in the tin');
+        addDiary('stall', (gone.length === 1 ? names + ' was gone' : names + ' were gone') + ' from the stall. ' + coins + ' coins in the tin. ' + pick(['i never see who takes them.', 'there\'s nobody here. there\'s never anybody here.', 'i waited a while in case. nobody.', 'the tin was warm, like someone had just touched it.']));
+        remember('day ' + dayOf(S.t) + ': drawings vanished from the stall and coins appeared in the tin; nobody seen', 3);
+      } else if (!placed.length) { log('the stall was just as he left it'); S.lastFail = 'nothing had gone from the stall'; feel('joy', -2); }
+      if (placed.length) log('left ' + placed.length + ' drawing' + (placed.length > 1 ? 's' : '') + ' out on the stall');
       break;
     }
     case 'read': S.stats.read++; break;
@@ -549,6 +560,16 @@ export function stockItem({ shop, name, price, desc }) {
   if (!it.name) return { error: 'Give it a name.' };
   S.items.push(it); log('something new appeared in the window of ' + p.name); bump();
   return { item: it };
+}
+
+// A real person (a visitor to his page or website) buys a drawing from the stall. Percy only ever finds the coins.
+export function buyDrawing(id, { coins, print = false } = {}) {
+  const dr = S.drawings.find(d => d.id === id);
+  if (!dr) return { error: 'That drawing isn\'t here any more.' };
+  if (print) { const c = Math.max(1, Math.round(Number(coins) || 10)); S.tin = (S.tin || 0) + c; dr.prints = (dr.prints || 0) + 1; log('a print of "' + dr.title + '" was sold somewhere'); bump(); return { ok: true }; }
+  if (!dr.onStall || dr.sold) return { error: dr.sold ? 'Someone has already taken that one.' : 'Percy hasn\'t put that one out on his stall yet.' };
+  dr.sold = true; dr.soldDay = dayOf(S.t); S.tin = (S.tin || 0) + (dr.price || 3);
+  bump(); return { ok: true, price: dr.price || 3 };
 }
 
 /* ---------- visitor objects ---------- */

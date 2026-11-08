@@ -215,7 +215,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); process
 const TYPES = { '.jpg': 'image/jpeg', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const streams = new Set();
 const ipOf = req => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-const lastNoteBy = new Map();
+const lastNoteBy = new Map(), lastBuyBy = new Map();
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
@@ -232,13 +232,13 @@ function keeperOK(key) {
   const a = crypto.createHash('sha256').update(key).digest(), b = crypto.createHash('sha256').update(config.keeperKey).digest();
   return crypto.timingSafeEqual(a, b);
 }
-const extra = () => ({ mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding });
+const extra = () => ({ mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl });
 function live() {
   return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, act: S.act ? { id: S.act.id, phase: S.act.phase } : null,
     doing: W.doingText(), thought: S.thought, needs: S.needs, mood: W.moodWord(), coins: S.coins, weather: S.weather.kind,
     season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: config.timeScale };
 }
-setInterval(() => { M.setWatchers(streams.size); const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
+setInterval(() => { M.setWatchers(streams.size); W.setWatchers(streams.size); const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -262,6 +262,14 @@ const server = http.createServer(async (req, res) => {
       S.notes.unshift({ id: W.uid(), text, from, day: W.dayOf(S.t), read: false });
       if (S.notes.length > 80) S.notes.pop();
       W.bump(); save(); return send(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && p === '/api/buy') {
+      const b = await readBody(req); const ip = ipOf(req), lastAt = lastBuyBy.get(ip) || 0;
+      if (Date.now() - lastAt < 10 * 60000) return send(res, 429, { error: 'One drawing at a time. Come back in a few minutes.' });
+      const r = W.buyDrawing(String(b.id || ''));
+      if (r.error) return send(res, 400, { error: r.error });
+      lastBuyBy.set(ip, Date.now()); save(); siteUpdate([], 'a drawing was taken from the stall');
+      return send(res, 200, { ok: true, img: '/media/drawings/' + b.id + '.svg' });
     }
     if (req.method === 'POST' && p.startsWith('/api/keeper/')) {
       const b = await readBody(req, 7 * 1024 * 1024);
@@ -309,6 +317,7 @@ const server = http.createServer(async (req, res) => {
           .finally(() => { W.bump(); save(); });
         return;
       }
+      if (what === 'print-sold') { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-graffiti') { S.graffiti = S.graffiti.filter(g => g.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-item') { S.items = S.items.filter(i => i.id !== b.id || i.sold); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-thing') { S.things = S.things.filter(t => t.id !== b.id); W.log('something vanished from town'); W.bump(); save(); return send(res, 200, { ok: true }); }

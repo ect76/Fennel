@@ -6,7 +6,7 @@ export const TYPES = {
   home:     { label: 'cottage', w: 7, d: 6, h: 3.4, acts: ['sleep', 'nap', 'draw', 'write', 'tidy'] },
   bakery:   { label: 'bakery', w: 7, d: 6, h: 3.6, open: [7, 19], acts: ['eat'] },
   library:  { label: 'library', w: 10, d: 7, h: 5.5, open: [9, 18], acts: ['read'] },
-  market:   { label: 'market stall', w: 4, d: 3, h: 2.8, open: [8, 16], acts: ['sell'] },
+  market:   { label: 'market stall', w: 4, d: 3, h: 2.8, acts: ['sell'] },
   cafe:     { label: 'café', w: 7, d: 6, h: 3.4, open: [8, 17], acts: ['visit'], feel: { joy: 8, calm: 6 } },
   post:     { label: 'post office', w: 7, d: 6, h: 3.6, open: [9, 17], acts: ['visit'], feel: { wonder: 5 } },
   station:  { label: 'railway station', w: 13, d: 5, h: 3.8, acts: ['visit'], feel: { wonder: 8 } },

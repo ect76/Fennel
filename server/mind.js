@@ -43,15 +43,15 @@ function context({ focus = '' } = {}) {
   const h = W.hourOf(S.t);
   const places = S.town.places.filter(p => p.known).map(p => {
     const T = TYPES[p.type]; const o = T.open;
-    return `- id ${p.id}: ${p.name} (${T.label}${o ? ', open ' + o[0] + '-' + o[1] + (W.isOpen(p, h) ? '' : ', closed now') : ''})${p.desc ? ' - ' + p.desc : ''}`;
+    return `- id ${p.id}: ${p.name} (${T.label}${o ? ', lights on ' + W.fmtHour(o[0]) + ' to ' + W.fmtHour(o[1]) + (W.isOpen(p, h) ? '' : ', dark right now') : ''})${p.desc ? ' - ' + p.desc : ''}`;
   }).join('\n');
   const unknown = S.town.places.filter(p => !p.known).length;
   const roads = [...new Set(S.town.edges.filter(e => !e.path).map(e => e.name))].join(', ');
-  return `WORLD: Mossbrook, a small village of winding streets (${roads}). Every road ends in thick fog he cannot get through. Nobody else seems to live here: the houses are empty and the shops leave things out for him. Now and then the fog pulls back and there is more town than before. Visitors from outside sometimes add objects and buildings.
+  return `WORLD: Mossbrook, a small village of winding streets (${roads}). Every road ends in thick fog he cannot get through. He is completely alone: there are no other people or animals anywhere in town. The houses are empty; the shops run themselves, with things left out and honesty tins. Now and then the fog pulls back and there is more town than before. Visitors from outside sometimes add objects and buildings.
 PLACES HE KNOWS:
 ${places}${unknown ? `\nThere ${unknown === 1 ? 'is somewhere' : 'are ' + unknown + ' places'} in town he hasn't found yet (exploring would find ${unknown === 1 ? 'it' : 'them'}).` : ''}
 NOW: day ${d}, ${W.hhmm(S.t)}, ${W.seasonOf(d)}, weather ${S.weather.kind}. He is ${W.whereIs()}, ${W.doingText()}.
-NEEDS (0-100): fullness ${Math.round(n.fullness)}, energy ${Math.round(n.energy)}, wonder ${Math.round(n.wonder)}, joy ${Math.round(n.joy)}, calm ${Math.round(n.calm)}. Mood: ${W.moodWord()}. Coins: ${S.coins}. Unsold drawings: ${W.unsold().length}.
+NEEDS (0-100): fullness ${Math.round(n.fullness)}, energy ${Math.round(n.energy)}, wonder ${Math.round(n.wonder)}, joy ${Math.round(n.joy)}, calm ${Math.round(n.calm)}. Mood: ${W.moodWord()}. Coins: ${S.coins}. Drawings at home: ${W.unsold().filter(d => !d.onStall).length}.
 WATCHING: ${watchers} outside visitor${watchers === 1 ? ' is' : 's are'} watching the town right now. He can't see them, but the Humming Stone hums louder the more there are.
 HAPPENING TODAY: ${S.events.map(e => e.text).join(' ') || 'nothing unusual'}
 HOW HE SEES HIMSELF: ${S.self.description}
@@ -61,7 +61,7 @@ GOALS: ${S.goals.map(g => g.text).join(' / ') || '-'}
 QUESTIONS HE HAS: ${S.questions.join(' / ') || '-'}
 HAS LEARNED ABOUT: ${S.knowledge.slice(-15).map(k => k.topic).join(', ') || 'nothing yet'}${S.researchQueue.length ? '\nWANTS TO RESEARCH: ' + S.researchQueue.map(r => r.topic).join(', ') : ''}
 OBJECTS VISITORS HAVE ADDED:\n${things}
-MONEY: he earns 2-5 coins when a drawing sells at the market stall. Bread costs 2, tea and cake at the café 2, drawing paper 1, spray paint 2.
+MONEY: nobody else lives in Mossbrook and he has never seen another soul. Shops are unattended: when their lights are on, things are left out with prices and an honesty tin, and he pays into it (bread 2 coins, tea and cake at the café 2, drawing paper 1, spray paint 2). He leaves his drawings out on the empty market stall with prices; when he comes back, some are sometimes gone and there are coins in the tin. He has no idea who takes them. Drawings on the stall now: ${S.drawings.filter(d => d.onStall && !d.sold).length}.
 FOR SALE THAT HE HAS SEEN:\n${S.items.filter(i => i.seen && !i.sold).map(i => `- id ${i.id}: ${i.name} for ${i.price} coins at ${(W.placeById(i.shop) || {}).name || 'a shop'}${i.desc ? ' - ' + i.desc : ''}`).join('\n') || '(nothing yet)'}
 HE OWNS: ${S.inventory.map(i => i.name + ' (bought day ' + i.day + ')').join('; ') || 'nothing much'}
 GRAFFITI AROUND TOWN: ${S.graffiti.filter(g => g.seen).map(g => (g.by === 'percy' ? 'his own' : 'someone else\'s') + ' ' + (g.where || '')).slice(-6).join('; ') || 'none'}
