@@ -112,8 +112,10 @@ function bodyTick(mins) {
   const asleep = a && a.phase === 'do' && (a.type === 'sleep' || a.type === 'nap');
   b.fullness -= (asleep ? 1.4 : 3.6) / 60 * mins;
   if (asleep) b.energy += (a.type === 'sleep' ? 13 : 9) / 60 * mins;
-  else if (resting) b.energy += 4 / 60 * mins;
-  else b.energy -= (a && a.phase === 'walk' ? 4 : 3) / 60 * mins * (b.fullness <= 0 ? 1.6 : 1);
+  // a body clock: staying awake late costs more, and resting at night doesn't refresh the way sleep does
+  const h = hourOf(S.t), late = h >= 23 || h < 5 ? 3 : h >= 21 || h < 6 ? 1.6 : 1;
+  if (resting) b.energy += (late > 1 ? 1.5 : 4) / 60 * mins;
+  else b.energy -= (a && a.phase === 'walk' ? 4 : 3) / 60 * mins * (b.fullness <= 0 ? 1.6 : 1) * late;
   b.fullness = clamp(b.fullness, 0, 100); b.energy = clamp(b.energy, 0, 100);
 }
 // a plain description of how his body is, for perception (no numbers)
@@ -121,7 +123,9 @@ export function bodySense() {
   const b = S.body;
   const stomach = b.fullness < 8 ? 'empty and aching' : b.fullness < 22 ? 'very hungry' : b.fullness < 40 ? 'hungry' : b.fullness < 75 ? 'fine' : 'full';
   const energy = b.energy < 8 ? 'barely able to keep going' : b.energy < 22 ? 'exhausted' : b.energy < 40 ? 'tired' : b.energy < 75 ? 'fine' : 'rested';
-  return { stomach, energy };
+  const h = hourOf(S.t), a = S.act, awake = !(a && a.phase === 'do' && (a.type === 'sleep' || a.type === 'nap'));
+  const drowsy = awake && (h >= 23 || h < 5) ? (b.energy < 50 ? 'his eyelids keep drooping; it is the middle of the night' : 'drowsy; it is the middle of the night') : awake && h >= 21 ? 'getting sleepy as the evening goes on' : '';
+  return { stomach, energy: energy + (drowsy ? ', ' + drowsy : '') };
 }
 
 /* ---------- doing things ---------- */
