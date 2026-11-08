@@ -251,7 +251,9 @@ export function grow(town, { day = 1, type } = {}) {
   const nid = 'g' + uid(); town.nodes[nid] = { x: n.x + Math.sin(dir) * len, z: n.z + Math.cos(dir) * len };
   const edge = { id: uid(), a: from, b: nid, name }; town.edges.push(edge);
   town.grown++;
-  const t = type || pick(['house', 'house', 'shop', 'shop', 'workshop', 'garden', 'museum', 'hall', 'tower', 'cafe']);
+  // a kind whose names are all used up is skipped, so the same museum doesn't appear twice
+  const kinds = ['house', 'house', 'shop', 'shop', 'workshop', 'garden', 'museum', 'hall', 'tower', 'cafe'].filter(k => k === 'house' || !PLACE_NAMES[k] || PLACE_NAMES[k].some(n => !town.usedNames.includes(n)));
+  const t = type || pick(kinds);
   const spot = findPlot(town, t, { edges: [edge], random: true });
   let place = null;
   if (spot) place = addPlace(town, { type: t, name: t === 'house' ? 'a house on ' + name : freshName(town, PLACE_NAMES[t] || ['somewhere new']), x: spot.x, z: spot.z, rot: spot.rot, known: false, builtBy: 'growth', day });
