@@ -39,6 +39,7 @@ function renderHUD() {
   $('#watching').textContent = L.watchers + (L.watchers === 1 ? ' visitor' : ' visitors') + ' watching'; $('#season').textContent = L.season;
   $('#doingNow').textContent = L.doing.charAt(0).toUpperCase() + L.doing.slice(1) + '.';
   $('#thoughtNow').textContent = recentThought();
+  { const asleep = L.act && L.act.phase === 'do' && (L.act.type === 'sleep' || L.act.type === 'nap'); const b = $('#skipSleep'); b.hidden = !(asleep && KEY && !$('#keeperTools').hidden); if (b.hidden) b.disabled = false; }
   const fn = $('#feelNow'); fn.textContent = '';
   if (L.feeling && L.feeling.word) { const ago = Math.max(0, Math.round(L.t - (L.feeling.t || L.t))); fn.append('Last said he felt '); fn.append(el('b', null, L.feeling.word)); fn.append(el('span', 'hint', ' · ' + (ago < 2 ? 'just now' : ago < 60 ? ago + ' minutes ago' : Math.round(ago / 60) + ' hour' + (Math.round(ago / 60) === 1 ? '' : 's') + ' ago') + ' (town time)')); }
 }
@@ -376,3 +377,4 @@ function renderKeeper() {
 }
 
 refreshState();
+$('#skipSleep').onclick = async () => { const b = $('#skipSleep'); b.disabled = true; b.textContent = 'Skipping to morning…'; try { await kpost('skip-sleep', {}); } catch (err) { b.textContent = err.message; } setTimeout(() => { b.textContent = 'Skip to morning'; }, 4000); };

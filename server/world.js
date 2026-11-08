@@ -69,7 +69,7 @@ export function timeScale() {
   const v = S && S.settings && S.settings.timeScale, base = Number.isFinite(v) && v > 0 ? v : config.timeScale;
   // asleep, nothing is decided (so nothing is spent): the keeper can let the night pass quickly
   const asleep = S && S.act && S.act.phase === 'do' && (S.act.type === 'sleep' || S.act.type === 'nap');
-  return asleep && S.settings.fastSleep !== false ? Math.max(base, 60) : base;
+  return asleep && (S.act.fast || S.settings.fastSleep === true) ? Math.max(base, 60) : base;
 }
 export function migrate(saved) {
   const fresh = newWorld();

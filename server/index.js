@@ -252,7 +252,7 @@ async function keeper(req, res, what) {
   switch (what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
-      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep !== false, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
+      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
         journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
@@ -343,6 +343,10 @@ async function keeper(req, res, what) {
     case 'remove-commission': S.commissions = S.commissions.filter(c => c.id !== b.id); return ok();
     case 'remove-note': S.notes = S.notes.filter(n => n.id !== b.id); return ok();
     case 'build': { const r = W.addBuilding({ kind: b.kind, name: b.name, desc: b.desc, x: Number(b.x), z: Number(b.z) }); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.place.id }); }
+    case 'skip-sleep': { // fast-forward this one sleep (asleep he decides nothing, so it costs nothing)
+      if (!(S.act && S.act.phase === 'do' && ['sleep', 'nap'].includes(S.act.type))) return send(res, 400, { error: 'He isn\'t asleep.' });
+      S.act.fast = true; W.wlog('the keeper let the night pass quickly'); return ok();
+    }
     case 'grow': { const g = W.growTown('keeper'); return ok({ road: g.road }); }
   }
   return send(res, 404, { error: 'Unknown keeper action.' });
