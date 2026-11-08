@@ -147,6 +147,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
   if (mem.questions.length) L.push('Open questions: ' + mem.questions.map(q => q.id + ': ' + q.text).join('; '));
   const inv = S.researchLog.filter(l => l.kind === 'research').slice(-6);
   if (inv.length) L.push('Recent investigations: ' + inv.map(l => l.id + ' "' + l.question + '" (day ' + l.day + ', ' + l.status + (l.leads && l.leads.length ? ', leads: ' + l.leads.map(x => x.what).join(' / ') : '') + ')').join('; '));
+  { const tr = trackRecord(); if (tr.length) L.push('How his recent efforts have gone (plain record, not advice): ' + tr.join('; ')); }
   if (projects.length) L.push('Projects: ' + projects.map(x => 'project ' + x.id + ' "' + x.title + '" (' + x.status + ', ' + x.files + ' files, ' + x.sittings + ' sittings' + (x.lastTest ? ', last check: ' + x.lastTest : '') + (x.url ? ', published' : '') + (x.next ? ', next: ' + x.next : '') + ')').join('; '));
   if (S.drawings.length) L.push('His drawings: ' + S.drawings.slice(-8).map(d => d.id + ' "' + d.title + '"' + (d.sold ? ' (gone)' : d.onStall ? ' (on the stall)' : d.listed ? ' (in his shop)' : '')).join('; '));
   if (S.pages.length) L.push('Pages he has written: ' + S.pages.slice(-6).map(d => d.id + ' "' + d.title + '"').join('; '));
@@ -154,7 +155,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
   if (orders.length) L.push('Orders from outside: ' + orders.map(c => 'order ' + c.id + ' (' + c.status + ', wants ' + W.COMMISSION_KINDS[c.kind] + ', offers ' + c.offer + ' coins' + (c.from ? ', from ' + c.from : '') + '): "' + c.text + '"').join('; '));
   const listings = W.openListings(); if (listings.length) L.push('In his shop: ' + listings.map(x => '"' + x.title + '" ' + x.price + ' coins').join('; '));
   if (reqs.length) L.push('His requests: ' + reqs.map(r => 'request ' + r.id + ' (' + r.status + (r.response ? ', reply: "' + r.response + '"' : '') + ', asked day ' + r.day + '): ' + r.what).join('; '));
-  L.push('\nWHAT HE CAN DO (choose one; use ids exactly as given)\n' + caps.map(c => '- ' + c.type + (c.args ? ' {' + c.args + '}' : '') + (c.note ? ': ' + c.note : '')).join('\n'));
+  L.push('\nWHAT HE CAN DO (choose one; ids or the names he knows things by)\n' + caps.map(c => '- ' + c.type + (c.args ? ' {' + c.args + '}' : '') + (c.note ? ': ' + c.note : '')).join('\n'));
   if (p !== 'plenty') L.push('\nHis capacity for long, effortful work is ' + p + ' for the rest of today; simple activities cost nothing.');
   return L.join('\n');
 }
@@ -203,6 +204,30 @@ function computerPlace(where) {
   if (lib && lib.type === 'library' && S.mind.knownPlaces[lib.id]) return { place: lib.id, needOpen: true, enter: true };
   const home = W.home(); return { place: home.id, enter: true };
 }
+// A factual record of repeated efforts and what they produced, so he can tell a productive loop from a dead end himself.
+// It never tells him to stop or change; it only counts.
+const TOPIC_STOP = new Set('what where when which who whom whose why how does did do is are was were the a an of in on at to for and or with from this that these those it its his my about there village'.split(' '));
+const topicWords = t => new Set(String(t || '').toLowerCase().match(/[a-z][a-z'-]{2,}/g)?.filter(w => !TOPIC_STOP.has(w)) || []);
+function trackRecord() {
+  const out = [], day = W.dayOf(S.t);
+  const recent = S.researchLog.filter(l => l.kind === 'research' && day - l.day <= 3 && l.status !== 'running');
+  const groups = [];
+  for (const l of recent) {
+    const w = topicWords(l.question + ' ' + (l.queries || []).join(' '));
+    const g = groups.find(g => [...w].filter(x => g.words.has(x)).length >= 2);
+    if (g) { g.items.push(l); for (const x of w) g.words.add(x); } else groups.push({ words: w, items: [l], label: l.question });
+  }
+  for (const g of groups.filter(g => g.items.length >= 2)) {
+    const searches = g.items.reduce((n, l) => n + (l.queries || []).length, 0), opened = g.items.reduce((n, l) => n + (l.pages || []).filter(p => p.via === 'opened').length, 0);
+    const results = g.items.reduce((n, l) => n + (l.pages || []).filter(p => p.via === 'search result').length, 0), sourced = g.items.reduce((n, l) => n + (l.findings || []).filter(f => f.support === 'source').length, 0);
+    out.push(g.items.length + ' investigations since day ' + g.items[0].day + ' around "' + g.label + '": ' + searches + ' searches, ' + results + ' search results, ' + opened + ' pages opened, ' + sourced + ' sourced findings');
+  }
+  const fails = S.journal.filter(j => j.outcome && !j.outcome.ok && day - j.day <= 1).slice(-12), byErr = {};
+  for (const j of fails) { const k = (j.choice && j.choice.type || '?') + ': ' + String((j.outcome.facts || [])[0] || '').slice(0, 90); byErr[k] = (byErr[k] || 0) + 1; }
+  for (const [k, n] of Object.entries(byErr)) if (n >= 2) out.push(n + ' recent attempts ended the same way (' + k + ')');
+  return out.slice(0, 5);
+}
+
 function resolveGo(to) {
   const s = String(to || '').trim(); const home = W.home();
   if (!s || /^home$/i.test(s) || s === home.id) return { place: home.id, label: 'home' };

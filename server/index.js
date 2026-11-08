@@ -250,7 +250,7 @@ async function keeper(req, res, what) {
   switch (what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
-      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), searchHealth: Search.searchHealth(), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
+      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
         journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
@@ -316,6 +316,11 @@ async function keeper(req, res, what) {
     }
     case 'print-sold': { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
     case 'remove-graffiti': S.graffiti = S.graffiti.filter(g => g.id !== b.id); return ok();
+    case 'remove-inside': { // take something out of a room (it was left there when the room was first described)
+      const pl = W.placeById(b.place); const items = pl && pl.inside && pl.inside.items; if (!items) return send(res, 400, { error: 'No such room.' });
+      const it = items.find(i => i.id === b.id); if (!it) return send(res, 400, { error: 'It isn\'t there.' });
+      pl.inside.items = items.filter(i => i !== it); W.wlog('the keeper took ' + (it.name || 'something') + ' out of ' + pl.name); return ok();
+    }
     case 'remove-item': S.items = S.items.filter(i => i.id !== b.id || i.sold); return ok();
     case 'remove-thing': W.removeThing(b.id); return ok();
     case 'remove-building': { const r = W.removeBuilding(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error }); return ok(); }

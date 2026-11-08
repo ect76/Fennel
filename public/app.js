@@ -308,6 +308,17 @@ function renderPrivate() {
     for (const [k, v] of lines) if (v) { const p = el('p', 'hint'); p.append(el('b', null, k + ': '), document.createTextNode(v)); d.append(p); }
     jw.append(d);
   }
+  const kr = $('#kRooms'); kr.textContent = '';
+  if (!(PRIV.rooms || []).length) kr.append(el('p', 'hint', 'Nothing yet: rooms are described the first time he goes inside.'));
+  for (const room of PRIV.rooms || []) {
+    const d = el('details'); d.append(el('summary', null, room.name + ' (' + room.items.length + ')')); const ul = el('ul', 'list');
+    for (const it of room.items) {
+      const li = el('li'); const x = el('div'); x.append(el('b', null, it.name), el('small', null, (it.taken ? 'he took it · ' : '') + (it.text ? '"' + it.text + '"' : ''))); li.append(x);
+      if (!it.taken) { const b = el('button', 'btn small', 'Remove'); b.type = 'button'; b.onclick = async () => { b.disabled = true; try { await kpost('remove-inside', { place: room.id, id: it.id }); loadPrivate(); } catch (err) { b.textContent = err.message; } }; li.append(b); }
+      ul.append(li);
+    }
+    d.append(ul); kr.append(d);
+  }
   const wl = $('#kWorld'); wl.textContent = Object.keys(PRIV.worldLog).sort((a, b) => b - a).map(d => 'Day ' + d + '\n' + PRIV.worldLog[d].slice().reverse().join('\n')).join('\n\n');
 }
 $('#budgetForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#budgetStatus'); try { await kpost('settings', { callsPerDay: $('#bCalls').value, spendPerDay: $('#bSpend').value, searchesPerDay: $('#bSearch').value, searchVia: $('#bVia').value, quality: $('#bQuality').value, publishApproved: $('#bPublish').value === '1' }); st.textContent = 'Saved.'; document.activeElement.blur(); loadPrivate(); refreshState(); } catch (err) { st.textContent = err.message; } });
