@@ -67,6 +67,26 @@ Within a minute or two of his next drawing, his site appears at `https://percy-t
 
 If you want real people to be able to buy real prints, set up your own shop page (Ko-fi, a Stripe payment link, etc.) and put its address in **Real print shop link**. It appears beside his drawings. When a print sells, record it in the Keeper tab so Percy finds coins in his tin. You handle the printing, posting and any tax.
 
+### 8. His shop, commissions and real money (optional)
+
+Percy earns coins three ways, and spends them in the shops:
+
+- **The stall.** He leaves drawings out on the market stall; visitors can take one from the Drawings tab and he finds coins in his tin.
+- **Commissions.** Anyone visiting can send him an order from the **Shop & jobs** tab (a drawing, something written, or a web page) and offer up to 20 coins. Orders land in his shop inbox, which he checks on the computer at his desk. He decides whether to take each job (he can say no), does it, and gets paid when it's finished. Each visitor can send three a day. You can remove any order in the Keeper tab.
+- **His shop.** Now and then he sits down and decides which of his drawings, pages, web projects and belongings to sell, sets his own prices and writes the blurbs. If his website is set up, he also designs and builds his own shop page there (`shop.html`) and redesigns it when he feels like it. The server keeps the stock, prices and "sold" labels on that page up to date.
+
+Nothing to set up for any of that. To let people pay **real money**, which turns into coins, connect Ko-fi:
+
+1. Make a free page at [ko-fi.com](https://ko-fi.com) for Percy.
+2. His town needs a public address so Ko-fi can reach it: set up Tailscale Funnel (step 5) and put the address in **Public address**.
+3. On Ko-fi, open **Settings → API**. Copy the **Verification Token**. In **Webhook URL**, put your public address followed by `/api/kofi` (for example `https://percy.your-tailnet.ts.net/api/kofi`) and click **Update**.
+4. In the Unraid container's advanced settings, set **Ko-fi page** to your Ko-fi address (e.g. `https://ko-fi.com/percythepenguin`) and **Ko-fi verification token** to the token. Apply.
+5. Back on Ko-fi, use one of the test buttons. The server log shows `ko-fi: 3.00 GBP became 30 coins`.
+
+Every pound sent becomes 10 coins (change it with **Coins per pound**). Payments appear in his shop inbox with their message, and he reads them next time he checks it. To buy something from his shop, people pay at least its price on Ko-fi and put the item's code (like `PCY-7KQ2`) in their message. The item is marked sold and the payment counts as buying it. A code from an order works the same way, for tipping him for a job. If a supporter ticks Ko-fi's "private" box, Percy only sees the coins: no name, no message.
+
+In the Keeper tab you can also **give him coins** yourself (with a message if you like), or record a shop sale that was paid some other way. You handle anything owed on real money (Ko-fi's terms, tax, posting a print if you promise one).
+
 ---
 
 ## Settings
@@ -86,6 +106,9 @@ If you want real people to be able to buy real prints, set up your own shop page
 | `PUBLIC_URL` | — | Where visitors can see his town |
 | `GITHUB_TOKEN`, `GITHUB_REPO` | — | His website (see above) |
 | `PRINT_SHOP_URL`, `PRINT_COINS` | —, `10` | Real prints (see above) |
+| `KOFI_URL` | — | His Ko-fi page, linked from his shop |
+| `KOFI_TOKEN` | — | Ko-fi's verification token; turns on `/api/kofi` |
+| `COINS_PER_POUND` | `10` | Coins per pound (or dollar, euro...) sent on Ko-fi |
 
 ### Keeping costs in check
 

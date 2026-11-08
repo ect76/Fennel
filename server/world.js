@@ -30,6 +30,9 @@ export const ACTIONS = {
   buy: { at: null, label: 'buying something', dur: 20, gain: { joy: 14 }, desc: 'buy something he has seen for sale (give the item id as "target"); only if he has the coins' },
   graffiti: { at: null, label: 'painting on a wall', dur: 40, gain: { joy: 10, wonder: -2 }, desc: 'paint graffiti on a wall somewhere in town (what to paint in "subject", a short tag of a few words in "title")' },
   inspect: { at: null, label: 'looking closely at something', dur: 45, gain: { wonder: 16, joy: 4 }, desc: 'go and look closely at an object visitors added to town (give its id as "target")' },
+  inbox: { at: 'home', label: 'checking his shop inbox', dur: 25, gain: { wonder: 4 }, desc: 'check the inbox of his shop on the computer at his desk: orders from people outside asking him to make things for coins (commissions), and payments from people who bought his things or just sent him money, with their messages' },
+  job: { at: 'home', label: 'working on a commission', dur: 110, gain: { joy: 8, energy: -8 }, desc: 'work on a commission he has accepted, at his desk (give its id as "target"); when it is done he gets paid' },
+  shopfront: { at: 'home', label: 'working on his shop', dur: 90, gain: { joy: 8, energy: -5 }, desc: 'work on his shop: choose which of his things to sell and for how much, and set up or redesign his shop page on his website, where people outside can buy them with real money' },
 };
 export const ACTION_IDS = Object.keys(ACTIONS);
 
@@ -99,6 +102,7 @@ export function newWorld() {
     dayMood: { score: 0.1, label: 'an ordinary day', causes: ['first morning in the cottage'], day: 1 }, moodCarry: 0, wishes: [], percyNotes: [], interests: [], lastContact: 1,
     knowledge: [], researchQueue: [], memories: [],
     diary: [], drawings: [], pages: [], webPages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
+    commissions: [], shop: [], post: [], payments: [], saving: null, advert: '', shopPage: null, earned: { work: 0, real: 0, stall: 0 }, wishLog: [],
     dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
     weather: { kind: 'clear', until: 12 * 60 }, events: [],
     lastSeenReal: Date.now(),
@@ -131,7 +135,7 @@ export function leaveNotebook(old) {
   S.questions = S.questions.slice(0, 6);
 }
 
-const newStats = () => ({ ate: 0, fish: 0, drew: 0, painted: 0, saw: 0, wrote: 0, sold: 0, read: 0, fog: 0, notes: 0, things: 0, closed: 0, found: 0 });
+const newStats = () => ({ ate: 0, fish: 0, drew: 0, painted: 0, saw: 0, wrote: 0, sold: 0, read: 0, fog: 0, notes: 0, things: 0, closed: 0, found: 0, jobs: 0, inbox: 0 });
 
 /* ---------- time ---------- */
 export const dayOf = t => Math.floor(t / 1440) + 1;
@@ -280,7 +284,7 @@ function decay(mins, asleep) {
   if (!asleep && w === 'snow' && outdoors()) n.joy += 2 / 60 * mins; // a penguin likes snow
   for (const k in n) n[k] = clamp(n[k], 0, 100);
 }
-function outdoors() { const a = S.act; return !a || a.phase === 'walk' || !['sleep', 'nap', 'draw', 'write', 'read', 'tidy', 'eat', 'visit'].includes(a.id); }
+function outdoors() { const a = S.act; return !a || a.phase === 'walk' || !INDOOR.has(a.id); }
 
 /* ---------- what's possible right now ---------- */
 export function available(id, h = hourOf(S.t)) {
@@ -298,6 +302,8 @@ export function available(id, h = hourOf(S.t)) {
     case 'web': return false; // needs Claude and his website
     case 'buy': return S.items.some(it => it.seen && !it.sold && it.price <= S.coins);
     case 'graffiti': return S.coins >= 2;
+    case 'job': return false; // needs Claude; the mind offers it when he has accepted work
+    case 'shopfront': return false; // needs Claude and his website
     default: return true;
   }
 }
@@ -331,6 +337,8 @@ function ruleScore(id, h) {
     case 'graffiti': s = 0.15 + (n.joy < 45 ? 0.2 : 0) + tr.creativity * 0.3 - S.stats.painted * 0.6; break;
     case 'write': s = -1e9; break;
     case 'web': s = -1e9; break;
+    case 'job': case 'shopfront': s = -1e9; break;
+    case 'inbox': s = 0.1 + (inboxWaiting() ? 1.6 : 0) + (S.coins < 5 ? 0.25 : 0); break;
     case 'inspect': { const b = bestThing(); if (!b) return -1e9; return b.s - (night ? 0.5 : 0) + (Number(S.leanings.inspect) || 0) * 0.45; }
   }
   if (night && !['sleep', 'stargaze', 'pond'].includes(id)) s -= 1;
@@ -349,7 +357,7 @@ const RULE_THOUGHTS = {
   eat: ['hungry. bread.', 'i could eat a whole loaf.'], fish: ['fancy a fish. off to the pond.'],
   draw: ['want to draw something.'], sell: ['i wonder if anything has gone from the stall.'],
   read: ['want to know something new.'], pond: ['going to sit by the pond for a while.'], stargaze: ['clear night. up the hill to look at the stars.'],
-  shrine: ['going to see if anyone left a note.'], fog: ['going to the end of the road to look at the fog.'],
+  shrine: ['going to see if anyone left a note.'], inbox: ['going to check my inbox.', 'i wonder if anyone ordered anything.'], fog: ['going to the end of the road to look at the fog.'],
   wander: ['going for a walk.', 'just walking for a bit.', 'stretching my legs.'], explore: ['going somewhere i haven\'t been for a while.'], tidy: ['the cottage needs tidying.'],
   visit: ['going to have a look inside somewhere.'], buy: ['i have enough coins. i\'m going to buy it.'], graffiti: ['want to paint something on a wall.'], inspect: ['going to look at that new thing.'],
 };
@@ -432,10 +440,10 @@ function fail(why, thought) {
   S.act = null; bump();
 }
 
-let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {}, onWake: () => {} };
+let hooks = { onArrive: () => {}, onFinish: () => {}, onBedtime: () => {}, onDiscover: () => {}, onGrow: () => {}, onGraffitiSeen: () => {}, onItemSeen: () => {}, onWake: () => {}, onInbox: () => {} };
 export const setHooks = h => { hooks = { ...hooks, ...h }; };
 
-const INDOOR = new Set(['visit', 'read', 'eat', 'draw', 'write', 'web', 'tidy', 'nap', 'sleep', 'buy']);
+const INDOOR = new Set(['visit', 'read', 'eat', 'draw', 'write', 'web', 'tidy', 'nap', 'sleep', 'buy', 'inbox', 'job', 'shopfront']);
 function arrive(a) {
   const h = hourOf(S.t), p = a.place ? placeById(a.place) : null;
   if (p && !p.known) discover(p);
@@ -487,6 +495,7 @@ function bedtime(h) {
   if (st.found) parts.push('found ' + (st.found === 1 ? 'a new place' : st.found + ' new places'));
   if (st.things) parts.push('looked at new things');
   if (st.notes) parts.push('found ' + (st.notes === 1 ? 'a note' : st.notes + ' notes'));
+  if (st.jobs) parts.push('worked on ' + (st.jobs === 1 ? 'a commission' : st.jobs + ' commissions'));
   addDiary('summary', 'day ' + d + '. ' + (parts.length ? parts.join(', ') : 'not much happened') + '. mostly felt ' + moodWord() + '.');
   S.stats = newStats();
   hooks.onBedtime(d);
@@ -501,9 +510,9 @@ function finish(a) {
     case 'sell': {
       // Nobody else lives here. He leaves drawings out; later some are gone and there are coins in the tin.
       const gone = S.drawings.filter(d => d.sold && !d.noticedSold);
-      const coins = S.tin || 0; S.tin = 0; S.coins += coins;
+      const coins = S.tin || 0; S.tin = 0; S.coins += coins; S.earned.stall += coins;
       for (const d of gone) d.noticedSold = true;
-      const placed = unsold().filter(d => !d.onStall).slice(0, Math.max(0, 6 - unsold().filter(d => d.onStall).length));
+      const placed = unsold().filter(d => !d.onStall && !d.listed && !d.commission).slice(0, Math.max(0, 6 - unsold().filter(d => d.onStall).length));
       for (const d of placed) { d.onStall = true; d.price = d.price || 2 + Math.floor(Math.random() * 4); }
       if (gone.length) {
         S.stats.sold += gone.length; feel('joy', 6); feel('wonder', 6); emo('contentment', 12); contact(10 * gone.length); emo('curiosity', 10);
@@ -528,6 +537,8 @@ function finish(a) {
     case 'inspect': { const th = thingById(a.thing); if (th) { th.inspections++; S.stats.things++; if (th.inspections >= 3) th.liked = true; } break; }
     case 'sleep': log('woke up'); { const h0 = hourOf(S.t); if (h0 >= 5 && h0 < 11) { newDayMood(); hooks.onWake(S.dayMood); } } break;
     case 'nap': log('took a nap'); break;
+    case 'inbox': S.stats.inbox++; a.collected = checkInbox(); break;
+    case 'job': S.stats.jobs++; break;
   }
   hooks.onFinish(a);
 }
@@ -637,7 +648,6 @@ export function stockItem({ shop, name, price, desc }) {
   const p = placeById(shop);
   if (!p || !['shop', 'bakery', 'cafe', 'market', 'post', 'workshop', 'museum'].includes(p.type)) return { error: 'Pick a shop to put it in.' };
   const it = { id: uid(), shop: p.id, name: str(name, 60), desc: str(desc, 240), price: clamp(Math.round(Number(price) || 10), 1, 999), day: dayOf(S.t), seen: false, sold: false, status: 'building', model: null };
-  if (wish) { const w = (S.wishes || []).find(w => w.text === wish); if (w) { w.granted = true; w.grantedDay = dayOf(S.t); th.wish = w.text; } }
   if (!it.name) return { error: 'Give it a name.' };
   S.items.push(it); log('something new appeared in the window of ' + p.name); bump();
   return { item: it };
@@ -664,6 +674,95 @@ function examineNext(p) {
   return it;
 }
 
+/* ---------- earning a living: commissions, his shop, and money from outside ---------- */
+// Codes let a payment on Ko-fi say what it was for ("PCY-7KQ2" in the message).
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function newCode() { let c; do { c = 'PCY-' + Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join(''); } while ((S.shop || []).some(x => x.code === c) || (S.commissions || []).some(x => x.code === c)); return c; }
+export const COMMISSION_KINDS = { drawing: 'a drawing', page: 'something written', web: 'a web page' };
+export function inboxWaiting() { const d = dayOf(S.t); return S.post.some(p => !p.collected) || S.commissions.some(c => c.status === 'posted' && c.waitDay !== d); }
+export function postCommission({ text, kind, from, offer }) {
+  text = str(text, 500); if (!text) return { error: 'Say what you would like him to make.' };
+  if (!COMMISSION_KINDS[kind]) kind = 'drawing';
+  if (S.commissions.filter(c => c.status === 'posted').length >= 10) return { error: 'His inbox is already full of orders he hasn\'t read. Try again after he has checked it.' };
+  const c = { id: uid(), code: newCode(), text, kind, from: str(from, 30), offer: clamp(Math.round(Number(offer) || 5), 1, 20), paidReal: 0, day: dayOf(S.t), status: 'posted', reply: '' };
+  S.commissions.unshift(c); if (S.commissions.length > 60) S.commissions.length = 60;
+  log('an order came into his shop inbox'); bump();
+  return { commission: c };
+}
+// Money from the outside world (a Ko-fi payment, or the keeper). It shows up in his shop inbox; the coins are his once he has seen it.
+export function receivePayment({ coins, from = '', message = '', code = '', amount = '', source = 'kofi', ref = '', isPublic = true }) {
+  coins = Math.max(1, Math.round(Number(coins) || 0));
+  if (ref && S.payments.some(p => p.ref === ref)) return { duplicate: true };
+  const m = String(message || '').toUpperCase().match(/PCY-[A-Z0-9]{4}/); code = String(code || (m ? m[0] : '')).toUpperCase();
+  const listing = code ? S.shop.find(x => x.code === code) : null, job = code ? S.commissions.find(x => x.code === code) : null;
+  if (isPublic === false) { from = ''; message = ''; } // a private payment: he only ever sees the coins
+  const env = { id: uid(), coins, from: str(from, 40), message: str(message, 500), day: dayOf(S.t), collected: false, source, forShop: listing ? listing.id : '', forJob: job ? job.id : '', public: isPublic !== false };
+  if (listing && !listing.sold) { listing.sold = true; listing.soldDay = dayOf(S.t); listing.buyer = env.from; env.forTitle = listing.title; markSoldThing(listing); }
+  if (job) { job.paidReal = (job.paidReal || 0) + coins; env.forTitle = 'the commission: ' + job.text.slice(0, 60); }
+  S.post.push(env); if (S.post.length > 80) S.post.shift();
+  S.payments.push({ ref: str(ref, 80), day: dayOf(S.t), coins, amount: str(amount, 20), source, code, from: env.from }); if (S.payments.length > 200) S.payments.shift();
+  S.earned.real += coins; log('a payment came into his shop inbox'); bump();
+  return { envelope: env, listing, job };
+}
+function markSoldThing(l) {
+  if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d) { d.sold = true; d.soldDay = dayOf(S.t); d.onStall = false; d.shopSold = true; } }
+  if (l.kind === 'thing') { S.inventory = S.inventory.filter(i => i.id !== l.ref); }
+}
+// What he finds when he checks his shop inbox: payments (with messages) and orders asking for work.
+function checkInbox() {
+  const envs = S.post.filter(p => !p.collected), letters = S.commissions.filter(c => c.status === 'posted');
+  let coins = 0;
+  for (const e of envs) { e.collected = true; e.collectedDay = dayOf(S.t); coins += e.coins; }
+  S.coins += coins;
+  for (const c of letters) c.status = 'read';
+  if (envs.length) {
+    contact(14 + envs.length * 6); emo('excitement', 18); emo('contentment', 12); feel('joy', 8);
+    const sold = envs.filter(e => e.forShop).map(e => e.forTitle);
+    log('found ' + envs.length + ' payment' + (envs.length > 1 ? 's' : '') + ' in his inbox, ' + coins + ' coins' + (sold.length ? ' (someone bought ' + sold.join(', ') + ')' : ''));
+    remember('day ' + dayOf(S.t) + ': ' + coins + ' coins came into his shop from outside' + (sold.length ? ' for ' + sold.join(', ') : ''), 4);
+  }
+  if (letters.length) { emo('curiosity', 12); contact(8 * letters.length); log('found ' + letters.length + ' order' + (letters.length > 1 ? 's' : '') + ' asking him to make things'); }
+  if (!envs.length && !letters.length) { log('nothing new in his inbox'); S.lastFail = 'there was nothing new in his inbox'; }
+  hooks.onInbox(envs, letters, coins);
+  return { envs, letters, coins };
+}
+// He has decided about an order.
+export function answerCommission(c, { accept, reply, offerNote }) {
+  c.status = accept ? 'accepted' : 'declined'; c.reply = str(reply, 400); c.decidedDay = dayOf(S.t); if (offerNote) c.note = str(offerNote, 200);
+  log((accept ? 'took on' : 'turned down') + ' a commission: ' + c.text.slice(0, 60)); bump();
+}
+export function finishCommission(c, result) {
+  c.status = 'done'; c.doneDay = dayOf(S.t); c.result = result;
+  const pay = c.offer; S.coins += pay; S.earned.work += pay;
+  emo('contentment', 16); emo('excitement', 8); feel('joy', 8); contact(10);
+  log('finished a commission and got ' + pay + ' coins'); remember('day ' + dayOf(S.t) + ': finished a commission (' + c.text.slice(0, 80) + ') and was paid ' + pay + ' coins', 3);
+  bump(); return pay;
+}
+// His shop: things he has chosen to sell, at prices he set. Listings refer to his drawings, pages, web projects or belongings.
+export function shopCandidates() {
+  const listed = new Set(S.shop.filter(x => !x.sold && !x.withdrawn).map(x => x.ref));
+  const out = [];
+  for (const d of S.drawings.slice(-30)) if (!d.sold && !listed.has(d.id) && !d.commission) out.push({ kind: 'drawing', ref: d.id, title: d.title, day: d.day });
+  for (const p of S.pages.slice(-15)) if (!listed.has(p.id) && !p.commission) out.push({ kind: 'page', ref: p.id, title: p.title, day: p.day });
+  for (const w of (S.webPages || []).slice(-15)) if (!listed.has(w.id) && !w.commission) out.push({ kind: 'web', ref: w.id, title: w.title, day: w.day });
+  for (const i of S.inventory) if (!listed.has(i.id)) out.push({ kind: 'thing', ref: i.id, title: i.name, day: i.day });
+  return out;
+}
+export function setListing({ ref, price, blurb }) {
+  const ex = S.shop.find(x => x.ref === ref && !x.sold && !x.withdrawn);
+  price = clamp(Math.round(Number(price) || 0), 1, 500);
+  if (ex) { ex.price = price; if (blurb) ex.blurb = str(blurb, 300); return ex; }
+  const c = shopCandidates().find(x => x.ref === ref); if (!c) return null;
+  const l = { id: uid(), code: newCode(), kind: c.kind, ref, title: str(c.title, 70), blurb: str(blurb, 300), price, day: dayOf(S.t), sold: false };
+  if (c.kind === 'drawing') { const d = S.drawings.find(x => x.id === ref); if (d) { d.onStall = false; d.listed = true; } }
+  S.shop.push(l); if (S.shop.length > 120) S.shop.splice(0, S.shop.length - 120);
+  log('put "' + l.title + '" in his shop for ' + price + ' coins'); bump();
+  return l;
+}
+export function withdrawListing(id) { const l = S.shop.find(x => (x.id === id || x.ref === id) && !x.sold); if (!l) return; l.withdrawn = true; const d = l.kind === 'drawing' && S.drawings.find(x => x.id === l.ref); if (d) d.listed = false; bump(); }
+export const openListings = () => S.shop.filter(x => !x.sold && !x.withdrawn);
+export const pounds = coins => Math.max(1, Math.round(coins / config.coinsPerPound * 100) / 100);
+
 /* ---------- visitor objects ---------- */
 export function spotProblem(x, z, size = 1.6) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return 'Pick a spot in town.';
@@ -674,6 +773,7 @@ export function spotProblem(x, z, size = 1.6) {
 }
 export function addThing({ name, desc, x, z, size = 3, wish = '' }) {
   const th = { id: uid(), kind: 'made', name: str(name, 60), desc: str(desc, 240), x, z, size: clamp(Number(size) || 3, 1, 8), rot: Math.atan2(-x, -z), day: dayOf(S.t), seen: false, noticed: false, inspections: 0, status: 'building', model: null };
+  if (wish) { const w = (S.wishes || []).find(w => w.text === wish); if (w) { w.granted = true; w.grantedDay = dayOf(S.t); th.wish = w.text; } }
   S.things.push(th);
   log('a ' + plainName(th.name) + ' appeared near ' + nearPlace(x, z));
   if (S.act && S.act.phase === 'walk' && S.act.id !== 'sleep') S.act = null;
@@ -704,7 +804,11 @@ export function publicState(extra = {}) {
     graffiti: S.graffiti.map(g => ({ id: g.id, by: g.by, x: g.x, y: g.y, z: g.z, nx: g.nx, nz: g.nz, w: g.w, h: g.h, img: g.img || ('/media/graffiti/' + g.id + '.svg'), where: g.where, day: g.day, seen: g.seen })),
     notebook: S.notebook || null, inventory: S.inventory || [],
     items: S.items.map(i => ({ id: i.id, shop: i.shop, name: i.name, desc: i.desc, price: i.price, seen: i.seen, sold: i.sold, img: i.img || '', model: i.model || null, status: i.status || 'ready' })),
-    wishes: S.wishes || [], percyNotes: (S.percyNotes || []).slice(-20),
+    wishes: S.wishes || [], percyNotes: (S.percyNotes || []).slice(-20), wishLog: (S.wishLog || []).slice(-12),
+    commissions: S.commissions.slice(0, 40).map(c => ({ id: c.id, code: c.code, text: c.text, kind: c.kind, from: c.from, offer: c.offer, paidReal: c.paidReal || 0, day: c.day, status: c.status, reply: c.reply, note: c.note || '', decidedDay: c.decidedDay, doneDay: c.doneDay, result: c.result || null })),
+    shop: S.shop.filter(x => !x.withdrawn).slice(-60).map(x => ({ id: x.id, code: x.code, kind: x.kind, ref: x.ref, title: x.title, blurb: x.blurb, price: x.price, pounds: pounds(x.price), day: x.day, sold: x.sold, soldDay: x.soldDay, buyer: x.buyer || '' })),
+    post: S.post.slice(-20).map(e => ({ id: e.id, coins: e.coins, from: e.public ? e.from : '', message: e.public ? e.message : '', day: e.day, collected: e.collected, forTitle: e.forTitle || '', source: e.source })),
+    earned: S.earned, advert: S.advert || '', saving: S.saving || null, shopPage: S.shopPage || null, coinsPerPound: config.coinsPerPound,
     emotions: S.emotions, dayMood: S.dayMood, interests: S.interests.map(i => ({ ...i, depth: depthOf(i) })), webPages: S.webPages || [],
     town: publicTown(), fogTests: S.fogTests, memoryCount: S.memories.length,
     ...extra,

@@ -37,4 +37,7 @@
   <Config Name="Website: repository" Target="GITHUB_REPO" Default="" Mode="" Description="Optional. e.g. percy-the-penguin/percy-the-penguin.github.io" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="Real print shop link" Target="PRINT_SHOP_URL" Default="" Mode="" Description="Optional. A link to your own shop (Ko-fi, Stripe payment link...) shown beside his drawings." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="Coins per real print sold" Target="PRINT_COINS" Default="10" Mode="" Description="What Percy finds in his tin when you record a real print sale." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+  <Config Name="Ko-fi page" Target="KOFI_URL" Default="" Mode="" Description="Optional. His Ko-fi page (e.g. https://ko-fi.com/percythepenguin), so people can buy from his shop and send him coins." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Ko-fi verification token" Target="KOFI_TOKEN" Default="" Mode="" Description="Optional. From Ko-fi Settings, API. Set the Ko-fi webhook URL to your public address + /api/kofi." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Coins per pound" Target="COINS_PER_POUND" Default="10" Mode="" Description="How many coins each pound (or dollar, euro...) sent on Ko-fi becomes." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
 </Container>

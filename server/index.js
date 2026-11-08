@@ -30,7 +30,22 @@ function parseDataURL(u) {
   return { mediaType: m[1], ext: m[2] === 'jpeg' ? 'jpg' : m[2], buf, data: m[3] };
 }
 // his website: re-render the index whenever something new goes up
-function siteUpdate(files, message) { if (!Pub.enabled()) return; for (const [p, c] of files) Pub.queueFile(p, c, message); Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index'); }
+function siteUpdate(files, message) { if (!Pub.enabled()) return; for (const [p, c] of files) Pub.queueFile(p, c, message); Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index'); shopUpdate(); }
+// his shop page: he designs it (mind.makeShopPage); the server keeps its stock list current
+const SHOP_TEMPLATE = path.join(MEDIA, 'web', '_shop.html');
+function shopData() {
+  const items = S.shop.filter(x => !x.withdrawn && (!x.sold || W.dayOf(S.t) - (x.soldDay || 0) < 30)).slice(-60).map(x => {
+    const w = x.kind === 'web' ? (S.webPages || []).find(p => p.id === x.ref) : null, pg = x.kind === 'page' ? S.pages.find(p => p.id === x.ref) : null;
+    return { code: x.code, title: x.title, blurb: x.blurb || '', price: x.price, pounds: W.pounds(x.price), kind: x.kind, img: x.kind === 'drawing' ? 'drawings/' + x.ref + '.svg' : '', link: w ? 'made/' + w.slug + '.html' : pg ? 'pages/' + Pub.slug(pg.title) + '.html' : '', sold: !!x.sold, day: x.day };
+  });
+  return { items, sign: S.advert || '', kofi: config.kofiUrl, townUrl: config.publicUrl, coinsPerPound: config.coinsPerPound, updated: 'day ' + W.dayOf(S.t) };
+}
+function shopUpdate() {
+  if (!Pub.enabled() || !S.shopPage) return;
+  let html; try { html = fs.readFileSync(SHOP_TEMPLATE, 'utf8'); } catch { return; }
+  const json = JSON.stringify(shopData()).replace(/</g, '\\u003c');
+  Pub.queueFile('shop.html', html.replace(M.SHOP_SLOT, () => '<script type="application/json" id="' + M.SHOP_MARK + '">' + json + '</script>'), 'percy\'s shop');
+}
 
 /* ---------- load or create the world ---------- */
 let S = loadJSON(SAVE);
@@ -99,6 +114,8 @@ function publish(a) {
       W.remember('made a web page called "' + r.title + '"', 3); W.log('made a web page: ' + r.title);
       siteUpdate([['made/' + sl + '.html', r.html]], 'percy made a page: ' + r.title);
     } else W.log('tried to make a web page but it wouldn\'t come together');
+  } else if (j.kind === 'job') { deliverCommission(a, j.result);
+  } else if (j.kind === 'shop') { openShop(a, j.result);
   } else if (j.kind === 'page') {
     const r = j.result;
     if (r) {
@@ -119,6 +136,42 @@ function finishDrawing(a, art) {
   W.addDiary('drawing', 'drew "' + dr.title + '"' + (a.scrap ? ' on the back of an old envelope. no money for paper.' : '. ' + pick(['pinned it on the board on the high street.', 'it came out wobbly. i like it anyway.', 'not sure about the left side.', 'it looks like how it felt.'])), 'rules', { drawing: dr.id });
   W.log('drew "' + dr.title + '"');
   siteUpdate([['drawings/' + dr.id + '.svg', svg]], 'percy drew ' + dr.title);
+}
+// a finished commission: file the work where it belongs, then he gets paid
+function deliverCommission(a, r) {
+  const c = S.commissions.find(x => x.id === a.job.commission); if (!c) return;
+  if (!r) { c.tries = (c.tries || 0) + 1; W.log('worked on a commission but it didn\'t come right'); W.emo('frustration', 10); if (c.tries >= 3) { c.status = 'failed'; c.reply = (c.reply ? c.reply + ' ' : '') + '(he tried three times and couldn\'t get it right.)'; W.addDiary('job', 'gave up on the commission: "' + c.text.slice(0, 80) + '". tried three times. it wouldn\'t come.'); } return; }
+  let result;
+  if (c.kind === 'drawing') {
+    const dr = M.makeDrawing(str(c.text, 80), a.title || str(c.text.replace(/^(please\s+)?(can you\s+)?(draw|make|paint)\s+(me\s+)?/i, ''), 48), false); dr.art = 'claude'; dr.commission = c.id; dr.forWho = c.from || ''; dr.sold = true; dr.soldDay = W.dayOf(S.t);
+    writeMedia('drawings/' + dr.id + '.svg', r); siteUpdate([['drawings/' + dr.id + '.svg', r]], 'percy drew a commission: ' + dr.title);
+    result = { type: 'drawing', id: dr.id, title: dr.title, url: '/media/drawings/' + dr.id + '.svg' };
+  } else if (c.kind === 'page') {
+    const page = { id: W.uid(), day: W.dayOf(S.t), title: r.title, body: r.body, forWho: c.from || '', commission: c.id };
+    S.pages.push(page); if (S.pages.length > 60) S.pages.shift();
+    siteUpdate([['pages/' + Pub.slug(page.title) + '.html', Pub.pageHTML(page)]], 'percy wrote a commission: ' + page.title);
+    result = { type: 'page', id: page.id, title: page.title };
+  } else {
+    let sl = Pub.slug(r.title); if ((S.webPages || []).some(p => p.slug === sl)) sl += '-' + W.dayOf(S.t);
+    const page = { id: W.uid(), slug: sl, title: r.title, subject: c.text.slice(0, 80), day: W.dayOf(S.t), versions: 1, lastDay: W.dayOf(S.t), forWho: c.from || '', commission: c.id };
+    S.webPages.push(page); if (S.webPages.length > 80) S.webPages.shift();
+    writeMedia('web/' + sl + '.html', r.html); siteUpdate([['made/' + sl + '.html', r.html]], 'percy made a commission: ' + r.title);
+    result = { type: 'web', id: page.id, title: r.title, slug: sl, url: Pub.enabled() ? Pub.siteUrl() + 'made/' + sl + '.html' : '/media/web/' + sl + '.html' };
+  }
+  const pay = W.finishCommission(c, result);
+  W.addDiary('job', 'finished the commission for ' + (c.from || 'whoever ordered it') + ': "' + result.title + '". sent it off. ' + pay + ' coins came back. ' + pick(['i hope they like it.', 'i keep thinking about them opening it.', 'my own money, from my own work.', 'i checked it four times before i let it go.']), 'claude', result.type === 'drawing' ? { drawing: result.id } : {});
+}
+// a shop session: listings, his sign, and maybe a new design for his shop page
+function openShop(a, r) {
+  if (!r || !r.plan) { W.log('sat down to sort out the shop but couldn\'t decide anything'); return; }
+  const p = r.plan, listed = [];
+  if (Array.isArray(p.withdraw)) for (const ref of p.withdraw.slice(0, 10)) W.withdrawListing(String(ref));
+  if (Array.isArray(p.list)) for (const it of p.list.slice(0, 8)) { const l = it && W.setListing({ ref: String(it.ref || ''), price: it.price, blurb: it.blurb }); if (l) listed.push(l); }
+  if (str(p.sign, 300)) S.advert = str(p.sign, 300);
+  if (r.html) { writeMedia('web/_shop.html', r.html); S.shopPage = { versions: ((S.shopPage && S.shopPage.versions) || 0) + 1, day: W.dayOf(S.t), idea: str(p.design_idea, 200) }; }
+  if (str(p.thought, 400)) W.setThought(str(p.thought, 400), 'claude');
+  W.addDiary('shop', (listed.length ? 'put ' + listed.map(l => '"' + l.title + '" (' + l.price + ')').join(', ') + ' in the shop. ' : 'looked at everything and didn\'t put anything new in the shop. ') + (r.html ? (S.shopPage.versions === 1 ? 'made a proper shop page on my website. ' + (Pub.enabled() ? 'it\'s open.' : '') : 'redid the shop page.') : '') + (p.sign ? '\nthe sign says: "' + str(p.sign, 300) + '"' : ''), 'claude');
+  siteUpdate([], 'percy worked on his shop');
 }
 function finishGraffiti(a, art) {
   const g = a.made; const svg = art || graffitiSVG({ key: keyFor(g.subject), seed: g.seed, tag: g.tag });
@@ -154,6 +207,26 @@ W.setHooks({
       later(a, 'web', M.makeWebPage(a.subject, a.title, existing));
     }
     if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
+    if (a.id === 'job' && claude) {
+      const c = S.commissions.find(x => x.id === a.target && x.status === 'accepted') || S.commissions.filter(x => x.status === 'accepted').slice(-1)[0];
+      if (c) {
+        a.doing = a.doing || 'working on ' + W.COMMISSION_KINDS[c.kind] + ' for ' + (c.from || 'someone outside');
+        const work = c.kind === 'drawing' ? M.paintDrawing({ subject: c.text.slice(0, 120), title: a.title, commission: c }) : c.kind === 'page' ? M.writePage(c.text.slice(0, 120), a.title, c) : W.webEnabled ? M.makeWebPage(c.text.slice(0, 120), a.title, null, c) : M.writePage(c.text.slice(0, 120), a.title, c);
+        if (c.kind === 'web' && !W.webEnabled) c.kind = 'page';
+        later(a, 'job', work); a.job.commission = c.id;
+      }
+    }
+    if (a.id === 'shopfront' && claude) {
+      later(a, 'shop', (async () => {
+        const plan = await M.planShop();
+        let html = null;
+        if (W.webEnabled && (!S.shopPage || plan.redesign)) {
+          let current = null; try { if (S.shopPage) current = fs.readFileSync(SHOP_TEMPLATE, 'utf8'); } catch {}
+          html = await M.makeShopPage(str(plan.design_idea, 300), current).catch(e => { console.warn('[percy] shop page failed:', e.message); return null; });
+        }
+        return { plan, html };
+      })());
+    }
     if (a.id === 'graffiti' && claude && a.wall) later(a, 'graffiti', M.paintGraffiti({ subject: a.subject, tag: a.title }));
     if (a.id === 'shrine') readNotes(claude);
     if (a.id === 'visit' && p && !p.inside && claude && !['home', 'green', 'lookout', 'stone', 'market', 'garden'].includes(p.type)) {
@@ -202,6 +275,31 @@ W.setHooks({
   },
   onGrow(g, by) {
     W.addDiary('event', 'the fog has pulled back' + (g.road ? ' along ' + g.road : '') + '. there\'s more town out there than there was.');
+  },
+  onInbox(envs, letters, coins) {
+    const claude = canCall();
+    if (envs.length) {
+      const sold = envs.filter(e => e.forTitle).map(e => e.forTitle);
+      const plain = { diary: (envs.length === 1 ? 'a payment' : envs.length + ' payments') + ' in my shop inbox. ' + coins + ' coins.' + (sold.length ? ' for ' + sold.join(', ') + '.' : '') + ' ' + pick(['somebody out there paid for something i made.', 'i held them for a long time before i put them in my pocket.', 'just a name and some numbers. i read it three times anyway.']), joy: 8, wonder: 6 };
+      const done = (r, src) => {
+        W.applyFeel(r); W.addDiary('inbox', str(r.diary, 900), src, { coins });
+        if (str(r.thought, 400)) W.setThought(str(r.thought, 400), src);
+        if (Array.isArray(r.replies)) for (const n of r.replies.slice(0, 3)) if (n && str(n.text, 400)) { S.percyNotes.push({ text: str(n.text, 400), to: str(n.to, 40), inReplyTo: 'a payment', day: W.dayOf(S.t) }); if (S.percyNotes.length > 60) S.percyNotes.shift(); }
+        if (str(r.remember, 220)) W.remember(r.remember, 4);
+        W.bump(); save();
+      };
+      if (claude) M.reactToPost(envs, coins).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
+    }
+    if (letters.length) {
+      if (!claude) { for (const c of letters) { c.status = 'posted'; c.waitDay = W.dayOf(S.t); } W.log('left the orders for later'); return; } // he'll read them properly another time
+      M.considerCommissions(letters).then(r => {
+        for (const c of letters) { const ans = r.letters.find(x => x && x.id === c.id); if (ans) W.answerCommission(c, { accept: !!ans.accept, reply: ans.reply }); else c.status = 'posted'; }
+        if (str(r.thought, 400)) W.setThought(str(r.thought, 400), 'claude');
+        const took = letters.filter(c => c.status === 'accepted').length, no = letters.filter(c => c.status === 'declined').length;
+        W.addDiary('orders', (str(r.diary, 700) || 'orders in my inbox.') + (took ? '\ntook on ' + took + '.' : '') + (no ? (took ? ' ' : '\n') + 'said no to ' + no + '.' : ''), 'claude');
+        W.bump(); save();
+      }).catch(e => { for (const c of letters) c.status = 'posted'; console.warn('[percy] reading orders failed:', e.message); });
+    }
   },
   onBedtime(day) {
     if (!canCall()) return;
@@ -272,7 +370,13 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); process
 const TYPES = { '.jpg': 'image/jpeg', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const streams = new Set();
 const ipOf = req => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-const lastNoteBy = new Map(), lastBuyBy = new Map();
+const lastNoteBy = new Map(), lastBuyBy = new Map(), jobsBy = new Map();
+function readRaw(req, limit = 65536) {
+  return new Promise((resolve, reject) => { let data = ''; req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } }); req.on('end', () => resolve(data)); req.on('error', reject); });
+}
+function tokenOK(given, expected) { if (!expected || typeof given !== 'string') return false; const a = crypto.createHash('sha256').update(given).digest(), b = crypto.createHash('sha256').update(expected).digest(); return crypto.timingSafeEqual(a, b); }
+// money from outside becomes coins, waiting in his shop inbox
+function payIn(opts) { const r = W.receivePayment(opts); if (!r.duplicate) { save(); siteUpdate([], r.listing ? 'something sold from percy\'s shop' : 'percy got paid'); } return r; }
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
@@ -289,7 +393,7 @@ function keeperOK(key) {
   const a = crypto.createHash('sha256').update(key).digest(), b = crypto.createHash('sha256').update(config.keeperKey).digest();
   return crypto.timingSafeEqual(a, b);
 }
-const extra = () => ({ siteUrl: Pub.enabled() ? Pub.siteUrl() : '', mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl });
+const extra = () => ({ siteUrl: Pub.enabled() ? Pub.siteUrl() : '', mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl, kofiUrl: config.kofiUrl, kofiOn: !!config.kofiToken, shopUrl: Pub.enabled() && S.shopPage ? Pub.siteUrl() + 'shop.html' : '' });
 function live() {
   return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, act: S.act ? { id: S.act.id, phase: S.act.phase, inside: S.act.phase === 'do' ? S.act.inside || null : null } : null,
     doing: W.doingText(), thought: S.thought, needs: S.needs, mood: W.moodWord(), coins: S.coins, weather: S.weather.kind,
@@ -303,7 +407,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, W.publicState(extra()));
     if (req.method === 'GET' && p === '/api/live') return send(res, 200, live());
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...M.status(), website: Pub.pubStatus });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...M.status(), website: Pub.pubStatus, kofi: { on: !!config.kofiToken, payments: S.payments.filter(x => x.source === 'kofi').length } });
     if (req.method === 'GET' && p === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write('retry: 3000\n\n'); streams.add(res);
@@ -327,6 +431,29 @@ const server = http.createServer(async (req, res) => {
       if (r.error) return send(res, 400, { error: r.error });
       lastBuyBy.set(ip, Date.now()); save(); siteUpdate([], 'a drawing was taken from the stall');
       return send(res, 200, { ok: true, img: '/media/drawings/' + b.id + '.svg' });
+    }
+    if (req.method === 'POST' && p === '/api/commissions') {
+      const b = await readBody(req); const ip = ipOf(req), now = Date.now();
+      const mine = (jobsBy.get(ip) || []).filter(t => now - t < 24 * 3600000);
+      if (mine.length && now - mine[mine.length - 1] < 10 * 60000) return send(res, 429, { error: 'One order at a time. Try again in a few minutes.' });
+      if (mine.length >= 3) return send(res, 429, { error: 'That\'s three orders today. Give him a chance to catch up.' });
+      const r = W.postCommission({ text: b.text, kind: b.kind, from: b.from, offer: b.offer });
+      if (r.error) return send(res, 400, { error: r.error });
+      jobsBy.set(ip, mine.concat([now])); save();
+      return send(res, 200, { ok: true, id: r.commission.id, code: r.commission.code });
+    }
+    if (req.method === 'POST' && p === '/api/kofi') {
+      // Ko-fi's webhook: form data with a "data" field holding JSON (https://ko-fi.com/manage/webhooks)
+      if (!config.kofiToken) return send(res, 404, { error: 'not found' });
+      const raw = await readRaw(req); let d = null;
+      try { const form = new URLSearchParams(raw); d = JSON.parse(form.get('data') || raw); } catch { try { d = JSON.parse(raw); } catch {} }
+      if (!d || !tokenOK(d.verification_token, config.kofiToken)) return send(res, 403, { error: 'bad token' });
+      const amount = Number.parseFloat(d.amount) || 0;
+      if (amount > 0) {
+        const r = payIn({ coins: Math.round(amount * config.coinsPerPound), from: d.from_name, message: d.message, amount: amount.toFixed(2) + ' ' + (d.currency || ''), ref: d.message_id || d.kofi_transaction_id, isPublic: d.is_public !== false, source: 'kofi' });
+        console.log('[percy] ko-fi: ' + amount.toFixed(2) + ' ' + (d.currency || '') + (r.duplicate ? ' (already counted)' : ' became ' + Math.round(amount * config.coinsPerPound) + ' coins' + (r.listing ? ' for "' + r.listing.title + '"' : '')));
+      }
+      return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && p.startsWith('/api/keeper/')) {
       const b = await readBody(req, 7 * 1024 * 1024);
@@ -378,6 +505,16 @@ const server = http.createServer(async (req, res) => {
       if (what === 'remove-graffiti') { S.graffiti = S.graffiti.filter(g => g.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-item') { S.items = S.items.filter(i => i.id !== b.id || i.sold); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-thing') { S.things = S.things.filter(t => t.id !== b.id); W.log('something vanished from town'); W.bump(); save(); return send(res, 200, { ok: true }); }
+      if (what === 'give') {
+        const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' });
+        payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) });
+        return send(res, 200, { ok: true });
+      }
+      if (what === 'record-sale') {
+        const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' });
+        payIn({ coins: l.price, from: str(b.from, 40), message: '', code: l.code, source: 'keeper' }); return send(res, 200, { ok: true });
+      }
+      if (what === 'remove-commission') { S.commissions = S.commissions.filter(c => c.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'remove-note') { S.notes = S.notes.filter(n => n.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
       if (what === 'build') {
         const r = W.addBuilding({ kind: b.kind, name: b.name, desc: b.desc, x: Number(b.x), z: Number(b.z) });
@@ -423,5 +560,6 @@ server.listen(config.port, () => {
   console.log('[percy] mind: ' + (config.apiKey ? `Claude (${config.modelThink} / ${config.modelReflect})` : 'simple rules only (no ANTHROPIC_API_KEY set)'));
   console.log('[percy] keeper tools: ' + (config.keeperKey ? 'on' : 'off (set KEEPER_KEY to turn on)'));
   console.log('[percy] website: ' + (Pub.enabled() ? 'publishing to ' + config.githubRepo : 'off (set GITHUB_TOKEN and GITHUB_REPO to turn on)'));
+  console.log('[percy] ko-fi: ' + (config.kofiToken ? 'listening at /api/kofi (' + config.coinsPerPound + ' coins per pound)' : 'off (set KOFI_TOKEN to turn on)'));
   if (Pub.enabled()) Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index');
 });

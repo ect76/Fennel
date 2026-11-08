@@ -42,7 +42,7 @@ function footer() {
 const wrap = (title, inner, base = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head><body><main>${inner}${footer()}</main></body></html>`;
 
 export function pageHTML(p) {
-  return wrap(p.title, `<p><a href="../">← percy</a></p><h1>${esc(p.title)}</h1><p style="color:#777;font-size:14px">day ${p.day} in mossbrook</p><div class="body">${esc(p.body)}</div>`);
+  return wrap(p.title, `<p><a href="../">← percy</a></p><h1>${esc(p.title)}</h1><p style="color:#777;font-size:14px">day ${p.day} in mossbrook${p.forWho ? ' · written for ' + esc(p.forWho) : ''}</p><div class="body">${esc(p.body)}</div>`);
 }
 export function indexHTML(S) {
   const pages = S.pages.slice().reverse().map(p => `<li><a href="pages/${slug(p.title)}.html">${esc(p.title)}</a> <span style="color:#999">· day ${p.day}</span></li>`).join('');
@@ -50,8 +50,11 @@ export function indexHTML(S) {
   const printLink = config.printShopUrl ? ` · <a href="${esc(config.printShopUrl)}">print</a>` : '';
   const drawings = S.drawings.slice().reverse().slice(0, 60).map(d => `<figure><img src="drawings/${d.id}.svg" alt="${esc(d.title)}" loading="lazy"><figcaption>${esc(d.title)} · day ${d.day}${buyLink(d)}${printLink}</figcaption></figure>`).join('');
   const graffiti = (S.graffiti || []).filter(g => g.by === 'percy').slice().reverse().slice(0, 30).map(g => `<figure><img src="graffiti/${g.id}.svg" alt="${esc(g.tag || 'graffiti')}" loading="lazy" style="background:#c9b9a6"><figcaption>${esc(g.where || '')} · day ${g.day}</figcaption></figure>`).join('');
-  const made = (S.webPages || []).slice().reverse().map(p => `<li><a href="made/${p.slug}.html">${esc(p.title)}</a> <span style="color:#999">· day ${p.day}</span></li>`).join('');
+  const made = (S.webPages || []).slice().reverse().map(p => `<li><a href="made/${p.slug}.html">${esc(p.title)}</a> <span style="color:#999">· day ${p.day}${p.forWho ? ' · made for ' + esc(p.forWho) : ''}</span></li>`).join('');
+  const forSale = (S.shop || []).filter(x => !x.sold && !x.withdrawn).length;
+  const shop = S.shopPage ? `<p><a href="shop.html">my shop</a>${forSale ? ' · ' + forSale + ' thing' + (forSale === 1 ? '' : 's') + ' for sale' : ''}${config.publicUrl ? ` · <a href="${esc(config.publicUrl)}#work">ask me to make something</a>` : ''}${config.kofiUrl ? ` · <a href="${esc(config.kofiUrl)}">send me coins</a>` : ''}</p>` : config.kofiUrl ? `<p><a href="${esc(config.kofiUrl)}">send me coins</a></p>` : '';
   return wrap('percy', `<h1>percy</h1><p>things i am making.</p>
+${shop}${S.advert ? '<p style="font-style:italic">' + esc(S.advert) + '</p>' : ''}
 ${made ? '<ul>' + made + '</ul>' : ''}
 <h2>pages i wrote</h2>${pages ? '<ul>' + pages + '</ul>' : '<p>nothing yet.</p>'}
 <h2>drawings</h2><p style=\"color:#777;font-size:14px\">i leave them out on the stall in town. sometimes they go and there are coins in the tin. i don't know who takes them.</p>${drawings ? '<div class="grid">' + drawings + '</div>' : '<p>nothing yet.</p>'}
