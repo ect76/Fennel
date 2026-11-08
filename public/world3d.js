@@ -231,13 +231,13 @@ function house(batch, signs, p, opts = {}) {
 }
 
 /* special buildings */
-function library(batch, signs, p) {
+function library(batch, signs, p, o = {}) {
   const r = rng(p.seed); const B = new THREE.Matrix4().compose(V(p.x, 0, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, p.rot, 0)), V(1, 1, 1));
-  const w = p.w, d = p.d, h = p.h, wm = stoneM(0xd9d2c3);
+  const w = p.w, d = p.d, h = p.h, wm = stoneM(o.wall || 0xd9d2c3);
   box(batch, B, MAT.stoneDark, w + 0.4, 0.5, d + 0.4, 0, 0.25, 0);
   box(batch, B, wm, w, h, d, 0, h / 2 + 0.5, 0, 0, 0, 0, [w / 3, h / 3]);
   box(batch, B, stoneM(0xc8c0b0), w + 0.6, 0.4, d + 0.6, 0, h + 0.7, 0);
-  gableRoof(batch, B, w, d, h + 0.9, 1.4, roofM(0x5f6a72), wm, 0.3);
+  gableRoof(batch, B, w, d, h + 0.9, 1.4, roofM(o.roof || 0x5f6a72), wm, 0.3);
   const F = face(B, w, d, 'front');
   for (let i = 0; i < 3; i++) box(batch, F, MAT.stoneDark, w * 0.6 - i * 0.4, 0.18, 0.5 + (2 - i) * 0.4, 0, 0.09 + i * 0.18, 0.25 + (2 - i) * 0.2);
   for (let i = 0; i < 4; i++) { const x = -w * 0.33 + i * w * 0.22; prim(batch, F, G.cyl, MAT.white, x, h / 2 + 0.5, 1.0, 0.45, h, 0.45); box(batch, F, MAT.white, 0.7, 0.2, 0.7, x, h + 0.42, 1.0); }
@@ -245,7 +245,53 @@ function library(batch, signs, p) {
   doorAt(batch, F, 0, 1.4, 2.6, 0x4a2e1e, 0xd9d2c3);
   for (const x of [-w * 0.35, w * 0.35]) windowAt(batch, F, x, h * 0.55 + 0.5, 1.0, 1.8, 0x3a3a3a, r);
   for (const s of ['left', 'right']) for (const x of [-1.5, 1.5]) windowAt(batch, face(B, w, d, s), x, h * 0.55 + 0.5, 0.9, 1.6, 0x3a3a3a, r);
-  signs.push({ text: p.name.replace(/^the /i, '').toUpperCase(), F, x: 0, y: h + 0.75, z: 1.46, w: w * 0.6, h: 0.42, bg: '#d9d2c3', fg: '#3a3530' });
+  signs.push({ text: o.sign || p.name.replace(/^the /i, '').toUpperCase(), F, x: 0, y: h + 0.75, z: 1.46, w: w * 0.6, h: 0.42, bg: '#d9d2c3', fg: '#3a3530' });
+}
+const placeB = p => new THREE.Matrix4().compose(V(p.x, 0, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, p.rot, 0)), V(1, 1, 1));
+function schoolhouse(batch, signs, p) {
+  const r = rng(p.seed), B = placeB(p), w = p.w, d = p.d, h = 4.2, wm = brickM(0xb76e52), trim = 0xf4f1ea;
+  box(batch, B, MAT.stoneDark, w + 0.3, 0.4, d + 0.3, 0, 0.2, 0);
+  box(batch, B, wm, w, h, d, 0, h / 2, 0, 0, 0, 0, [w / 2.5, h / 2.5]);
+  gableRoof(batch, B, w, d, h, 2.0, roofM(0x55626b), wm, 0.4);
+  // bell cupola on the ridge
+  box(batch, B, MAT.white, 1.1, 1.0, 1.1, 0, h + 2.4, 0); for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(batch, B, MAT.white, 0.14, 0.9, 0.14, x * 0.5, h + 3.3, z * 0.5);
+  prim(batch, B, G.cone4, roofM(0x55626b), 0, h + 4.1, 0, 1.7, 0.9, 1.7, Math.PI / 4); prim(batch, B, G.sphere, MAT.gold, 0, h + 3.25, 0, 0.42, 0.5, 0.42);
+  const F = face(B, w, d, 'front');
+  // tall school windows either side of a double door
+  for (const x of [-w * 0.33, w * 0.33]) windowAt(batch, F, x, h * 0.5, 1.1, 2.0, trim, r);
+  doorAt(batch, F, -0.5, 0.95, 2.2, 0x2f4e6b, trim); doorAt(batch, F, 0.5, 0.95, 2.2, 0x2f4e6b, trim);
+  for (const s of ['left', 'right']) for (const x of [-d * 0.25, d * 0.25]) windowAt(batch, face(B, w, d, s), x, h * 0.5, 1.0, 2.0, trim, r);
+  signs.push({ text: p.name.replace(/^the /i, '').toUpperCase(), F, x: 0, y: h - 0.55, w: Math.min(w * 0.7, 4.6), h: 0.5, bg: '#f4f1ea', fg: '#7b2d26' });
+  // railings and a little yard
+  for (let k = -5; k <= 5; k++) box(batch, B, MAT.iron, 0.05, 1.0, 0.05, k * w / 11, 0.5, d / 2 + 1.6);
+  box(batch, B, MAT.iron, w, 0.06, 0.06, 0, 0.95, d / 2 + 1.6);
+}
+function workshop(batch, signs, p) {
+  const B = placeB(p), w = p.w, d = p.d, h = 4, wm = brickM(0x9a8f84), tin = std(0x7d8a8f, { metalness: 0.5, roughness: 0.45 });
+  box(batch, B, wm, w, h, d, 0, h / 2, 0, 0, 0, 0, [w / 2.5, h / 2.5]);
+  gableRoof(batch, B, w, d, h, 1.4, tin, wm, 0.35);
+  const F = face(B, w, d, 'front');
+  for (const s of [-1, 1]) { box(batch, F, std(0x3d5a40, { map: TEX.wood }), 1.3, 2.9, 0.1, s * 0.66, 1.45, 0.06); box(batch, F, MAT.woodDark, 0.08, 2.9, 0.12, s * 0.66, 1.45, 0.1, 0, 0, s * 0.42); }
+  for (const x of [-w * 0.36, w * 0.36]) windowAt(batch, F, x, 2.4, 0.9, 0.9, 0x3a3a3a, rng(p.seed));
+  for (const x of [-w * 0.25, w * 0.25]) box(batch, B, MAT.glass, 1.0, 0.06, 1.2, x, h + 0.75, d * 0.18, 0, -0.5);
+  box(batch, B, MAT.wood, 1.2, 0.5, 0.8, w / 2 + 0.9, 0.25, d / 4); for (let i = 0; i < 3; i++) prim(batch, B, G.cyl, std(0x6b4f37), w / 2 + 0.6 + i * 0.3, 0.7, d / 4, 0.25, 0.4, 0.25);
+  signs.push({ text: p.name.replace(/^(a|the) /i, ''), F, x: 0, y: h - 0.4, w: Math.min(w * 0.8, 4.6), h: 0.5, bg: '#3a3a3a', fg: '#f2c94c' });
+}
+function windmill(batch, signs, p) {
+  const B = placeB(p);
+  prim(batch, B, new THREE.CylinderGeometry(1.5, 2.4, 9, 12), plaster(0xf2ede2), 0, 4.5, 0, 1, 1, 1);
+  prim(batch, B, G.cone, roofM(0x5f4a3a), 0, 10, 0, 3.4, 2.2, 3.4);
+  const S = B.clone().multiply(M4(0, 8.4, 1.7, 0, 0, Math.PI / 8));
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; box(batch, S, MAT.wood, 0.5, 4.2, 0.08, Math.sin(a) * 2.2, Math.cos(a) * 2.2, 0, 0, 0, -a); }
+  prim(batch, B, G.cyl, MAT.woodDark, 0, 8.4, 1.5, 0.3, 0.6, 0.3, 0, Math.PI / 2);
+  doorAt(batch, face(B, 4, 4.4, 'front'), 0, 0.9, 1.9, 0x5f4a3a, 0xf2ede2);
+}
+function waterTower(batch, signs, p) {
+  const B = placeB(p);
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) prim(batch, B, G.cyl6, MAT.iron, x * 1.4, 4, z * 1.4, 0.22, 8, 0.22);
+  prim(batch, B, new THREE.CylinderGeometry(2.3, 2.3, 3, 20), std(0x8a5a3c, { map: TEX.wood }), 0, 9.5, 0, 1, 1, 1);
+  prim(batch, B, G.cone, std(0x55626b, { metalness: 0.4 }), 0, 11.6, 0, 5, 1.2, 5);
+  for (const y of [8.5, 10.5]) prim(batch, B, new THREE.TorusGeometry(2.32, 0.06, 6, 30), MAT.iron, 0, y, 0, 1, 1, 1, 0, Math.PI / 2);
 }
 function tower(batch, signs, p, clocks) {
   const B = new THREE.Matrix4().compose(V(p.x, 0, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, p.rot, 0)), V(1, 1, 1));
@@ -457,7 +503,7 @@ export function createWorld({ canvas, stage, onTap }) {
   // the visitor's wisp (explore mode)
   const wisp = new THREE.Group(); { const core = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xbfe6ff, emissiveIntensity: 2.5 })); wisp.add(core); const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: 0xbfe6ff, transparent: true, depthWrite: false, opacity: 0.8 })); halo.scale.setScalar(1.6); wisp.add(halo); const wl = new THREE.PointLight(0xbfe6ff, 4, 8, 2); wisp.add(wl); }
   wisp.visible = false; scene.add(wisp);
-  const walker = { x: 0, z: 6 };
+  const walker = { x: 0, z: 6, bob: 0 };
 
   // rain & snow
   const PN = MOBILE ? 1200 : 3000, pGeo = new THREE.BufferGeometry(), pArr = new Float32Array(PN * 3);
@@ -506,10 +552,11 @@ export function createWorld({ canvas, stage, onTap }) {
       else if (t === 'cafe') house(batch, signs, p, { shopfront: true, wall: 0xe9d6b0, trim: 0x2e6e6a, roof: 0x8b5a3c, awning: ['#2e6e6a', '#f4f1ea'], signBg: '#2e6e6a' });
       else if (t === 'post') house(batch, signs, p, { shopfront: true, brick: true, wall: 0xb5634b, trim: 0x7b2d26, roof: 0x55626b, awning: ['#c0392b', '#f4f1ea'], signBg: '#c0392b', noTimber: true });
       else if (t === 'shop') house(batch, signs, p, { shopfront: true, awning: [['#2f4e6b', '#f4f1ea'], ['#5b3a6b', '#f2c94c'], ['#3d5a40', '#f4f1ea']][p.seed % 3] });
-      else if (t === 'workshop') house(batch, signs, p, { wall: 0xb9b4aa, trim: 0x3a3a3a, roof: 0x6f7377, noTimber: true, brick: true, garden: false });
-      else if (t === 'hall' || t === 'museum') house(batch, signs, p, { stone: t === 'museum', wall: t === 'museum' ? 0xd9d2c3 : 0xe8cfa0, roof: 0x55626b, noTimber: true, shopfront: true, awning: ['#3a3a3a', '#d9d2c3'], signBg: '#3a3530' });
+      else if (t === 'workshop') workshop(batch, signs, p);
+      else if (t === 'hall') schoolhouse(batch, signs, p);
+      else if (t === 'museum') library(batch, signs, p, { wall: 0xe6dccb, roof: 0x7b2d26, sign: p.name.replace(/^the /i, '').toUpperCase() });
       else if (t === 'library') library(batch, signs, p);
-      else if (t === 'tower') tower(batch, signs, p, clocks);
+      else if (t === 'tower') { if (/windmill/i.test(p.name)) windmill(batch, signs, p); else if (/water tower/i.test(p.name)) waterTower(batch, signs, p); else tower(batch, signs, p, clocks); }
       else if (t === 'station') station(batch, signs, p);
       else if (t === 'green') green(batch, p, extras);
       else if (t === 'lookout') lookout(batch, p);
@@ -632,15 +679,19 @@ export function createWorld({ canvas, stage, onTap }) {
   }
 
   /* ---------- camera and controls ---------- */
-  let mode = 'follow', ang = 0.6, tilt = 0.55, zoom = 1, drag = null; const pointers = new Map(); let pinch0 = null;
+  let mode = 'follow', ang = 0.6, tilt = 0.55, zoom = 1, pitch = 0, drag = null; const pointers = new Map(); let pinch0 = null;
   const camT = new THREE.Vector3(), camP = new THREE.Vector3();
   const keys = new Set();
-  canvas.addEventListener('pointerdown', e => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom }; drag = null; } else drag = { x: e.clientX, y: e.clientY, a: ang, t: tilt, moved: 0 }; });
+  canvas.addEventListener('pointerdown', e => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom }; drag = null; } else drag = { x: e.clientX, y: e.clientY, a: ang, t: tilt, p: pitch, moved: 0 }; if (mode === 'explore' && e.pointerType === 'mouse' && !placingNow() && canvas.requestPointerLock && document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} } });
+  // with the pointer locked, the mouse turns your head freely (Esc to let go)
+  document.addEventListener('mousemove', e => { if (document.pointerLockElement !== canvas || mode !== 'explore') return; ang -= e.movementX * 0.0025; pitch = clamp(pitch - e.movementY * 0.0025, -1.25, 1.25); });
+  const placingNow = () => stage.classList.contains('placing');
   addEventListener('pointermove', e => {
     if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch0 && pointers.size === 2) { const [a, b] = [...pointers.values()]; zoom = clamp(pinch0.z * pinch0.d / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), 0.3, 3.5); return; }
     if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
-    ang = drag.a - dx * 0.006; if (e.pointerType !== 'touch' || mode === 'explore') tilt = clamp(drag.t + dy * 0.004, 0.12, 1.35);
+    if (mode === 'explore') { if (document.pointerLockElement === canvas) return; ang = drag.a - dx * 0.005; pitch = clamp(drag.p - dy * 0.005, -1.25, 1.25); return; }
+    ang = drag.a - dx * 0.006; if (e.pointerType !== 'touch') tilt = clamp(drag.t + dy * 0.004, 0.12, 1.35);
   });
   const endPointer = e => { if (drag && drag.moved < 8 && e.type === 'pointerup' && e.target === canvas && onTap) onTap(e, api); pointers.delete(e.pointerId); if (pointers.size < 2) pinch0 = null; if (!pointers.size) drag = null; };
   addEventListener('pointerup', endPointer); addEventListener('pointercancel', endPointer);
@@ -712,7 +763,8 @@ export function createWorld({ canvas, stage, onTap }) {
     if (L) { if (!percyPos.init) { percyPos.x = L.pos.x; percyPos.z = L.pos.z; percyPos.init = true; } const k = 1 - Math.exp(-dt * 3); percyPos.x += (L.pos.x - percyPos.x) * k; percyPos.z += (L.pos.z - percyPos.z) * k; }
     const diff = (((L ? L.face : 0) - percyFace + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; percyFace += diff * 0.12;
     const gy = groundHeight(percyPos.x, percyPos.z);
-    percy.visible = !asleep; percy.position.set(percyPos.x, gy, percyPos.z); percy.rotation.y = percyFace;
+    const inside = !!(act && act.phase === 'do' && act.inside);
+    percy.visible = !asleep && !inside; percy.position.set(percyPos.x, gy, percyPos.z); percy.rotation.y = percyFace;
     const ud = percy.userData, tt = now * 0.001;
     if (walking && !REDUCED) { ud.body.rotation.z = Math.sin(tt * 9) * 0.12; ud.body.position.y = Math.abs(Math.sin(tt * 9)) * 0.05; ud.flippers[0].rotation.z = -0.18 - Math.abs(Math.sin(tt * 9)) * 0.4; ud.flippers[1].rotation.z = 0.18 + Math.abs(Math.sin(tt * 9)) * 0.4; ud.feet[0].position.z = 0.12 + Math.sin(tt * 9) * 0.08; ud.feet[1].position.z = 0.12 - Math.sin(tt * 9) * 0.08; }
     else { ud.body.rotation.z *= 0.9; ud.body.position.y = 0; ud.body.scale.y = 1 + Math.sin(tt * 2) * 0.012; const busy = act && act.phase === 'do' && ['draw', 'graffiti', 'fish'].includes(act.id); ud.flippers[0].rotation.z = -0.18 - (busy ? Math.abs(Math.sin(tt * 5)) * 0.6 : 0); ud.flippers[1].rotation.z = 0.18; }
@@ -723,16 +775,24 @@ export function createWorld({ canvas, stage, onTap }) {
     for (const m of thingMeshes.values()) if (m.userData.spin) m.userData.spin.rotation.y += dt;
     // camera
     if (mode === 'explore') {
-      const sp = (keys.has('run') ? 11 : 5.5) * dt, fx = -Math.sin(ang), fz = -Math.cos(ang), rx = Math.cos(ang), rz = -Math.sin(ang);
+      // first person: you are standing in the street at penguin-ish eye height
+      const sp = (keys.has('run') ? 9 : 4.2) * dt, fx = -Math.sin(ang), fz = -Math.cos(ang), rx = Math.cos(ang), rz = -Math.sin(ang);
       let mx = 0, mz = 0; if (keys.has('f')) { mx += fx; mz += fz; } if (keys.has('b')) { mx -= fx; mz -= fz; } if (keys.has('r')) { mx += rx; mz += rz; } if (keys.has('l')) { mx -= rx; mz -= rz; }
       if (keys.has('tl')) ang += dt * 1.6; if (keys.has('tr')) ang -= dt * 1.6;
-      const L2 = Math.hypot(mx, mz); if (L2) { let nx = walker.x + mx / L2 * sp, nz = walker.z + mz / L2 * sp; [nx, nz] = collide(nx, nz); walker.x = nx; walker.z = nz; }
-      wisp.visible = true; wisp.position.set(walker.x, groundHeight(walker.x, walker.z) + 1.1 + Math.sin(tt * 2) * 0.1, walker.z);
-      camT.lerp(v3.set(walker.x, groundHeight(walker.x, walker.z) + 0.8, walker.z), 0.2);
-    } else { wisp.visible = false; if (mode === 'overview') camT.lerp(v3.set(0, 0, 0), 0.05); else camT.lerp(v3.set(percyPos.x, gy + 0.6, percyPos.z), 0.08); }
-    const base = mode === 'overview' ? townR * 1.5 : mode === 'explore' ? 7 : 11; const dist = base * zoom, tl = mode === 'overview' ? Math.max(tilt, 0.7) : tilt;
-    camP.set(camT.x + Math.sin(ang) * Math.cos(tl) * dist, camT.y + Math.sin(tl) * dist + 0.5, camT.z + Math.cos(ang) * Math.cos(tl) * dist);
-    camera.position.lerp(camP, mode === 'explore' ? 0.25 : 0.1); camera.lookAt(camT);
+      const L2 = Math.hypot(mx, mz); if (L2) { let nx = walker.x + mx / L2 * sp, nz = walker.z + mz / L2 * sp; [nx, nz] = collide(nx, nz); walker.x = nx; walker.z = nz; walker.bob += dt * (keys.has('run') ? 14 : 9); }
+      wisp.visible = false;
+      const eye = groundHeight(walker.x, walker.z) + 1.35 + (L2 && !REDUCED ? Math.sin(walker.bob) * 0.04 : 0);
+      camera.position.set(walker.x, eye, walker.z);
+      camT.set(walker.x + fx * Math.cos(pitch) * 10, eye + Math.sin(pitch) * 10, walker.z + fz * Math.cos(pitch) * 10);
+      const fov = clamp(60 * zoom, 25, 85); if (Math.abs(camera.fov - fov) > 0.1) { camera.fov = fov; camera.updateProjectionMatrix(); }
+      camera.lookAt(camT);
+    } else {
+      wisp.visible = false; if (camera.fov !== 50) { camera.fov = 50; camera.updateProjectionMatrix(); }
+      if (mode === 'overview') camT.lerp(v3.set(0, 0, 0), 0.05); else camT.lerp(v3.set(percyPos.x, gy + 0.6, percyPos.z), 0.08);
+      const base = mode === 'overview' ? townR * 1.5 : 11; const dist = base * zoom, tl = mode === 'overview' ? Math.max(tilt, 0.7) : tilt;
+      camP.set(camT.x + Math.sin(ang) * Math.cos(tl) * dist, camT.y + Math.sin(tl) * dist + 0.5, camT.z + Math.cos(ang) * Math.cos(tl) * dist);
+      camera.position.lerp(camP, 0.1); camera.lookAt(camT);
+    }
     if (composer) composer.render(); else renderer.render(scene, camera);
     if (api.onFrame) api.onFrame();
   }
@@ -754,13 +814,13 @@ export function createWorld({ canvas, stage, onTap }) {
       syncThings(st.things || []); syncGraffiti(st.graffiti || []); syncBoard(st.drawings || [], st.town); syncItems(st.items || []);
     },
     setLive(l) { L = l; clientT = l.t; },
-    setMode(m) { mode = m; if (m === 'explore') { walker.x = percyPos.x + 2; walker.z = percyPos.z + 2; tilt = 0.35; } if (m === 'overview') tilt = 0.9; if (m === 'follow') tilt = 0.55; api.onMode && api.onMode(m); },
+    setMode(m) { mode = m; if (m === 'explore') { const [wx, wz] = collide(percyPos.x + Math.sin(ang) * 4, percyPos.z + Math.cos(ang) * 4); walker.x = wx; walker.z = wz; pitch = -0.08; } else if (document.pointerLockElement === canvas) document.exitPointerLock(); if (m === 'overview') tilt = 0.9; if (m === 'follow') tilt = 0.55; api.onMode && api.onMode(m); },
     get mode() { return mode; },
     zoomBy(f) { zoom = clamp(zoom * f, 0.3, 3.5); },
     press(k, on) { if (on) keys.add(k); else keys.delete(k); },
     // where things are on screen, for the speech bubble and labels
     project(x, y, z) { v3.set(x, y, z).project(camera); if (v3.z > 1 || Math.abs(v3.x) > 1.15 || Math.abs(v3.y) > 1.15) return null; return { x: (v3.x + 1) / 2 * stage.clientWidth, y: (1 - v3.y) / 2 * stage.clientHeight }; },
-    percyAnchor() { const act = L && L.act; const asleep = act && act.phase === 'do' && (act.id === 'sleep' || act.id === 'nap'); if (asleep && ST) { const home = ST.town.places.find(p => p.type === 'home'); if (home) return { x: home.x, y: home.h + 3.4, z: home.z, asleep: true }; } return { x: percyPos.x, y: groundHeight(percyPos.x, percyPos.z) + 1.9, z: percyPos.z, asleep: false }; },
+    percyAnchor() { const act = L && L.act; if (act && act.phase === 'do' && act.inside && placesById[act.inside]) { const p = placesById[act.inside]; return { x: p.x, y: p.h + 2.6, z: p.z, asleep: act.id === 'sleep' || act.id === 'nap' }; } const asleep = act && act.phase === 'do' && (act.id === 'sleep' || act.id === 'nap'); if (asleep && ST) { const home = ST.town.places.find(p => p.type === 'home'); if (home) return { x: home.x, y: home.h + 3.4, z: home.z, asleep: true }; } return { x: percyPos.x, y: groundHeight(percyPos.x, percyPos.z) + 1.9, z: percyPos.z, asleep: false }; },
     labels() { return labelsData; },
     cameraTarget() { return camT; },
     tapGround(e) { setRay(e); return ray.ray.intersectPlane(gplane, hit) ? { x: hit.x, z: hit.z } : null; },

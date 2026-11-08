@@ -5,7 +5,7 @@ const shorten = t => { t = String(t || ''); return t.length > 140 ? t.slice(0, 1
 const NEEDS = [['fullness', 'Fullness', '--c-full'], ['energy', 'Energy', '--c-energy'], ['wonder', 'Wonder', '--c-wonder'], ['joy', 'Joy', '--c-joy'], ['calm', 'Calm', '--c-calm']];
 const WEATHER = { clear: 'clear', cloudy: 'cloudy', rain: 'raining', fog: 'foggy', wind: 'windy', snow: 'snowing' };
 const LEAN = { sleep: 'sleep', nap: 'naps', eat: 'the bakery', fish: 'fishing', draw: 'drawing', write: 'writing', sell: 'the stall', read: 'the library', pond: 'the pond', stargaze: 'stargazing', shrine: 'the Humming Stone', fog: 'the fog', wander: 'wandering', explore: 'exploring', tidy: 'tidying', inspect: 'new things', visit: 'visiting places', buy: 'buying things', graffiti: 'graffiti' };
-const KIND = { summary: 'end of day', thought: 'thought', reflection: 'reflection', learn: 'learned', note: 'a note', thing: 'something new', drawing: 'drawing', fog: 'the fog', dream: 'dream', page: 'page', found: 'somewhere new', graffiti: 'graffiti', window: 'shop window', bought: 'bought', stall: 'the stall', morning: 'waking up', event: '' };
+const KIND = { summary: 'end of day', thought: 'thought', reflection: 'reflection', learn: 'learned', note: 'a note', thing: 'something new', drawing: 'drawing', fog: 'the fog', dream: 'dream', page: 'page', found: 'somewhere new', graffiti: 'graffiti', window: 'shop window', bought: 'bought', stall: 'the stall', morning: 'waking up', inside: 'inside', event: '' };
 
 let L = null, ST = null, lastRev = -1, lastLiveAt = 0, W = null;
 
@@ -112,7 +112,7 @@ function renderAll() {
   // diary
   const ol = $('#diary'); ol.textContent = '';
   for (const e of ST.diary.slice().reverse()) {
-    const li = el('li', 'entry' + (['reflection', 'note', 'thing', 'found', 'graffiti', 'bought', 'stall', 'morning'].includes(e.kind) ? ' big' : ''));
+    const li = el('li', 'entry' + (['reflection', 'note', 'thing', 'found', 'graffiti', 'bought', 'stall', 'morning', 'inside'].includes(e.kind) ? ' big' : ''));
     li.append(el('div', 'when', 'Day ' + e.day + ' · ' + e.time + (KIND[e.kind] ? ' · ' + KIND[e.kind] : '')), el('div', 'txt', e.text));
     if (e.mood) li.firstChild.textContent += ' · ' + e.mood;
     if (e.drawing) { const img = el('img'); img.src = '/media/drawings/' + e.drawing + '.svg'; img.alt = 'the drawing'; img.loading = 'lazy'; li.append(img); }

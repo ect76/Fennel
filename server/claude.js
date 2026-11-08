@@ -10,14 +10,18 @@ function rollDay() {
 export function canCall() { rollDay(); return !!config.apiKey && usage.calls < config.maxCallsPerDay; }
 export function canSearch() { rollDay(); return config.webResearch && usage.searches < config.maxSearchesPerDay; }
 
-export async function callClaude({ model, system, prompt, maxTokens = 800, webSearches = 0, timeoutMs = 120000, images = [] }) {
+// json: true makes Claude answer by filling in a 'respond' tool, which always comes back as readable data.
+export async function callClaude({ model, system, prompt, maxTokens = 800, webSearches = 0, timeoutMs = 120000, images = [], json = false }) {
   rollDay();
   if (!canCall()) throw new Error('daily limit reached');
   usage.calls++;
   // images: [{ mediaType: 'image/png', data: '<base64>' }] are shown to Claude alongside the prompt
   const content0 = images.length ? [...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })), { type: 'text', text: prompt }] : prompt;
   const messages = [{ role: 'user', content: content0 }];
-  const tools = webSearches > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: webSearches }] : null;
+  const tools = [];
+  if (webSearches > 0) tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: webSearches });
+  if (json) tools.push({ name: 'respond', description: 'Give your final answer by calling this tool, with exactly the JSON object the prompt asks for as its input.', input_schema: { type: 'object', additionalProperties: true } });
+  const toolChoice = json ? (webSearches > 0 ? { type: 'any' } : { type: 'tool', name: 'respond' }) : null;
   const content = [];
   for (let round = 0; round < 4; round++) {
     const ctl = new AbortController();
@@ -28,7 +32,7 @@ export async function callClaude({ model, system, prompt, maxTokens = 800, webSe
         method: 'POST',
         signal: ctl.signal,
         headers: { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': process.env.ANTHROPIC_VERSION || '2026-10-21' },
-        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages, ...(tools ? { tools } : {}) }),
+        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages, ...(tools.length ? { tools } : {}), ...(toolChoice ? { tool_choice: toolChoice } : {}) }),
       });
       data = await res.json().catch(() => null);
     } catch (e) {
@@ -49,13 +53,15 @@ export async function callClaude({ model, system, prompt, maxTokens = 800, webSe
     break;
   }
   const text = content.filter(b => b.type === 'text').map(b => b.text).join('');
+  const call = content.find(b => b.type === 'tool_use' && b.name === 'respond');
+  const data = call && call.input && typeof call.input === 'object' ? call.input : null;
   const sources = [];
   for (const b of content) {
     if (b.type === 'text' && Array.isArray(b.citations)) {
       for (const c of b.citations) if (c.url && !sources.some(s => s.url === c.url)) sources.push({ url: c.url, title: c.title || c.url });
     }
   }
-  return { text, sources };
+  return { text, sources, data };
 }
 
 // Pull one JSON object out of a reply, tolerating a sentence before or after it.
@@ -65,5 +71,7 @@ export function parseJSON(text) {
   const body = fence ? fence[1] : text;
   const a = body.indexOf('{'), b = body.lastIndexOf('}');
   if (a < 0 || b <= a) return null;
-  try { return JSON.parse(body.slice(a, b + 1)); } catch { return null; }
+  const raw = body.slice(a, b + 1);
+  try { return JSON.parse(raw); } catch {}
+  try { return JSON.parse(raw.replace(/[\u201c\u201d]/g, '"').replace(/,\s*([}\]])/g, '$1').replace(/\n/g, ' ')); } catch { return null; }
 }

@@ -137,7 +137,7 @@ function bookFallback() {
 }
 
 W.setHooks({
-  onArrive(a) {
+  onArrive(a, p) {
     const claude = canCall();
     if (a.id === 'read') {
       const q = S.researchQueue[0];
@@ -150,6 +150,10 @@ W.setHooks({
     if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
     if (a.id === 'graffiti' && claude && a.wall) later(a, 'graffiti', M.paintGraffiti({ subject: a.subject, tag: a.title }));
     if (a.id === 'shrine') readNotes(claude);
+    if (a.id === 'visit' && p && !p.inside && claude && !['home', 'green', 'lookout', 'stone', 'market', 'garden'].includes(p.type)) {
+      p.inside = { pending: true };
+      M.furnish(p).then(r => { p.inside = r; W.bump(); save(); }).catch(e => { p.inside = null; console.warn('[percy] furnishing failed:', e.message); });
+    }
     if (a.id === 'inspect') { const th = W.thingById(a.thing); if (th && !th.seen) firstLook(th, claude); }
     if (claude && a.total >= 60 && Math.random() < 0.65) a.museAt = a.total * (0.35 + Math.random() * 0.3);
     if (claude && a.id === 'sleep') a.museAt = a.total * 0.5;
@@ -159,6 +163,11 @@ W.setHooks({
     else if (a.id === 'read') bookFallback();
     if (a.id === 'draw' && !(a.job && a.job.kind === 'drawing')) finishDrawing(a, null);
     if (a.id === 'graffiti' && a.made && !(a.job && a.job.kind === 'graffiti')) finishGraffiti(a, null);
+    if (a.id === 'visit' && a.examined) {
+      const p = W.placeById(a.place), it = a.examined;
+      W.addDiary('inside', (p && p.inside && p.inside.firstVisitDone ? '' : (p && p.inside && p.inside.feel ? 'inside ' + p.name + ': ' + p.inside.feel + '\n' : '')) + 'found ' + it.name + '. ' + it.finds + (it.taken ? '\ntook it home.' : ''), 'claude');
+      if (p && p.inside) p.inside.firstVisitDone = true;
+    } else if (a.id === 'visit') { const p = W.placeById(a.place); if (p && p.inside && p.inside.items) W.addDiary('inside', 'went back into ' + p.name + '. ' + pick(['everything just as i left it.', 'sat for a bit in the quiet.', 'the dust has settled again.'])); }
     if (a.id === 'buy' && a.bought) {
       W.addDiary('bought', 'bought ' + a.bought.name + ' for ' + a.bought.price + ' coins. ' + pick(['carried it home very carefully.', 'counted the coins out one at a time.', 'it\'s mine now. that feels strange.']));
     }
@@ -186,7 +195,7 @@ W.setHooks({
     if (canCall()) M.wakeUp(mood).then(t => done(t, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
   },
   onGrow(g, by) {
-    W.addDiary('event', by === 'keeper' ? 'woke up with the feeling the town had got bigger in the night.' : 'the fog looks thinner down ' + (g.road || 'one of the roads') + ' today.');
+    W.addDiary('event', 'the fog has pulled back' + (g.road ? ' along ' + g.road : '') + '. there\'s more town out there than there was.');
   },
   onBedtime(day) {
     if (!canCall()) return;
@@ -275,7 +284,7 @@ function keeperOK(key) {
 }
 const extra = () => ({ siteUrl: Pub.enabled() ? Pub.siteUrl() : '', mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl });
 function live() {
-  return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, act: S.act ? { id: S.act.id, phase: S.act.phase } : null,
+  return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, act: S.act ? { id: S.act.id, phase: S.act.phase, inside: S.act.phase === 'do' ? S.act.inside || null : null } : null,
     doing: W.doingText(), thought: S.thought, needs: S.needs, mood: W.moodWord(), coins: S.coins, weather: S.weather.kind,
     season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: config.timeScale };
 }

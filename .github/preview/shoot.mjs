@@ -13,6 +13,7 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1440, height: 860 }
   await stage.screenshot({ path: `${out}/${tag}-${name}-2-town.png` });
   await page.click('[data-mode=explore]'); await page.waitForTimeout(1500);
   if (name === 'desktop') { await page.keyboard.down('w'); await page.waitForTimeout(1800); await page.keyboard.up('w'); await page.waitForTimeout(800); }
+  else { const b = await stage.boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); }
   await stage.screenshot({ path: `${out}/${tag}-${name}-3-explore.png` });
   await page.click('[data-mode=follow]'); await page.click('#zoomIn'); await page.click('#zoomIn'); await page.waitForTimeout(2500);
   await stage.screenshot({ path: `${out}/${tag}-${name}-4-close.png` });

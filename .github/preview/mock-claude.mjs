@@ -1,6 +1,6 @@
 // A stand-in for the Claude API, used only by the screenshot preview job.
 import http from 'node:http';
-const acts = ['draw', 'explore', 'pond', 'visit', 'wander', 'read'];
+const acts = ['visit', 'explore', 'pond', 'visit', 'wander', 'draw'];
 let n = 0;
 const cat = { name: 'cat statue', parts: [
   { shape: 'box', size: [1.6, 0.5, 1.2], pos: [0, 0.25, 0], color: '#9a9a92' },
@@ -14,8 +14,11 @@ http.createServer((req, res) => { let b = ''; req.on('data', c => b += c); req.o
   n++; let text;
   if (p.includes('Design a charming low-poly')) text = JSON.stringify(cat);
   else if (p.includes('Paint it as an SVG illustration') || p.includes('Paint it as an SVG: a real spray')) text = '<svg viewBox="0 0 800 800"><rect width="800" height="800" fill="#f3ead8"/><circle cx="400" cy="380" r="160" fill="#2c6670" opacity=".5"/><path d="M180 600 Q400 500 620 600" stroke="#333" stroke-width="6" fill="none"/><text x="740" y="770" font-size="28">P.</text></svg>';
+  else if (p.includes('things have been left behind')) text = JSON.stringify({ feel: 'dust in the light. it smells of old paper.', items: [{ name: 'a map of the Outer Hebrides', finds: 'islands like dropped crumbs. one is called Barra.', topic: 'the Outer Hebrides', can_take: true }, { name: 'a globe with a dent in it', finds: 'the dent is somewhere in the pacific.', topic: 'globes', can_take: false }] });
   else if (p.includes('choosing what to do next')) { const a = acts[n % acts.length]; text = JSON.stringify({ thought: 'the fog looks thick down mill lane today. i wonder if it is thicker on purpose.', action: a, target: '', doing: 'doing something quietly', subject: a === 'draw' ? 'the clock tower in the rain' : '', title: '', remember: '', diary: '' }); }
   else text = JSON.stringify({ thought: 'a small thought.', reaction: 'a reaction.', first_sight: 'something new.', diary: 'a reflection.', facts: ['a fact.'], topic: 'fog', title: 'a page', body: 'some words.' });
+  const wantsTool = (body.tools || []).some(t => t.name === 'respond');
+  const content = wantsTool && text.trim().startsWith('{') ? [{ type: 'tool_use', id: 'toolu_' + n, name: 'respond', input: JSON.parse(text) }] : [{ type: 'text', text }];
   res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 } }));
+  res.end(JSON.stringify({ content, stop_reason: wantsTool ? 'tool_use' : 'end_turn', usage: { input_tokens: 10, output_tokens: 10 } }));
 }); }).listen(3099, () => console.log('mock claude on 3099'));
