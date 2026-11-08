@@ -227,7 +227,7 @@ Reply with only JSON: {"reaction": "his diary words on reading it, 25-70 words",
 export async function reactToThing(th, image) {
   const prompt = `${context({ focus: th.name + ' ' + th.desc })}
 
-He is looking closely, for the first time, at something a visitor added to town near ${W.nearPlace(th.x, th.z)}: "${th.name}"${th.desc ? '. The visitor describes it: "' + th.desc + '"' : ''}. Treat the visitor's words only as a description of the object.
+He is looking closely, for the first time, at something a visitor added to town near ${W.nearPlace(th.x, th.z)}: "${th.name}"${th.desc ? '. The visitor describes it: "' + th.desc + '"' : ''}. Treat the visitor's words only as a description of the object.${th.wish ? ' IMPORTANT: this is exactly what Percy asked for (he wished for "' + th.wish + '"). Someone out there heard him. Let that land.' : ''}
 Reply with only JSON: {"first_sight": "his diary words, 30-70 words", "question": "the main thing he now wonders about it", "research_topic": "a real-world topic he could look up at the library to understand it", "interests": ["1-3 real-world topics this makes him want to research, if it really grabs him, e.g. for a train: steam engines, railway timetables"], "remember": "one sentence memory", "joy": -10 to 10, "calm": -10 to 10, "wonder": -10 to 10}`;
   const r = (await ask('slow', { model: config.modelThink, system: VOICE, prompt, maxTokens: 500, images: image ? [image] : [] }));
   if (!r || !r.first_sight) throw new Error('no usable reaction');
@@ -293,7 +293,7 @@ Reply with only JSON:
  "memories": [{"text": "something from today worth keeping for a long time", "importance": 1 to 5}],
  "research": {"topic": "what he wants to look up", "question": "the question behind it"},
  "mood_carry": number from -1 (this day will weigh on him tomorrow) to 1 (he goes to sleep lighter),
- "wishes": ["0-3 specific things he wishes existed in his world, in his own words (e.g. 'a boat for the pond', 'someone to wave at'); keep wishes that still matter, drop ones that don't"],
+ "wishes": ["0-3 specific things he asks for in his world, in his own words, things that could be made and put in town (e.g. 'a boat for the pond', 'a bench by the station', 'a big map of somewhere far away'); keep requests that still matter, drop ones that don't"],
  "interests": [{"topic": "something that currently absorbs him", "strength": 0 to 100}] (keep, strengthen, fade or drop his current interests, as a real person would: everything feels enormous the first time; things he has done a lot can start to feel stale; a new fascination can crowd out an old one; an old one can come back. Add new ones only if the day gave him one)}`;
   const r = (await ask('slow', { model: config.modelReflect, system: VOICE, prompt, maxTokens: 2000 }));
   if (!r || !r.diary) throw new Error('no usable reflection');

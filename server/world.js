@@ -256,7 +256,7 @@ export function interest(topic, strength = 60) {
   if (ex) ex.strength = clamp(ex.strength + strength * 0.5, 0, 100);
   else {
     // attention is limited: something new pushes the others aside a little
-    for (const i of S.interests) i.strength = clamp(i.strength - strength * 0.2, 0, 100);
+    for (const i of S.interests) i.strength = clamp(i.strength - strength * 0.08, 0, 100);
     const past = (S.pastInterests || []).find(p => p.topic.toLowerCase() === topic.toLowerCase());
     S.interests.push({ topic, strength: clamp(strength + (past ? 10 : 0), 0, 100), since: dayOf(S.t), sessions: past ? Math.floor(past.sessions / 2) : 0, rediscovered: !!past });
   }
@@ -575,8 +575,9 @@ function newDay(d) {
   for (const i of S.interests) {
     i.strength -= 7 * (1 - Math.min(i.sessions || 0, 12) / 15); // interests fade unless fed; deep ones fade slowly
     // and like anyone, he can simply get bored of something he's been at for a while
-    const age = d - (i.since || d), worn = (i.sessions || 0) >= 3 || age >= 4;
-    if (worn && Math.random() < 0.06 + Math.min(i.sessions || 0, 10) * 0.015 + Math.min(age, 14) * 0.01) { i.strength *= 0.45; i.bored = d; log('going off ' + i.topic + ' a bit'); remember('day ' + d + ': started to get bored of ' + i.topic, 2); }
+    // only after he's really explored something, and rarely for a deep passion
+    const age = d - (i.since || d), worn = (i.sessions || 0) >= 6 && age >= 7;
+    if (worn && Math.random() < (0.015 + Math.min(age, 30) * 0.002) * ((i.sessions || 0) >= 10 && i.strength > 60 ? 0.4 : 1)) { i.strength *= 0.45; i.bored = d; log('going off ' + i.topic + ' a bit'); remember('day ' + d + ': started to get bored of ' + i.topic, 2); }
   }
   for (const i of S.interests) if (i.strength <= 5) { S.pastInterests = (S.pastInterests || []).filter(p => p.topic !== i.topic).concat([{ topic: i.topic, sessions: i.sessions || 0, until: d }]).slice(-20); }
   S.interests = S.interests.filter(i => i.strength > 5);
@@ -615,7 +616,7 @@ export function tick(dt, requestDecision) {
 function noticeThings() {
   for (const th of S.things) {
     if (!th.noticed && Math.hypot(th.x - S.pos.x, th.z - S.pos.z) < 8) {
-      th.noticed = true; feel('wonder', 4); emo('curiosity', 22); emo('excitement', 12); contact(8); log('noticed something new: ' + th.name);
+      th.noticed = true; feel('wonder', 4); emo('curiosity', 22); emo('excitement', 12); contact(8); if (th.wish) { emo('excitement', 25); emo('contentment', 20); contact(20); log('the thing he asked for is here: ' + th.wish); } log('noticed something new: ' + th.name);
       setThought(pick(['what is that? that wasn\'t there before.', 'something new by ' + nearPlace(th.x, th.z) + '.'])); bump();
     }
   }
@@ -636,6 +637,7 @@ export function stockItem({ shop, name, price, desc }) {
   const p = placeById(shop);
   if (!p || !['shop', 'bakery', 'cafe', 'market', 'post', 'workshop', 'museum'].includes(p.type)) return { error: 'Pick a shop to put it in.' };
   const it = { id: uid(), shop: p.id, name: str(name, 60), desc: str(desc, 240), price: clamp(Math.round(Number(price) || 10), 1, 999), day: dayOf(S.t), seen: false, sold: false, status: 'building', model: null };
+  if (wish) { const w = (S.wishes || []).find(w => w.text === wish); if (w) { w.granted = true; w.grantedDay = dayOf(S.t); th.wish = w.text; } }
   if (!it.name) return { error: 'Give it a name.' };
   S.items.push(it); log('something new appeared in the window of ' + p.name); bump();
   return { item: it };
@@ -670,7 +672,7 @@ export function spotProblem(x, z, size = 1.6) {
   if (!Town.fits(S.town, x, z, size, size, 0)) return 'There\'s something already there, or it\'s too close to the road. Try another spot.';
   return null;
 }
-export function addThing({ name, desc, x, z, size = 3 }) {
+export function addThing({ name, desc, x, z, size = 3, wish = '' }) {
   const th = { id: uid(), kind: 'made', name: str(name, 60), desc: str(desc, 240), x, z, size: clamp(Number(size) || 3, 1, 8), rot: Math.atan2(-x, -z), day: dayOf(S.t), seen: false, noticed: false, inspections: 0, status: 'building', model: null };
   S.things.push(th);
   log('a ' + plainName(th.name) + ' appeared near ' + nearPlace(x, z));

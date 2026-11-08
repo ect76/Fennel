@@ -340,7 +340,7 @@ const server = http.createServer(async (req, res) => {
         if (b.image && !img) return send(res, 400, { error: 'That picture couldn\'t be read. Try a JPEG or PNG under 4 MB.' });
         const size = Math.max(1, Math.min(8, Number(b.size) || 3));
         const x = Number(b.x), z = Number(b.z); const prob = W.spotProblem(x, z, size * 0.7); if (prob) return send(res, 400, { error: prob });
-        const th = W.addThing({ name: desc || 'something from a picture', desc, x, z, size });
+        const th = W.addThing({ name: desc || 'something from a picture', desc, x, z, size, wish: str(b.wish, 120) });
         if (img) { th.file = 'uploads/' + th.id + '.' + img.ext; writeMedia(th.file, img.buf); }
         save(); send(res, 200, { ok: true, id: th.id });
         if (!canCall()) { th.status = 'failed'; W.bump(); return; }

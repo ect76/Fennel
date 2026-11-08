@@ -203,7 +203,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
       <div><h2>Wondering about</h2><ul class="plain" id="questions"></ul></div>
       <div><h2>Beliefs</h2><ul class="plain" id="beliefs"></ul></div>
       <div><h2>Goals</h2><ul class="plain" id="goals"></ul></div>
-      <div><h2>He wishes</h2><ul class="plain" id="wishes"></ul></div>
+      <div><h2>Percy's requests</h2><ul class="plain" id="wishes"></ul></div>
       <div><h2>His things</h2><ul class="plain" id="inventory"></ul></div>
       <div><h2>Leanings</h2><p class="hint" id="leanings"></p></div>
       <div><h2>Wants to look up</h2><ul class="plain" id="queue"></ul></div>
@@ -235,6 +235,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <span class="hint" id="keyStatus" role="status"></span>
       </form>
       <div id="keeperTools" hidden style="display:grid;gap:14px">
+        <div class="card" id="kWishesWrap" hidden><h2 style="margin:0">Percy's requests</h2><p class="hint">Things he has asked for. "Make this" fills in the form below.</p><ul class="list" id="kWishes"></ul></div>
         <form class="card" id="makeForm">
           <h2 style="margin:0">Make something</h2>
           <p class="hint">Describe it, add a picture, or both. Claude builds a 3D version and you choose where it goes.</p>

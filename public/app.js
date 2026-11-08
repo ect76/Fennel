@@ -120,7 +120,7 @@ function renderAll() {
   list($('#questions'), ST.questions, q => el('li', null, q));
   list($('#beliefs'), ST.beliefs, b => el('li', null, b));
   list($('#goals'), ST.goals, g => { const li = el('li', null, g.text); if (g.action) li.append(el('small', null, '→ ' + (LEAN[g.action] || g.action))); return li; });
-  list($('#wishes'), ST.wishes, w => { const li = el('li', null, w.text); li.append(el('small', null, 'since day ' + w.day)); return li; });
+  list($('#wishes'), ST.wishes, w => { const li = el('li', null, w.text); li.append(el('small', null, w.granted ? 'granted on day ' + w.grantedDay : 'asked on day ' + w.day)); return li; });
   list($('#inventory'), ST.inventory, i => { const li = el('li', null, i.name); li.append(el('small', null, 'bought day ' + i.day + ' for ' + i.price)); return li; });
   list($('#queue'), ST.researchQueue, q => el('li', null, q));
   const seek = [], avoid = []; for (const k in ST.leanings) (ST.leanings[k] > 0 ? seek : avoid).push(LEAN[k] || k);
@@ -209,7 +209,7 @@ function readImage(file, max = 1024, type = 'image/jpeg') {
 }
 
 // tap-to-place
-let placing = null;
+let placing = null, makeWish = '';
 function startPlacing(kind, payload, text) { placing = { kind, payload }; stage.classList.add('placing'); $('#bannerText').textContent = text; $('#banner').hidden = false; if (W && kind !== 'graffiti') setMode('overview'); stage.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 function endPlacing() { placing = null; stage.classList.remove('placing'); $('#banner').hidden = true; }
 $('#cancelPlace').onclick = endPlacing;
@@ -234,7 +234,7 @@ $('#makeForm').addEventListener('submit', async e => {
   try {
     const description = $('#makeDesc').value.trim(); const image = await readImage($('#makeImg').files[0]);
     if (!description && !image) { st.textContent = 'Describe it or add a picture.'; return; }
-    startPlacing('make', { description, image, size: $('#makeSize').value }, 'Tap where it should go');
+    startPlacing('make', { description, image, size: $('#makeSize').value, wish: description === makeWish ? makeWish : '' }, 'Tap where it should go');
   } catch (err) { st.textContent = err.message; }
 });
 $('#buildForm').addEventListener('submit', e => { e.preventDefault(); startPlacing('build', { kind: $('#buildKind').value, name: $('#buildName').value.trim(), desc: $('#buildDesc').value.trim() }, 'Tap an empty spot beside a road'); });
@@ -272,6 +272,8 @@ function renderKeeper() {
   if (!ST || $('#keeperTools').hidden) return;
   const shops = ST.town.places.filter(p => ['shop', 'bakery', 'cafe', 'market', 'post', 'workshop', 'museum'].includes(p.type));
   const sel = $('#stockShop'), cur = sel.value; sel.textContent = ''; for (const p of shops) { const o = el('option', null, p.name); o.value = p.id; sel.append(o); } if (cur) sel.value = cur;
+  const open = (ST.wishes || []).filter(w => !w.granted); $('#kWishesWrap').hidden = !open.length; const kw = $('#kWishes'); kw.textContent = '';
+  for (const w of open) { const li = el('li'); const d = el('div'); d.append(el('b', null, w.text), el('small', null, 'asked on day ' + w.day)); const b = el('button', 'btn small', 'Make this'); b.type = 'button'; b.onclick = () => { $('#makeDesc').value = w.text; makeWish = w.text; $('#makeDesc').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#makeDesc').focus(); }; li.append(d, b); kw.append(li); }
   const rm = (what, id) => async () => { try { await kpost(what, { id }); refreshState(); } catch {} };
   const row = (title, sub, what, id) => { const li = el('li'); const d = el('div'); d.append(el('b', null, title), el('small', null, sub)); li.append(d); if (what) { const b = el('button', 'btn small', 'Remove'); b.type = 'button'; b.onclick = rm(what, id); li.append(b); } return li; };
   list($('#kThings'), ST.things, t => row(t.name, (t.status === 'building' ? 'being built… · ' : t.status === 'failed' ? 'couldn\'t be built, so it\'s a crate · ' : '') + (t.seen ? 'he\'s looked at it ' + t.inspections + '×' : t.noticed ? 'he\'s noticed it' : 'not noticed yet'), 'remove-thing', t.id));
