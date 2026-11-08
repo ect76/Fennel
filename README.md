@@ -61,15 +61,8 @@ Percy can search the web three ways. In order of preference:
 To set up SearXNG on Unraid:
 
 1. In **Apps** (Community Applications), search for **SearXNG** and install it. Note its port (often `8080`; change it if something else uses that).
-2. Open its appdata folder (usually `/mnt/user/appdata/searxng/`) and edit `settings.yml`. Find the `search:` section and make sure `formats` includes `json`:
-   ```yaml
-   search:
-     formats:
-       - html
-       - json
-   ```
-3. Restart the SearXNG container.
-4. Edit Percy's container and set **SearXNG address** to e.g. `http://192.168.0.15:8080`. Apply.
+2. That's all SearXNG needs. (Optionally, enabling its JSON output in `settings.yml` under `search: formats: [html, json]` is slightly faster; without it Percy reads its normal results page.)
+3. Edit Percy's container and set **SearXNG address** to e.g. `http://192.168.0.15:8080`. Apply.
 
 The keeper's Budget panel shows which search method he's using and how many free and paid searches he's done today. You can force one method there too.
 
