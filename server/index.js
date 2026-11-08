@@ -73,7 +73,14 @@ function publish(a) {
       if (r.newQuestion) { S.questions.unshift(r.newQuestion); S.questions = S.questions.slice(0, 6); }
       W.addDiary('learn', 'read about ' + r.topic + '.\n' + r.facts.map(f => '· ' + f).join('\n') + (r.feeling ? '\n' + r.feeling : ''), 'claude', { sources: r.sources });
       W.remember('learned about ' + r.topic + ': ' + r.facts[0], 3);
-      { const it = S.interests.find(i => r.topic.toLowerCase().includes(i.topic.toLowerCase()) || i.topic.toLowerCase().includes(r.topic.toLowerCase())); if (it) { it.sessions++; it.strength = Math.min(100, it.strength + 8); } W.emo('curiosity', 6); W.emo('contentment', 6); }
+      { const words = t => String(t).toLowerCase().match(/[a-z]{4,}/g) || [];
+        const rw = new Set(words(r.topic + ' ' + (a.subject || '')));
+        const it = S.interests.find(i => words(i.topic).some(w => rw.has(w))) || (S.interests[0] && S.interests[0].strength > 50 ? S.interests[0] : null);
+        if (it) { it.sessions++; it.strength = Math.min(100, it.strength + 8); }
+        W.emo('curiosity', 6); W.emo('contentment', 6);
+        // down the rabbit hole: while he's hooked, each session suggests the next thing to look up
+        if (r.nextTopic && (!it || it.strength > 35) && !S.researchQueue.some(q => q.topic.toLowerCase() === r.nextTopic.toLowerCase()) && !S.knowledge.some(k => k.topic.toLowerCase() === r.nextTopic.toLowerCase())) S.researchQueue.unshift({ topic: r.nextTopic, question: 'going deeper' + (it ? ' into ' + it.topic : '') });
+        if (S.researchQueue.length > 8) S.researchQueue.length = 8; }
       W.log('researched ' + r.topic);
     } else bookFallback();
   } else if (j.kind === 'drawing') { finishDrawing(a, j.result);
