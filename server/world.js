@@ -13,6 +13,7 @@ export const ACTIONS = {
   sleep: { at: 'home', label: 'sleeping', gain: { energy: 100, calm: 10 }, desc: 'go home to bed for the night' },
   nap: { at: 'home', label: 'napping', dur: 80, gain: { energy: 30 }, desc: 'a short nap at home' },
   draw: { at: 'home', label: 'drawing', dur: 90, gain: { joy: 12, energy: -6, wonder: -4 }, desc: 'draw something at his desk (say what in "subject")' },
+  web: { at: 'home', label: 'making a web page', dur: 120, gain: { joy: 12, wonder: 4, energy: -8 }, desc: 'build a real web page for his website about something that interests him: a guide, a map, a log, a timetable, or a little interactive toy, game or experiment (what in "subject", its title in "title")' },
   write: { at: 'home', label: 'writing a page', dur: 80, gain: { joy: 8, energy: -4, wonder: -3 }, desc: 'write a page to pin up for visitors: a guide, a list, a log, an observation (say what in "subject")' },
   tidy: { at: 'home', label: 'tidying the cottage', dur: 40, gain: { calm: 12 }, desc: 'tidy the cottage' },
   eat: { at: 'bakery', label: 'eating bread', dur: 30, gain: { fullness: 45, joy: 6 }, desc: 'buy and eat bread at the bakery (2 coins)' },
@@ -68,6 +69,7 @@ const EVENTS = [
 ];
 
 export let S = null;
+export let webEnabled = false; export const setWebEnabled = v => { webEnabled = !!v; };
 export let watchers = 0; // people outside, watching right now (Percy can't see them)
 export const setWatchers = n => { watchers = n; };
 export const fmtHour = h => (h % 12 || 12) + (h < 12 || h === 24 ? 'am' : 'pm');
@@ -96,7 +98,7 @@ export function newWorld() {
     emotions: { loneliness: 30, curiosity: 45, sadness: 10, contentment: 50, frustration: 5, anxiety: 15, excitement: 25 },
     dayMood: { score: 0.1, label: 'an ordinary day', causes: ['first morning in the cottage'], day: 1 }, moodCarry: 0, interests: [], lastContact: 1,
     knowledge: [], researchQueue: [], memories: [],
-    diary: [], drawings: [], pages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
+    diary: [], drawings: [], pages: [], webPages: [], notes: [], things: [], graffiti: [], items: [], inventory: [],
     dayLog: { 1: [] }, stats: newStats(), fogTests: 0,
     weather: { kind: 'clear', until: 12 * 60 }, events: [],
     lastSeenReal: Date.now(),
@@ -285,6 +287,7 @@ export function available(id, h = hourOf(S.t)) {
     case 'stargaze': return (h >= 20 || h < 4) && S.weather.kind !== 'fog';
     case 'inspect': return S.things.length > 0;
     case 'write': return false; // needs Claude; the mind offers it itself
+    case 'web': return false; // needs Claude and his website
     case 'buy': return S.items.some(it => it.seen && !it.sold && it.price <= S.coins);
     case 'graffiti': return S.coins >= 2;
     default: return true;
@@ -319,6 +322,7 @@ function ruleScore(id, h) {
     case 'buy': { const it = S.items.filter(i => i.seen && !i.sold && i.price <= S.coins).sort((a, b) => b.price - a.price)[0]; s = it ? 0.5 + (S.coins - it.price > 10 ? 0.6 : 0) : -1e9; break; }
     case 'graffiti': s = 0.15 + (n.joy < 45 ? 0.2 : 0) + tr.creativity * 0.3 - S.stats.painted * 0.6; break;
     case 'write': s = -1e9; break;
+    case 'web': s = -1e9; break;
     case 'inspect': { const b = bestThing(); if (!b) return -1e9; return b.s - (night ? 0.5 : 0) + (Number(S.leanings.inspect) || 0) * 0.45; }
   }
   if (night && !['sleep', 'stargaze', 'pond'].includes(id)) s -= 1;
@@ -483,6 +487,7 @@ function finish(a) {
     case 'fish': S.stats.fish++; log('caught fish in the pond'); break;
     case 'draw': S.stats.drew++; if (S.coins >= 1) S.coins -= 1; else a.scrap = true; break;
     case 'write': S.stats.wrote++; break;
+    case 'web': S.stats.wrote++; break;
     case 'sell': {
       // Nobody else lives here. He leaves drawings out; later some are gone and there are coins in the tin.
       const gone = S.drawings.filter(d => d.sold && !d.noticedSold);
@@ -669,7 +674,7 @@ export function publicState(extra = {}) {
     graffiti: S.graffiti.map(g => ({ id: g.id, by: g.by, x: g.x, y: g.y, z: g.z, nx: g.nx, nz: g.nz, w: g.w, h: g.h, img: g.img || ('/media/graffiti/' + g.id + '.svg'), where: g.where, day: g.day, seen: g.seen })),
     notebook: S.notebook || null, inventory: S.inventory || [],
     items: S.items.map(i => ({ id: i.id, shop: i.shop, name: i.name, desc: i.desc, price: i.price, seen: i.seen, sold: i.sold, img: i.img || '', model: i.model || null, status: i.status || 'ready' })),
-    emotions: S.emotions, dayMood: S.dayMood, interests: S.interests,
+    emotions: S.emotions, dayMood: S.dayMood, interests: S.interests, webPages: S.webPages || [],
     town: publicTown(), fogTests: S.fogTests, memoryCount: S.memories.length,
     ...extra,
   };

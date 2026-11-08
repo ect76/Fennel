@@ -32,6 +32,7 @@ setInterval(flush, 60000).unref();
 
 /* ---------- the site itself ---------- */
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+export const siteUrl = () => { const r = config.githubRepo; if (!r) return ''; const [owner, name] = r.split('/'); return name && name.toLowerCase().endsWith('.github.io') ? 'https://' + name.toLowerCase() + '/' : 'https://' + owner.toLowerCase() + '.github.io/' + name + '/'; };
 export const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'page';
 const STYLE = `body{margin:0;background:#f4f1e8;color:#222;font:17px/1.55 Georgia,serif;padding:32px max(18px,env(safe-area-inset-left))}main{max-width:720px;margin:0 auto}h1{font-weight:normal;font-size:30px;margin:0 0 4px}h2{font-size:15px;font-weight:normal;text-transform:lowercase;letter-spacing:.06em;color:#777;margin:34px 0 10px}ul{padding-left:20px}a{color:#1f5f7a}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}.grid figure{margin:0}.grid img{width:100%;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.15);background:#fff}.grid figcaption{font-size:14px;color:#555}.body{white-space:pre-line}footer{margin-top:44px;border-top:1px solid #ddd;padding-top:14px;color:#777;font-size:14px}`;
 function footer() {
@@ -49,8 +50,10 @@ export function indexHTML(S) {
   const printLink = config.printShopUrl ? ` · <a href="${esc(config.printShopUrl)}">print</a>` : '';
   const drawings = S.drawings.slice().reverse().slice(0, 60).map(d => `<figure><img src="drawings/${d.id}.svg" alt="${esc(d.title)}" loading="lazy"><figcaption>${esc(d.title)} · day ${d.day}${buyLink(d)}${printLink}</figcaption></figure>`).join('');
   const graffiti = (S.graffiti || []).filter(g => g.by === 'percy').slice().reverse().slice(0, 30).map(g => `<figure><img src="graffiti/${g.id}.svg" alt="${esc(g.tag || 'graffiti')}" loading="lazy" style="background:#c9b9a6"><figcaption>${esc(g.where || '')} · day ${g.day}</figcaption></figure>`).join('');
+  const made = (S.webPages || []).slice().reverse().map(p => `<li><a href="made/${p.slug}.html">${esc(p.title)}</a> <span style="color:#999">· day ${p.day}</span></li>`).join('');
   return wrap('percy', `<h1>percy</h1><p>things i am making.</p>
-<h2>pages</h2>${pages ? '<ul>' + pages + '</ul>' : '<p>nothing yet.</p>'}
+${made ? '<ul>' + made + '</ul>' : ''}
+<h2>pages i wrote</h2>${pages ? '<ul>' + pages + '</ul>' : '<p>nothing yet.</p>'}
 <h2>drawings</h2><p style=\"color:#777;font-size:14px\">i leave them out on the stall in town. sometimes they go and there are coins in the tin. i don't know who takes them.</p>${drawings ? '<div class="grid">' + drawings + '</div>' : '<p>nothing yet.</p>'}
 <h2>things i put on walls. still up.</h2>${graffiti ? '<div class="grid">' + graffiti + '</div>' : '<p>nothing yet.</p>'}`);
 }

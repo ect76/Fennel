@@ -84,7 +84,7 @@ function renderAll() {
   const m = ST.mind, ms = $('#mindStatus');
   ms.className = 'dot' + (m.mode === 'claude' ? '' : ' off'); ms.textContent = m.mode === 'claude' ? 'Thinking with Claude' : 'Simple rules (' + m.reason + ')';
   $('#keeperTab').hidden = !ST.keeper;
-  $('#siteLink').textContent = '';
+  const sl = $('#siteLink'); sl.textContent = ''; if (ST.siteUrl) { sl.append('His website: '); const a = el('a', null, ST.siteUrl.replace(/^https:\/\//, '').replace(/\/$/, '')); a.href = ST.siteUrl; a.target = '_blank'; a.rel = 'noopener'; sl.append(a); }
   if (ST.dayMood) {
     $('#todayLabel').textContent = ST.dayMood.label.charAt(0).toUpperCase() + ST.dayMood.label.slice(1);
     $('#todayWhy').textContent = ST.dayMood.causes && ST.dayMood.causes.length ? ST.dayMood.causes.join(' · ') : '';
@@ -135,7 +135,13 @@ function renderAll() {
   }
   // pages
   const pg = $('#pages'); pg.textContent = '';
-  if (!ST.pages.length) pg.append(el('p', 'hint', 'He hasn\'t written any pages yet.'));
+  if ((ST.webPages || []).length) {
+    const box = el('div', 'card'); box.append(el('h2', null, 'Web pages he made'));
+    const ul = el('ul', 'plain');
+    for (const w of ST.webPages.slice().reverse()) { const li = el('li'); if (ST.siteUrl) { const a = el('a', null, w.title); a.href = ST.siteUrl + 'made/' + w.slug + '.html'; a.target = '_blank'; a.rel = 'noopener'; li.append(a); } else li.append(w.title); li.append(el('small', null, 'day ' + w.day)); ul.append(li); }
+    box.append(ul); pg.append(box);
+  }
+  if (!ST.pages.length && !(ST.webPages || []).length) pg.append(el('p', 'hint', 'He hasn\'t written any pages yet.'));
   for (const p of ST.pages.slice().reverse()) { const a = el('article', 'page'); a.append(el('h3', null, p.title), el('small', null, 'Day ' + p.day), el('div', 'txt', p.body)); pg.append(a); }
   // notes
   const nw = $('#notes'); nw.textContent = '';

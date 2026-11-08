@@ -11,13 +11,14 @@ import * as W from './world.js';
 import * as M from './mind.js';
 import { drawingSVG, graffitiSVG, keyFor } from './doodle.js';
 import * as Pub from './publish.js';
+W.setWebEnabled(Pub.enabled());
 
 const { str, pick, plainName } = W;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, '..', 'public');
 const SAVE = path.join(config.dataDir, 'world.json');
 const MEDIA = path.join(config.dataDir, 'media');
-for (const d of ['drawings', 'graffiti', 'uploads']) fs.mkdirSync(path.join(MEDIA, d), { recursive: true });
+for (const d of ['drawings', 'graffiti', 'uploads', 'web']) fs.mkdirSync(path.join(MEDIA, d), { recursive: true });
 function writeMedia(rel, data) { try { fs.writeFileSync(path.join(MEDIA, rel), data); } catch (e) { console.warn('[percy] could not save ' + rel + ':', e.message); } }
 function readImage(rel) {
   try { const buf = fs.readFileSync(path.join(MEDIA, rel)); const ext = path.extname(rel).slice(1); const mt = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[ext]; return mt ? { mediaType: mt, data: buf.toString('base64') } : null; } catch { return null; }
@@ -85,6 +86,17 @@ function publish(a) {
     } else bookFallback();
   } else if (j.kind === 'drawing') { finishDrawing(a, j.result);
   } else if (j.kind === 'graffiti') { if (a.made) finishGraffiti(a, j.result);
+  } else if (j.kind === 'web') {
+    const r = j.result;
+    if (r) {
+      let sl = Pub.slug(r.title); if ((S.webPages || []).some(p => p.slug === sl)) sl += '-' + W.dayOf(S.t);
+      const page = { id: W.uid(), slug: sl, title: r.title, subject: a.subject || '', day: W.dayOf(S.t) };
+      S.webPages.push(page); if (S.webPages.length > 80) S.webPages.shift();
+      writeMedia('web/' + sl + '.html', r.html);
+      W.addDiary('page', 'made a web page: "' + r.title + '". ' + (Pub.enabled() ? 'it\'s up on my site now.' : 'it\'s sitting on my desk. nowhere to put it.'), 'claude', { web: sl });
+      W.remember('made a web page called "' + r.title + '"', 3); W.log('made a web page: ' + r.title);
+      siteUpdate([['made/' + sl + '.html', r.html]], 'percy made a page: ' + r.title);
+    } else W.log('tried to make a web page but it wouldn\'t come together');
   } else if (j.kind === 'page') {
     const r = j.result;
     if (r) {
@@ -134,6 +146,7 @@ W.setHooks({
       if (claude && topic) { a.subject = topic; later(a, 'research', M.research(topic, book ? book.question : '', book && book.text)); W.setThought(book && book.text ? 'someone left a book about ' + topic + '. reading it.' : 'looking up ' + topic + '.'); }
     }
     if (a.id === 'write' && claude) later(a, 'page', M.writePage(a.subject, a.title));
+    if (a.id === 'web' && claude) later(a, 'web', M.makeWebPage(a.subject, a.title));
     if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
     if (a.id === 'graffiti' && claude && a.wall) later(a, 'graffiti', M.paintGraffiti({ subject: a.subject, tag: a.title }));
     if (a.id === 'shrine') readNotes(claude);
@@ -260,7 +273,7 @@ function keeperOK(key) {
   const a = crypto.createHash('sha256').update(key).digest(), b = crypto.createHash('sha256').update(config.keeperKey).digest();
   return crypto.timingSafeEqual(a, b);
 }
-const extra = () => ({ mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl });
+const extra = () => ({ siteUrl: Pub.enabled() ? Pub.siteUrl() : '', mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl });
 function live() {
   return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, act: S.act ? { id: S.act.id, phase: S.act.phase } : null,
     doing: W.doingText(), thought: S.thought, needs: S.needs, mood: W.moodWord(), coins: S.coins, weather: S.weather.kind,

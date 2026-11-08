@@ -86,9 +86,10 @@ function actionMenu() {
     if (id === 'buy' && !S.items.some(i => i.seen && !i.sold)) notes.push('he hasn\'t seen anything for sale');
     if (id === 'buy' && S.items.some(i => i.seen && !i.sold) && !S.items.some(i => i.seen && !i.sold && i.price <= S.coins)) notes.push('he can\'t afford anything he has seen yet');
     if (id === 'graffiti' && S.coins < 2) notes.push('can\'t afford paint');
+    if (id === 'web' && !W.webEnabled) return null;
     if (id === 'sleep' && !W.isNight(h)) notes.push('it is daytime; use nap if tired');
     return `${id}: ${A.desc}${notes.length ? ' (' + notes.join(', ') + ')' : ''}`;
-  }).join('\n');
+  }).filter(Boolean).join('\n');
 }
 
 /* ---------- choosing what to do next ---------- */
@@ -119,6 +120,7 @@ Reply with only JSON:
   // a penguin has to sleep sometime: past midnight, bed wins unless he's out stargazing
   if ((h >= 23.75 || h < 5) && !['sleep', 'stargaze'].includes(action)) action = 'sleep';
   if (action === 'inspect' && !S.things.length) action = 'wander';
+  if (action === 'web' && !W.webEnabled) action = 'write';
   if (str(r.remember, 220)) W.remember(r.remember, 2);
   if (str(r.diary, 600)) W.addDiary('thought', str(r.diary, 600), 'claude');
   return { action, target: str(r.target, 20), thought: str(r.thought, 500), doing: str(r.doing, 80), subject: str(r.subject, 80), title: str(r.title, 50), src: 'claude' };
@@ -152,6 +154,24 @@ Reply with only JSON: {"topic": "short topic name", "facts": ["3-5 facts, each o
 }
 
 /* ---------- pages he writes for visitors ---------- */
+// A real web page for his website: self-contained HTML, CSS and JavaScript, made the way he would make it.
+export async function makeWebPage(subject, title) {
+  const S = W.S;
+  const absorbed = S.interests.length ? S.interests.map(i => i.topic).join(', ') : '';
+  const prompt = `${context({ focus: subject + ' ' + absorbed })}
+
+At his desk, Percy is making a real web page for his website${subject ? ' about: ' + subject : ''}${title ? ' (title: "' + title + '")' : ''}. ${absorbed ? 'He is currently absorbed by ' + absorbed + ', and it should show.' : ''} Things he has learned are listed above; use them, accurately.
+Make it something a curious, slightly odd penguin would genuinely make: a guide, a log, a map, a timetable, a catalogue, or a small interactive toy, game, simulator or experiment, built with plain HTML, CSS and JavaScript. It should be specific to his life and interests, made with care, and charmingly personal rather than slick. Written in his voice (lowercase, plain, a bit odd).
+Rules: one complete, self-contained HTML document (inline CSS and JS only; no external scripts, fonts, images or network requests); under about 40 KB; works on phones; ends with this line in a footer: "i am percy, a small autonomous penguin. i made this page myself." Reply with only the HTML document.`;
+  const { text } = await run('slow', () => callClaude({ model: config.modelReflect, system: 'You are a creative web developer. You reply with a single complete HTML document only.', prompt, maxTokens: 16000, timeoutMs: 300000 }));
+  const m = String(text || '').match(/<!doctype html[\s\S]*<\/html>|<html[\s\S]*<\/html>/i); if (!m) throw new Error('no usable web page');
+  let html = m[0].replace(/<script[^>]+src=[^>]*>\s*<\/script>/gi, '').replace(/<link[^>]+href=["']https?:[^>]*>/gi, '').replace(/<meta[^>]+http-equiv=["']?refresh[^>]*>/gi, '');
+  if (!/^<!doctype/i.test(html)) html = '<!doctype html>\n' + html;
+  if (html.length > 120000) throw new Error('web page too large');
+  const t = (html.match(/<title>([^<]*)<\/title>/i) || [])[1];
+  return { title: str(t || title || subject || 'a page', 70), html };
+}
+
 export async function writePage(subject, title) {
   const prompt = `${context({ focus: subject })}
 
