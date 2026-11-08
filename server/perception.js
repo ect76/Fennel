@@ -107,6 +107,7 @@ export function describe(p) {
   const L = [];
   L.push('Time: ' + p.when + '. Weather: ' + p.weather + '.');
   L.push('Where: ' + p.where + '.');
+  { const here = (p.places || []).find(x => /right here/.test(x.where) && x.lit && !W.S.inside); if (here) L.push('The door right in front of him: ' + (here.sign || 'this building') + ' is ' + (/door open/.test(here.lit) ? 'OPEN now; he could walk straight in' : 'locked now') + '.'); }
   L.push('Body: stomach ' + p.body.stomach + '; energy ' + p.body.energy + '. Coins in pocket: ' + p.coins + '.');
   if (p.room) L.push('In the room: ' + p.room.filter(Boolean).join('; ') + '.');
   if (p.forSale) L.push('For sale here: ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');

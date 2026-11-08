@@ -180,6 +180,7 @@ function arrive(a) {
   if (p && a.enter && p.h > 0) { S.inside = p.id; p.visits = (p.visits || 0) + 1; }
   if (p && p.h > 0) S.face = Math.atan2(p.x - S.pos.x, p.z - S.pos.z);
   if (a.type === 'go') a.facts.push(p ? 'arrived at ' + p.name : 'got to where he was heading' + (a.args && a.args.said_to ? ' (' + str(a.args.said_to, 40) + ')' : ''));
+  a.doorsAtStart = doorsNearby();
   a.phase = 'do'; a.total = a.left = a.type === 'sleep' ? sleepMinutes(h) : a.minutes;
   hooks.onArrive(a, p);
   if (a.workFn) startWork(a);
@@ -247,8 +248,12 @@ function finish(a) {
       S.graffiti.push(g); a.made = g; data.graffiti = g.id; f.push('painted on the wall ' + a.wall.where + ' (used up the paint)'); break;
     }
   }
+  // doors that opened or closed nearby while he was busy, reported as things that happened
+  if (a.doorsAtStart && !['sleep', 'nap'].includes(a.type)) for (const [id, was] of Object.entries(a.doorsAtStart)) { const q = placeById(id), now = q && isOpen(q, h); if (q && now !== was) f.push('meanwhile the door of ' + q.name + ' was ' + (now ? 'unlocked and opened (it is open now)' : 'closed and locked (it is shut now)')); }
   return { ok, facts: f, data };
 }
+// opening state of places with hours close to where he is (to notice doors changing while he waits)
+function doorsNearby() { const out = {}; for (const p of S.town.places) if (TYPES[p.type] && TYPES[p.type].open && p.door && dist(p.door, S.pos) < 14 && (S.mind.knownPlaces[p.id])) out[p.id] = isOpen(p); return out; }
 
 /* ---------- the clock: called several times a second with real seconds ---------- */
 // the keeper's "Skip to morning": run the rest of this sleep straight through, ten town minutes at a time,
