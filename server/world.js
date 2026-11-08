@@ -1,7 +1,7 @@
 // Percy's world: the town, his needs, time, weather, happenings, and the mechanics of doing things.
 // The "mind" (mind.js) decides what he does; this file makes it happen.
 import { config } from './config.js';
-import { clamp, pick, uid, str, plainName } from './util.js';
+import { clamp, pick, uid, str, plain, plainName } from './util.js';
 import * as Town from './town.js';
 export { clamp, pick, uid, str, plainName };
 export const { TYPES, BUILDABLE } = Town;
@@ -188,8 +188,9 @@ export function remember(text, importance = 2) {
   }
 }
 export function setThought(text, src = 'rules') {
-  S.thought = { text: String(text), src };
-  if (src === 'claude') { S.recentThoughts.push(String(text)); if (S.recentThoughts.length > 8) S.recentThoughts.shift(); }
+  text = plain(text) || '…';
+  S.thought = { text, src };
+  if (src === 'claude') { S.recentThoughts.push(text); if (S.recentThoughts.length > 8) S.recentThoughts.shift(); }
 }
 export function feel(k, v) { S.needs[k] = clamp(S.needs[k] + v, 0, 100); }
 export function applyFeel(r) { if (!r) return; for (const k of ['joy', 'calm', 'wonder']) { const v = Number(r[k]); if (Number.isFinite(v)) feel(k, clamp(v, -12, 12)); } }
