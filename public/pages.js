@@ -1,4 +1,4 @@
-// The separate pages: Percy's requests (/requests) and his shop & jobs (/shop).
+// The separate pages: Percy's requests (/requests), his research (/research) and his shop & orders (/shop).
 const $ = s => document.querySelector(s);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const PAGE = document.body.dataset.page;
@@ -8,7 +8,7 @@ const days = n => n + ' day' + (n === 1 ? '' : 's');
 
 let ST = null, rev = -1, busy = false, keeper = false;
 async function refresh() { if (busy) return; busy = true; try { ST = await getJSON('/api/state'); rev = ST.rev; render(); } catch {} finally { busy = false; } }
-function onLive(d) { $('#nowLine').textContent = 'Day ' + d.day + ' · ' + d.time + ' · feeling ' + d.mood + ' · ' + d.coins + ' coins'; if (d.rev !== rev) refresh(); }
+function onLive(d) { $('#nowLine').textContent = 'Day ' + d.day + ' · ' + d.time + ' · ' + d.doing + ' · ' + d.coins + ' coins'; if (d.rev !== rev) refresh(); }
 try { const es = new EventSource('/api/stream'); es.onmessage = e => { try { onLive(JSON.parse(e.data)); } catch {} }; } catch {}
 let KEY = ''; try { KEY = localStorage.getItem('percy-keeper') || ''; } catch {}
 if (KEY) post('/api/keeper/check', { key: KEY }).then(() => { keeper = true; render(); }).catch(() => {});
@@ -16,31 +16,64 @@ if (KEY) post('/api/keeper/check', { key: KEY }).then(() => { keeper = true; ren
 function render() {
   if (!ST) return;
   const sl = $('#siteLink'); sl.textContent = ''; if (ST.siteUrl) { sl.append('His website: '); const a = el('a', null, ST.siteUrl.replace(/^https:\/\//, '').replace(/\/$/, '')); a.href = ST.siteUrl; a.target = '_blank'; a.rel = 'noopener'; sl.append(a); }
-  if (PAGE === 'requests') renderRequests(); else renderShop();
+  if (PAGE === 'requests') renderRequests(); else if (PAGE === 'research') renderResearch(); else renderShop();
 }
 
 /* ---------- requests ---------- */
-function renderRequests() {
-  const open = (ST.wishes || []).filter(w => !w.granted), log = ST.wishLog || [];
-  const done = (ST.wishes || []).filter(w => w.granted).concat(log.filter(w => w.granted)).sort((a, b) => (b.grantedDay || 0) - (a.grantedDay || 0));
-  const gone = log.filter(w => !w.granted).slice().reverse();
-  $('#savingWrap').hidden = !(ST.saving && ST.saving.what);
-  if (ST.saving && ST.saving.what) $('#saving').textContent = ST.saving.what + (ST.saving.coins ? ' · he has ' + Math.min(ST.coins, ST.saving.coins) + ' of ' + ST.saving.coins + ' coins' : '');
-  const ro = $('#reqOpen'); ro.textContent = '';
-  if (!open.length) ro.append(el('p', 'hint', 'Nothing right now. He thinks about what he wants at bedtime, so check back after a night or two.'));
-  for (const w of open) {
-    const d = el('div', 'wish'); d.append(el('div', 'voice', w.text));
-    const wait = ST.day - w.day;
-    d.append(el('small', null, 'asked on day ' + w.day + (wait > 0 ? ' · waiting ' + days(wait) : ' · asked today') + (w.asked > 1 ? ' · asked ' + w.asked + ' times' : '')));
-    if (keeper) { const a = el('a', 'btn small', 'Make this'); a.href = '/?make=' + encodeURIComponent(w.text); a.style.justifySelf = 'start'; a.style.textDecoration = 'none'; d.append(a); }
-    ro.append(d);
-  }
-  $('#reqDoneWrap').hidden = !done.length; const rd = $('#reqDone'); rd.textContent = '';
-  for (const w of done) { const d = el('div', 'wish done'); d.append(el('div', 'voice', w.text), el('small', null, 'asked on day ' + w.day + ' · came true on day ' + w.grantedDay + (w.grantedDay > w.day ? ', after ' + days(w.grantedDay - w.day) : ''))); rd.append(d); }
-  $('#reqGoneWrap').hidden = !gone.length; const rg = $('#reqGone'); rg.textContent = '';
-  for (const w of gone) { const d = el('div', 'wish gone'); d.append(el('div', 'voice', w.text), el('small', null, 'asked on day ' + w.day + ' · stopped hoping on day ' + w.gaveUp)); rg.append(d); }
-  $('#keeperHint').hidden = !keeper || !open.length;
+const RSTATUS = { open: 'waiting', approved: 'approved', declined: 'declined', modified: 'approved with changes', fulfilled: 'done', withdrawn: 'withdrawn' };
+function reqCard(r) {
+  const d = el('div', 'wish' + (r.status === 'fulfilled' || r.status === 'approved' ? ' done' : r.status === 'declined' || r.status === 'withdrawn' ? ' gone' : ''));
+  d.append(el('div', 'voice', r.what));
+  const wait = ST.day - r.day;
+  d.append(el('small', null, r.kind + ' · asked on day ' + r.day + (r.status === 'open' ? (wait > 0 ? ' · waiting ' + days(wait) : ' · asked today') : ' · ' + RSTATUS[r.status] + (r.updatedDay ? ' on day ' + r.updatedDay : '')) + ' · cares: ' + r.interest));
+  for (const [k, v] of [['Why', r.why], ['What\'s missing', r.missing], ['He considered instead', r.alternatives], ['Depends on', r.dependencies], ['The keeper said', r.response]]) if (v) { const p = el('p', 'hint'); p.style.margin = '0'; p.append(el('b', null, k + ': '), document.createTextNode(v)); d.append(p); }
+  for (const n of (r.notes || []).slice(-3)) d.append(el('small', null, 'Day ' + n.day + ': ' + n.text));
+  if (keeper && r.status === 'open' && r.kind === 'object') { const a = el('a', 'btn small', 'Make this'); a.href = '/?make=' + encodeURIComponent(r.what) + '&request=' + r.id; a.style.justifySelf = 'start'; a.style.textDecoration = 'none'; d.append(a); }
+  return d;
 }
+function renderRequests() {
+  const all = (ST.requests || []).slice().reverse();
+  const fill = (sel, wrap, items, empty) => { const box = $(sel); box.textContent = ''; if (wrap) $(wrap).hidden = !items.length; if (!items.length && empty) box.append(el('p', 'hint', empty)); for (const r of items) box.append(reqCard(r)); };
+  fill('#reqOpen', null, all.filter(r => r.status === 'open'), 'Nothing right now. He asks when he finds something missing that he wants.');
+  fill('#reqAnswered', '#reqAnsweredWrap', all.filter(r => !['open', 'withdrawn'].includes(r.status)));
+  fill('#reqGone', '#reqGoneWrap', all.filter(r => r.status === 'withdrawn'));
+  $('#keeperHint').hidden = !keeper;
+}
+
+/* ---------- research ---------- */
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+const SUPPORT = { source: 'a page said so', inference: 'worked out', speculation: 'a guess' };
+function link(url, text) { const a = el('a', null, text || url); a.href = url; a.target = '_blank'; a.rel = 'noopener nofollow'; return a; }
+function renderResearch() {
+  const q = ($('#resFilter').value || '').toLowerCase(), kind = $('#resKind').value;
+  const logs = (ST.researchLog || []).slice().reverse();
+  const allQ = logs.reduce((n, l) => n + l.queries.length, 0), allOpen = logs.reduce((n, l) => n + l.pages.filter(p => p.via === 'opened').length, 0);
+  $('#resTotals').textContent = logs.filter(l => l.kind === 'research').length + ' investigations · ' + allQ + ' searches · ' + allOpen + ' pages opened';
+  const box = $('#resList'); box.textContent = '';
+  const shown = logs.filter(l => (!kind || l.kind === kind) && (!q || JSON.stringify([l.question, l.why, l.queries, l.summary, l.findings, l.leads]).toLowerCase().includes(q)));
+  if (!shown.length) box.append(el('p', 'hint', logs.length ? 'Nothing matches.' : 'Nothing yet. He researches when he decides he wants to find something out.'));
+  const byId = new Map(logs.map(l => [l.id, l]));
+  for (const l of shown) {
+    const c = el('article', 'card research'); c.id = l.id;
+    c.append(el('h3', null, l.kind === 'code' ? 'While coding: ' + l.question.replace(/^while working on /, '') : l.question));
+    const prev = l.continues && byId.get(l.continues);
+    c.append(el('small', null, 'Day ' + l.day + ' · ' + l.time + (l.where ? ' · ' + l.where : '') + ' · ' + ({ searxng: 'his own search engine', browser: 'searching in his browser', claude: 'web search' }[l.via] || l.via || '') + ' · ' + l.status + (l.cost ? ' · about $' + Number(l.cost).toFixed(3) : '')));
+    if (prev) { const p = el('p', 'hint'); p.append('Carries on from '); const a = el('a', null, '"' + prev.question + '" (day ' + prev.day + ')'); a.href = '#' + prev.id; p.append(a); c.append(p); }
+    if (l.why) { const p = el('p'); p.append(el('b', null, 'Why: '), document.createTextNode(l.why)); c.append(p); }
+    if (l.summary) c.append(el('p', 'voice', l.summary));
+    if (l.queries.length) { c.append(el('h4', null, 'Searched for')); const ul = el('ul', 'queries'); for (const x of l.queries) ul.append(el('li', null, '"' + x + '"')); c.append(ul); }
+    const opened = l.pages.filter(p => p.via === 'opened' || p.via === 'redirected');
+    if (opened.length) { c.append(el('h4', null, 'Pages he opened')); const ol = el('ol', 'trail'); for (const p of opened) { const li = el('li'); li.append(link(p.url, p.title || host(p.url))); li.append(el('small', null, host(p.url) + (p.from ? ' · got there from ' + (/^https?:/.test(p.from) ? host(p.from) : p.from) : '') + (p.published ? ' · published ' + String(p.published).slice(0, 10) : ''))); ol.append(li); } c.append(ol); }
+    const results = l.pages.filter(p => p.via === 'search result');
+    if (results.length) { const d = el('details'); d.append(el('summary', null, results.length + ' search results he saw')); const ul = el('ul'); for (const p of results.slice(0, 40)) { const li = el('li'); li.append(link(p.url, p.title || host(p.url))); ul.append(li); } d.append(ul); c.append(d); }
+    if ((l.findings || []).length) { c.append(el('h4', null, 'What he took away')); const ul = el('ul', 'findings'); for (const f of l.findings) { const li = el('li'); li.append(el('span', 'pill prov-' + (f.support === 'source' ? 'researched' : 'inferred'), SUPPORT[f.support] || f.support), document.createTextNode(' ' + f.claim + ' ')); if (f.url) li.append(link(f.url, '(' + host(f.url) + ')')); if (f.note) li.append(el('small', null, ' ' + f.note)); ul.append(li); } c.append(ul); }
+    if ((l.leads || []).length) { c.append(el('h4', null, 'Leads he noted for later')); const ul = el('ul'); for (const x of l.leads) { const li = el('li', null, x.what + (x.why ? ' (' + x.why + ')' : '') + ' '); if (x.url) li.append(link(x.url, '(found on ' + host(x.url) + ')')); ul.append(li); } c.append(ul); }
+    if (l.whyStopped) c.append(el('small', null, 'Stopped because: ' + l.whyStopped));
+    box.append(c);
+  }
+  if (location.hash && !renderResearch.jumped) { renderResearch.jumped = true; const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
+}
+if (PAGE === 'research') { $('#resFilter').addEventListener('input', renderResearch); $('#resKind').addEventListener('change', renderResearch); }
 
 /* ---------- shop & jobs ---------- */
 let myJobs = new Map(); try { myJobs = new Map(JSON.parse(localStorage.getItem('percy-jobs') || '[]')); } catch {}
@@ -48,7 +81,6 @@ const STATUS = { posted: 'waiting at the post office', read: 'he is reading it',
 const KINDNAME = { drawing: 'a drawing', page: 'something written', web: 'a web page' };
 function renderShop() {
   const rate = ST.coinsPerPound || 10, pounds = c => '£' + (Math.max(1, c / rate)).toFixed(2).replace(/\.00$/, '');
-  const sign = $('#shopSign'); sign.hidden = !ST.advert; sign.textContent = ST.advert || '';
   const items = (ST.shop || []).slice().reverse(), open = items.filter(x => !x.sold), sold = items.filter(x => x.sold).slice(0, 8);
   const how = $('#shopHow'); how.textContent = '';
   if (!open.length) how.append('Nothing for sale yet. Percy decides what to sell and sets the prices himself.');

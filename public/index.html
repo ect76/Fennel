@@ -49,45 +49,41 @@
   <section class="panel">
     <header class="who">
       <h1>Percy</h1>
-      <p>a small penguin in Mossbrook · feeling <span class="tag" id="mood">…</span> · <span class="tag" id="coins">0</span> coins</p>
+      <p>lives in Mossbrook<span id="feelWrap" hidden> · feeling <span class="tag" id="mood"></span></span> · <span class="tag" id="coins">0</span> coins</p>
     </header>
     <div class="status"><span id="mindStatus" class="dot">…</span><span id="watching"></span><span id="season"></span></div>
-    <nav class="pagelinks" aria-label="More about Percy"><a href="/requests" id="reqLink">His requests</a><a href="/shop" id="shopLink">His shop &amp; jobs</a></nav>
+    <nav class="pagelinks" aria-label="More about Percy"><a href="/requests" id="reqLink">His requests</a><a href="/research" id="resLink">His research</a><a href="/shop" id="shopLink">His shop &amp; orders</a></nav>
     <div class="meters" id="meters"></div>
 
     <nav class="tabs" role="tablist" aria-label="Percy">
       <button role="tab" aria-selected="true" data-tab="mind">Mind</button>
-      <button role="tab" aria-selected="false" data-tab="diary">Diary</button>
-      <button role="tab" aria-selected="false" data-tab="drawings">Drawings</button>
-      <button role="tab" aria-selected="false" data-tab="pages">Pages</button>
+      <button role="tab" aria-selected="false" data-tab="life">Life</button>
+      <button role="tab" aria-selected="false" data-tab="work">Work</button>
       <button role="tab" aria-selected="false" data-tab="stone">The Stone</button>
       <button role="tab" aria-selected="false" data-tab="keeper" id="keeperTab" hidden>Keeper</button>
     </nav>
 
     <div class="tabpanel" id="p-mind">
-      <div class="card today" id="todayCard"><h2 style="margin:0">Today</h2><p class="voice" id="todayLabel" style="margin:0"></p><p class="hint" id="todayWhy"></p><div class="emos" id="emos"></div><p class="hint" id="absorbed"></p></div>
-      <div><h2>On his mind</h2><p class="voice" id="thoughtNow" style="margin:0"></p></div>
-      <div><h2>Who he thinks he is</h2><p class="voice" id="selfDesc" style="margin:0"></p></div>
-      <div class="chips" id="traits"></div>
-      <div><h2>Wondering about</h2><ul class="plain" id="questions"></ul></div>
-      <div><h2>Beliefs</h2><ul class="plain" id="beliefs"></ul></div>
-      <div><h2>Goals</h2><ul class="plain" id="goals"></ul></div>
-      <div><h2>His things</h2><ul class="plain" id="inventory"></ul></div>
-      <div><h2>Leanings</h2><p class="hint" id="leanings"></p></div>
-      <div><h2>Wants to look up</h2><ul class="plain" id="queue"></ul></div>
-      <div><h2>What he has learned</h2><div id="knowledge"></div></div>
-      <details class="know notebook" id="notebookWrap" hidden><summary>Fennel's notebook</summary><p class="hint" style="font-family:var(--f-body);font-size:13px">Found under a loose floorboard in Percy's cottage. Fennel, a frog, lived there before him.</p><div id="notebook"></div></details>
+      <div class="card"><h2 style="margin:0">Right now</h2><p id="doingNow" style="margin:0"></p><p class="voice" id="thoughtNow" style="margin:0"></p><p class="hint" id="pattern"></p></div>
+      <div><h2>What he intends</h2><ul class="plain" id="intentions"></ul></div>
+      <div><h2>Questions he has</h2><ul class="plain" id="questions"></ul></div>
+      <div><h2>What he knows <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0">· and how he knows it</span></h2><div id="knowledge"></div></div>
+      <div><h2>About himself</h2><ul class="plain" id="personal"></ul></div>
+      <div><h2>Things he has learned to do</h2><ul class="plain" id="skills"></ul></div>
+      <div><h2>Things he has named</h2><p class="hint" id="named"></p></div>
+      <div><h2>Days so far</h2><ul class="plain" id="summaries"></ul></div>
+      <p class="hint" id="memCounts"></p>
     </div>
-    <div class="tabpanel" id="p-diary" hidden><ol class="diary" id="diary"></ol></div>
-    <div class="tabpanel" id="p-drawings" hidden>
-      <p class="hint">He leaves his drawings out on the market stall. If you take one, it vanishes from the stall and he finds coins in his honesty tin. He'll never know who it was.</p>
-      <div class="gallery" id="gallery"></div>
+    <div class="tabpanel" id="p-life" hidden><p class="hint">What actually happened, as the world recorded it, with his own words where he had any.</p><ol class="diary" id="life"></ol></div>
+    <div class="tabpanel" id="p-work" hidden>
+      <div><h2>Projects</h2><div id="projects" style="display:grid;gap:12px"></div></div>
+      <div><h2>Writing</h2><div id="pages" style="display:grid;gap:14px"></div></div>
+      <div><h2>Drawings</h2><p class="hint">Drawings he puts out on the market stall can be taken. He finds coins in the honesty tin, and never sees who took them.</p><div class="gallery" id="gallery"></div></div>
     </div>
-    <div class="tabpanel" id="p-pages" hidden><p class="hint">Pages he has written and pinned up.</p><div id="pages" style="display:grid;gap:14px"></div></div>
     <div class="tabpanel" id="p-stone" hidden>
       <form class="card" id="noteForm">
-        <h2 style="margin:0">Leave a note at the Humming Stone</h2>
-        <p class="hint">He finds notes when he visits the stone, and he remembers them.</p>
+        <h2 style="margin:0">Leave a note at the standing stone</h2>
+        <p class="hint">It stays tucked under the stone until he goes there and decides to read it. He might not.</p>
         <label class="fld">Your note<textarea id="noteText" maxlength="1000" rows="5" required></textarea></label>
         <label class="fld">Sign it (optional)<input type="text" id="noteFrom" maxlength="30"></label>
         <div class="row"><button type="submit" class="btn primary">Leave note</button><span class="hint" id="noteStatus" role="status"></span></div>
@@ -103,11 +99,24 @@
         <span class="hint" id="keyStatus" role="status"></span>
       </form>
       <div id="keeperTools" hidden style="display:grid;gap:14px">
+        <form class="card" id="budgetForm">
+          <h2 style="margin:0">Budget</h2>
+          <p class="hint" id="usageLine"></p>
+          <div class="row"><label class="fld" style="flex:1;min-width:120px">Claude calls per day<input type="number" id="bCalls" min="0" max="5000"></label><label class="fld" style="flex:1;min-width:120px">Spending cap per day ($)<input type="number" id="bSpend" min="0" max="200" step="0.5"></label></div>
+          <div class="row"><label class="fld" style="flex:1;min-width:120px">Paid web searches per day<input type="number" id="bSearch" min="0" max="500"></label><label class="fld" style="flex:1;min-width:150px">Search with<select id="bVia"><option value="auto">Automatic (free first)</option><option value="searxng">SearXNG</option><option value="browser">His own browser</option><option value="claude">Claude's web search (1p each)</option></select></label></div>
+          <label class="fld">Thinking<select id="bQuality"><option value="economy">Economical (Haiku, cheapest)</option><option value="better">Better (Sonnet, about 20× the cost)</option></select></label>
+          <label class="fld" id="bPublishWrap">Publishing to his website<select id="bPublish"><option value="0">Only if AUTO_PUBLISH is on in Unraid</option><option value="1">Allowed</option></select></label>
+          <div class="row"><button type="submit" class="btn primary">Save</button><button type="button" class="btn" id="bPause">Pause his thinking</button><span class="hint" id="budgetStatus" role="status"></span></div>
+          <p class="hint">While paused, or when a limit is reached, he keeps living on simple rules (eating, sleeping, resting) and keeps his plans for later. The cap is an estimate from the tokens each call actually used.</p>
+        </form>
+        <div class="card"><h2 style="margin:0">His requests</h2><p class="hint">Answering sends him a letter at the post office. Approving doesn't make anything happen by itself: for objects, use "Make something" below; new abilities need building.</p><div id="kReqs" style="display:grid;gap:10px"></div></div>
+        <div class="card"><h2 style="margin:0">Why did he do that?</h2><p class="hint">His private decision journal: what triggered each decision, what he perceived and intended, what he expected, and what actually happened.</p><div id="kJournal" style="display:grid;gap:8px"></div></div>
         <form class="card" id="makeForm">
           <h2 style="margin:0">Make something</h2>
           <p class="hint">Describe it, add a picture, or both. Claude builds a 3D version and you choose where it goes.</p>
           <label class="fld">What is it?<input type="text" id="makeDesc" maxlength="200" placeholder="a statue of a cat sitting on a plinth"></label>
           <label class="fld">Picture (optional)<input type="file" id="makeImg" accept="image/*"></label>
+          <label class="fld">For one of his requests (optional)<select id="makeFor"><option value="">No, just put it there</option></select></label>
           <label class="fld">Size<select id="makeSize"><option value="1.4">Small, like a bench</option><option value="3" selected>Medium, like a statue</option><option value="5.5">Large, like a car or a tree</option><option value="8">Huge, like a spaceship</option></select></label>
           <div class="row"><button type="submit" class="btn primary">Choose a spot</button><span class="hint" id="makeStatus" role="status"></span></div>
         </form>
@@ -139,8 +148,8 @@
         </form>
         <form class="card" id="bookForm">
           <h2 style="margin:0">Leave a book at the library</h2>
-          <p class="hint">He'll read it next time he's at the library. Leave the text empty and he'll look the topic up on the web instead.</p>
-          <label class="fld">Book about<input type="text" id="bookTopic" maxlength="60" required></label>
+          <p class="hint">It sits on a reading table in the library. He may find it, read it, or never notice it.</p>
+          <label class="fld">Title<input type="text" id="bookTopic" maxlength="80" required></label>
           <label class="fld">Text of the book (optional): paste an article or anything you want him to read<textarea id="bookText" maxlength="20000" rows="5"></textarea></label>
           <div class="row"><button type="submit" class="btn">Leave the book</button><span class="hint" id="bookStatus" role="status"></span></div>
         </form>
@@ -155,14 +164,15 @@
         <div class="card" id="kShopWrap" hidden><h2 style="margin:0">Percy's shop</h2><p class="hint">If someone pays you some other way, record the sale here and the coins go to him.</p><ul class="list" id="kShop"></ul></div>
         <div class="card" id="kJobsWrap" hidden><h2 style="margin:0">Commission letters</h2><ul class="list" id="kJobs"></ul></div>
         <div class="card"><h2 style="margin:0">Things you've made</h2><ul class="list" id="kThings"></ul></div>
-        <div class="card"><h2 style="margin:0">Buildings</h2><p class="hint">Take a building out of Mossbrook. If he knew it, he'll notice it's gone. Without the bakery, library, market or Humming Stone he can't do the things he does there.</p><ul class="list" id="kBuildings"></ul></div>
+        <div class="card"><h2 style="margin:0">Buildings</h2><p class="hint">Take a building out of Mossbrook. If he knew it, he'll notice it's gone when he's next nearby.</p><ul class="list" id="kBuildings"></ul></div>
         <div class="card"><h2 style="margin:0">Graffiti</h2><ul class="list" id="kGraffiti"></ul></div>
         <div class="card"><h2 style="margin:0">In the shops</h2><ul class="list" id="kItems"></ul></div>
         <div class="card" id="kPrintsWrap" hidden><h2 style="margin:0">Real print sales</h2><p class="hint">When someone buys a real print through your shop link, record it here so Percy finds coins in his tin.</p><ul class="list" id="kPrints"></ul></div>
         <div class="card"><h2 style="margin:0">Notes</h2><ul class="list" id="kNotes"></ul></div>
+        <details class="card"><summary><b>World log</b> <span class="hint">what actually happened, day by day</span></summary><div id="kWorld" class="hint" style="white-space:pre-line;max-height:420px;overflow:auto"></div></details>
       </div>
     </div>
-    <footer>Percy lives here day and night. His thoughts are written by Claude; his world runs on its own. <span id="siteLink"></span></footer>
+    <footer>Percy lives here day and night. His decisions are made with Claude from what he perceives and remembers; his world runs on its own. <span id="siteLink"></span></footer>
   </section>
 </div>
 <script type="module" src="app.js"></script>

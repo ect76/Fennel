@@ -17,7 +17,11 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1440, height: 860 }
   await stage.screenshot({ path: `${out}/${tag}-${name}-3-explore.png` });
   await page.click('[data-mode=follow]'); await page.click('#zoomIn'); await page.click('#zoomIn'); await page.waitForTimeout(2500);
   await stage.screenshot({ path: `${out}/${tag}-${name}-4-close.png` });
-  if (tag === 'day') await page.screenshot({ path: `${out}/${tag}-${name}-5-page.png`, fullPage: true });
+  if (tag === 'day') {
+    await page.screenshot({ path: `${out}/${tag}-${name}-5-page.png`, fullPage: true });
+    for (const t of ['life', 'work']) { await page.click('[data-tab=' + t + ']'); await page.waitForTimeout(400); await page.screenshot({ path: `${out}/${tag}-${name}-6-${t}.png`, fullPage: true }); }
+    for (const sub of ['research', 'requests', 'shop']) { await page.goto(base + sub, { waitUntil: 'load' }); await page.waitForTimeout(1500); await page.screenshot({ path: `${out}/${tag}-${name}-7-${sub}.png`, fullPage: true }); }
+  }
   await ctx.close();
 }
 await browser.close();

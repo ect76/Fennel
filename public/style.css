@@ -112,7 +112,7 @@ details.know p,.notebook p{font-family:var(--f-voice);font-size:18px;line-height
 .gallery small{color:var(--muted);font-size:12px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px}
 label.fld{display:grid;gap:4px;font-size:13px;color:var(--muted)}
-input[type=text],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;color:var(--ink)}
+input[type=text],input[type=search],input[type=password],input[type=number],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;color:var(--ink)}
 textarea{resize:vertical;min-height:64px}
 .pad{width:100%;max-width:420px;aspect-ratio:2/1;background:repeating-linear-gradient(0deg,#cdbca6 0 22px,#c4b29a 22px 24px);border-radius:8px;touch-action:none;cursor:crosshair}
 .swatches{display:flex;gap:6px;flex-wrap:wrap}
@@ -146,3 +146,26 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 .pagelinks a{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:13.5px;font-weight:700;color:var(--ink);text-decoration:none}
 .pagelinks a:hover{border-color:var(--accent)}
 button.nogl{border:0;background:rgba(255,255,255,.94);font:inherit;font-weight:700;width:100%;z-index:6}
+
+/* the redesign: provenance pills, facts, research and journal */
+.fact{font-size:14.5px;line-height:1.45;padding:6px 0;border-bottom:1px solid var(--line)}
+.fact:last-child{border-bottom:0}
+.pill.prov-perceived,.pill.prov-experienced{background:color-mix(in srgb,var(--c-energy) 18%,transparent)}
+.pill.prov-researched{background:color-mix(in srgb,var(--c-calm) 22%,transparent)}
+.pill.prov-told{background:color-mix(in srgb,var(--c-joy) 18%,transparent)}
+.pill.prov-inferred,.pill.prov-imagined{background:color-mix(in srgb,var(--c-wonder) 18%,transparent)}
+.pill.prov-initial{background:color-mix(in srgb,var(--muted) 18%,transparent)}
+.entry .fact{border:0;padding:2px 0}
+.card.research{display:grid;gap:8px}
+.card.research h3{margin:0;font-size:19px;text-wrap:balance}
+.card.research h4{margin:6px 0 0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.card.research ul,.card.research ol{margin:0;padding-left:20px;display:grid;gap:4px;min-width:0}
+.card.research li{overflow-wrap:anywhere}
+.card.research li small{display:block;color:var(--muted)}
+.card.research .voice{font-size:20px;line-height:1.2;margin:0}
+.card.project{display:grid;gap:6px}
+.card.project h3{margin:0}
+.card.project p{margin:0}
+.jentry summary{cursor:pointer;font-size:14px}
+.jentry p{margin:4px 0;overflow-wrap:anywhere}
+#kWorld{white-space:pre-wrap;font-size:12.5px;max-height:360px;overflow:auto}

@@ -41,6 +41,8 @@ jobs:
           cp .github/preview/shoot.mjs /tmp/pw/ && cd /tmp/pw
           node shoot.mjs http://localhost:3001/ $GITHUB_WORKSPACE/shots day
           node shoot.mjs http://localhost:3002/ $GITHUB_WORKSPACE/shots night
+      - name: Acceptance checks (the design brief, against the day town)
+        run: node .github/preview/acceptance.mjs http://localhost:3001 k /tmp/day || true
       - name: Server logs
         if: always()
         run: tail -n 30 /tmp/day.log /tmp/night.log

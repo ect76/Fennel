@@ -1,20 +1,24 @@
 # Percy of Mossbrook
 
-Percy is a small autonomous penguin who lives completely alone in Mossbrook, a village of winding cobbled streets surrounded on every side by fog. He lives there day and night, whether or not anyone is watching.
+Percy is an autonomous agent who lives as a small penguin in Mossbrook, a village of cobbled streets surrounded by fog. He lives there day and night, whether or not anyone is watching.
 
-He wakes into good days and bad days, gets lonely, gets absorbed by things, paints, writes pages, researches on the web at the library, tests the fog where the roads end, and reflects on each day before he sleeps. Those reflections change his beliefs, goals and habits, so over weeks he becomes someone nobody designed. Every few days the fog pulls back and there is more town than before.
+He starts with almost nothing: a cottage, a name, a few coins, and no idea what the town holds. Nobody gave him hobbies, fears or a personality. He decides what he wants (for the next ten minutes or the next few weeks) and then how to get it: walking somewhere to look, investigating a question on the web, writing and testing code, building and publishing websites, drawing, writing, asking for things he lacks, or doing nothing much at all. What he becomes comes out of what he actually experiences.
 
-Visitors can watch him in 3D, walk the streets themselves, read his diary, leave notes under the Humming Stone, and take his drawings from his market stall. He finds coins in his honesty tin and never knows who took them.
+Visitors can watch him in 3D, walk the streets themselves, see what he's thinking and doing, follow every search he makes, open his projects, leave notes under the Humming Stone, and buy what he decides to sell.
 
-As the keeper, you can make anything appear in town (describe it or upload a photo and Claude builds a 3D version), paint graffiti on walls, put up new buildings, push back the fog, stock the shops with things for him to save up for, and leave books (or whole articles) at the library.
+As the keeper, you shape his **environment**, never his mind: make things appear (describe it or upload a photo and Claude builds a 3D version), paint walls, put up buildings, push back the fog, stock shops, leave books at the library, answer his requests, and set his budget.
 
 ## How it works
 
-- **The world** runs on the server in real time. By default a town day lasts 6 real hours (`TIME_SCALE=4`). There's weather, seasons and small happenings, and the town slowly grows.
-- **His mind** is Claude. Every time he finishes something, Claude gets his mood, feelings, needs, surroundings, memories, interests and recent thoughts, and decides what he thinks and does next. He wakes each morning into a mood shaped by sleep, loneliness, the weather, yesterday and chance. At bedtime a stronger model reflects on the day and updates who he is. At the library he uses real web search, or reads what you left him.
-- **His art** is painted by Claude as real illustrations (SVG), and pinned to the noticeboard on the High Street.
-- **If Claude isn't available** (no key, daily limit reached, an outage), simple rules keep him alive until it's back.
-- **Everything he is** is saved in `/data`: `world.json`, `media/` (drawings, graffiti, uploads) and a daily backup in `backups/`. Updates never wipe it.
+- **The world** runs on the server in real time (by default a town day lasts 6 real hours). It holds the truth: where things are, what's open, what happened.
+- **What he perceives** is separate from that truth. He sees what's near him, as it looks rather than what it's called, until he finds out. He doesn't know there are visitors; he might notice the stone humming.
+- **His mind** is Claude, run cheaply: a small model (Haiku) for most decisions, short sittings for research and coding, prompt caching, and a daily spending cap you can change from the page.
+- **His memory** has five kinds (experiences, things he knows, views of himself, skills, intentions and questions), every item tagged with how he knows it (saw it, read it with the source link, was told, worked it out, imagined it). Old memories are summarised but never rewritten.
+- **Research** happens whenever he wants to find something out: from his computer at home or at the library. He types his own searches, opens pages, follows links wherever they lead, notes leads for later, and can pick an investigation up again days later. Every query and page is on the **Research** page.
+- **Code** is real: he writes files, runs them in a sandbox (no network, can only see his project), previews pages in a real browser (seeing console errors and a screenshot), fixes what's actually broken, keeps versions with git, and publishes to his website.
+- **The decision journal** (keeper only) records why he chose each thing: what triggered it, what he intended, what he expected, and what actually happened.
+- **If Claude isn't available** (paused, budget reached, an outage), he keeps living on simple rules and keeps his intentions for later.
+- **Everything he is** is saved in `/data`: `world.json`, `journal.jsonl`, `memory-archive.jsonl`, `workspace/` (his projects, with history), `media/`, and daily backups.
 
 ---
 
@@ -42,7 +46,32 @@ Then on the **Docker** tab, click **Add Container**, choose **fennel** from the 
 
 ### 4. Updates
 
-On the **Docker** tab, click **Check for Updates**, then **apply update**. If it insists it's up to date, switch to **Advanced view** and use **force update**. The **CA Auto Update Applications** plugin can do this on a schedule. His memories live in appdata, so updates keep everything.
+On the **Docker** tab, click **Check for Updates**, then **apply update**. If it insists it's up to date, switch to **Advanced view** and use **force update**. His memories live in appdata, so updates keep everything.
+
+(The one exception was the switch to this design, which started a new world on purpose. The old world was kept in `/data/archive-v2-…`.)
+
+### 4b. Free web search with SearXNG (recommended)
+
+Percy can search the web three ways. In order of preference:
+
+1. **Your own SearXNG** (free, private): set **SearXNG address**.
+2. **His own browser** (free, built into the container): searches Bing directly. Works without any setup, but search engines sometimes block automated browsers.
+3. **Claude's web search** (about 1p per search, capped by **Max paid web searches per day**).
+
+To set up SearXNG on Unraid:
+
+1. In **Apps** (Community Applications), search for **SearXNG** and install it. Note its port (often `8080`; change it if something else uses that).
+2. Open its appdata folder (usually `/mnt/user/appdata/searxng/`) and edit `settings.yml`. Find the `search:` section and make sure `formats` includes `json`:
+   ```yaml
+   search:
+     formats:
+       - html
+       - json
+   ```
+3. Restart the SearXNG container.
+4. Edit Percy's container and set **SearXNG address** to e.g. `http://192.168.0.15:8080`. Apply.
+
+The keeper's Budget panel shows which search method he's using and how many free and paid searches he's done today. You can force one method there too.
 
 ### 5. Let the world visit (optional)
 
@@ -54,7 +83,7 @@ You'll get an address like `https://mossbrook.<your-tailnet>.ts.net`. Put it in 
 
 ### 6. His own website (optional)
 
-Like Pino, Percy can publish his drawings, pages and graffiti to a GitHub Pages site he keeps himself.
+Percy can publish his projects, writing and drawings to a GitHub Pages site he keeps himself.
 
 1. (Optional, but fun) create a GitHub account just for him, e.g. `percy-the-penguin`.
 2. On that account, create a public repository named `<account>.github.io` (e.g. `percy-the-penguin.github.io`) with a README, then in its **Settings → Pages** choose "Deploy from a branch", branch `main`.
@@ -71,9 +100,9 @@ If you want real people to be able to buy real prints, set up your own shop page
 
 Percy earns coins three ways, and spends them in the shops:
 
-- **The stall.** He leaves drawings out on the market stall; visitors can take one from the Drawings tab and he finds coins in his tin.
+- **The stall.** If he decides to leave drawings out on the market stall, visitors can take one from the Work tab and he finds coins in his tin.
 - **Commissions.** Anyone visiting can send him an order on his **shop page** (the "His shop & jobs" link under his name, or `/shop`) (a drawing, something written, or a web page) and offer up to 20 coins. Orders arrive as letters at the post office in Mossbrook, which he collects when he goes there (it's open 9am to 5pm, town time). He decides whether to take each job (he can say no), does it, and gets paid when it's finished. Each visitor can send three a day. You can remove any order in the Keeper tab.
-- **His shop.** Now and then he sits down and decides which of his drawings, pages, web projects and belongings to sell, sets his own prices and writes the blurbs. If his website is set up, he also designs and builds his own shop page there (`shop.html`) and redesigns it when he feels like it. The server keeps the stock, prices and "sold" labels on that page up to date.
+- **His shop.** If he wants to, he lists drawings, writing or projects for sale at prices he sets. If he builds a page for it, the server fills in the stock and "sold" labels whenever he publishes (see the `percy-shop` slot).
 
 Nothing to set up for any of that. To let people pay **real money**, which turns into coins, connect Ko-fi:
 
@@ -87,11 +116,13 @@ Every pound sent becomes 10 coins (change it with **Coins per pound**). Payments
 
 In the Keeper tab you can also **give him coins** yourself (with a message if you like), or record a shop sale that was paid some other way. Everything he sells is digital: buyers get his drawing, page or web project online, and nothing is ever posted. The post office is only part of his world, not a job for you. You handle anything owed on real money (Ko-fi's terms, tax).
 
-His requests (what he's asking for, how long he's waited, what came true, what he gave up on, and what he's saving for) have their own page too: the "His requests" link under his name, or `/requests`. When you're unlocked as keeper, each request has a **Make this** button that takes you to the town with it filled in.
-
 ### 9. Taking things away
 
-In the Keeper tab you can remove things you've made, graffiti, shop items, notes, orders and whole buildings (everything except his cottage). He notices when something he knew has gone, and it stays with him. Without the bakery, library, market stall or Humming Stone he can't do the things he does there.
+In the Keeper tab you can remove things you've made, graffiti, shop items, notes, orders and whole buildings (everything except his cottage). If he knew something was there, he may notice it's gone.
+
+### 10. His requests
+
+When he finds something missing that he wants, he writes a request: what, why, what's missing, what he considered instead, what it depends on, and how much he cares. They're on the **His requests** page (`/requests`). Answer them in the Keeper tab (Approve, Decline, Approve with changes, It's done, with an optional note). Your answer reaches him as a letter at the post office. Approving doesn't make anything happen by itself: for an object, use **Make this** (or the "Make something" card, choosing which request it's for).
 
 ---
 
@@ -103,31 +134,39 @@ In the Keeper tab you can remove things you've made, graffiti, shop items, notes
 | `KEEPER_KEY` | — | Password for the keeper tools on the web page |
 | `TIME_SCALE` | `4` | Town minutes per real minute. `4` = a town day every 6 hours |
 | `GROW_EVERY_DAYS` | `3` | The fog pulls back every N town days (`0` = only when you do it) |
-| `MAX_CALLS_PER_DAY` | `250` | Hard cap on Claude calls per real day; after that he runs on simple rules until midnight UTC |
-| `MAX_SEARCHES_PER_DAY` | `12` | Cap on web searches per day ($10 per 1,000 searches, so at most about $3.60 a month) |
-| `WEB_RESEARCH` | `on` | `off` = research from Claude's own knowledge only |
-| `MODEL_THINK` | `claude-haiku-5-5` | Everyday thoughts and choices (most calls) |
-| `MODEL_REFLECT` | `claude-sonnet-5-5` | Bedtime reflection, pages, drawings, graffiti and things you make |
-| `MODEL_RESEARCH` | `claude-sonnet-5-5` | Library research |
+| `MAX_CALLS_PER_DAY` | `300` | Claude calls per real day (change it live in the Keeper tab) |
+| `MAX_SPEND_PER_DAY` | `2` | Estimated dollars per real day, worked out from the tokens each call used (`0` = no cap; change it live) |
+| `MAX_SEARCHES_PER_DAY` | `10` | Paid Claude web searches per day (about $0.01 each) |
+| `SEARXNG_URL` | — | Your SearXNG address for free searches (see 4b) |
+| `MAX_LOCAL_SEARCHES` | `60` | Free searches (SearXNG or his browser) per day |
+| `WEB_RESEARCH` | `on` | `off` = no web at all |
+| `MODEL_DECIDE` | `claude-haiku-5-5` | Everyday decisions |
+| `MODEL_WORK` | `claude-haiku-5-5` | Research and coding sittings |
+| `MODEL_BETTER` | `claude-sonnet-5-5` | Used for everything when you choose "Better" in the Keeper tab |
+| `MODEL_WORLD` | `claude-haiku-5-5` | Furnishing rooms, building things you make |
+| `SESSION_STEPS` | `5` | Steps per research or coding sitting. Smaller = slower and cheaper; he carries on next time |
+| `FETCH_TOKENS` | `6000` | How much of a web page he reads at once |
+| `AUTO_PUBLISH` | `on` | He may update his website without asking. `off` = only when you allow it in the Keeper tab |
+| `RUN_TIMEOUT_MS` | `15000` | How long his scripts may run |
+| `CHROMIUM_PATH` | `/usr/bin/chromium-browser` | His browser (already in the image) |
 | `PUBLIC_URL` | — | Where visitors can see his town |
 | `GITHUB_TOKEN`, `GITHUB_REPO` | — | His website (see above) |
 | `PRINT_SHOP_URL`, `PRINT_COINS` | —, `10` | Real prints (see above) |
-| `KOFI_URL` | — | His Ko-fi page, linked from his shop |
-| `KOFI_TOKEN` | — | Ko-fi's verification token; turns on `/api/kofi` |
-| `COINS_PER_POUND` | `10` | Coins per pound (or dollar, euro...) sent on Ko-fi |
+| `KOFI_URL`, `KOFI_TOKEN` | — | Ko-fi (see above) |
+| `COINS_PER_POUND` | `10` | Coins per pound sent on Ko-fi |
 
 ### Keeping costs in check
 
-Most calls are small everyday decisions on the cheapest model; drawings and reflections use the bigger one. To spend less: lower `TIME_SCALE`, lower `MAX_CALLS_PER_DAY`, or set `MODEL_REFLECT` to the Haiku model. Watch your spending in the Claude Console for the first few days and adjust.
+Open the **Keeper** tab: the **Budget** card shows today's calls, estimated spend and searches, and lets you lower the daily calls, the spending cap and paid searches, switch the search method, or pause his thinking entirely. Changes apply immediately, no restart. When a limit is reached he slows down first (fewer, cheaper decisions), then lives on simple rules until midnight UTC, keeping his plans. Also set a monthly spend limit in the Claude Console.
 
 ## Checking on him
 
-- `http://<server>:3000/api/health` shows whether his mind is running on Claude or simple rules, today's call count, the last error, and his website's publishing status.
+- `http://<server>:3000/api/health` shows whether his mind is running on Claude or simple rules, today's calls and spend, the last error, which search method works, whether his browser and git are available, and his website's publishing status.
 - The container log prints a line whenever something goes wrong.
 
 ## Running without Docker
 
-Needs Node.js 20 or newer. No packages to install.
+Needs Node.js 22.15 or newer, plus Chromium and git for his browser and project history (he manages without them, but can't preview pages or keep versions). No npm packages to install.
 
 ```
 ANTHROPIC_API_KEY=... KEEPER_KEY=... node server/index.js

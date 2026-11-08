@@ -1,4 +1,4 @@
-// Percy's server: runs his world nonstop, serves the 3D town page, and takes visitors' notes.
+// Percy's server: runs his world nonstop, serves the town page and its side pages, and the keeper's tools.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,590 +6,335 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { loadJSON, saveJSON, dailyBackup } from './store.js';
-import { canCall } from './claude.js';
+import { canCall, setBudgetSource, status as claudeStatus, budget } from './claude.js';
 import * as W from './world.js';
-import * as M from './mind.js';
-import { drawingSVG, graffitiSVG, keyFor } from './doodle.js';
+import * as Agent from './agent.js';
+import * as Mem from './memory.js';
+import * as C from './create.js';
+import * as Sessions from './sessions.js';
+import * as Code from './code.js';
+import * as WS from './workshop.js';
+import * as B from './browser.js';
+import * as Search from './search.js';
 import * as Pub from './publish.js';
-W.setWebEnabled(Pub.enabled());
+import { str, uid } from './util.js';
 
-const { str, pick, plainName } = W;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, '..', 'public');
 const SAVE = path.join(config.dataDir, 'world.json');
 const MEDIA = path.join(config.dataDir, 'media');
-for (const d of ['drawings', 'graffiti', 'uploads', 'web']) fs.mkdirSync(path.join(MEDIA, d), { recursive: true });
+for (const d of ['drawings', 'graffiti', 'uploads']) fs.mkdirSync(path.join(MEDIA, d), { recursive: true });
 function writeMedia(rel, data) { try { fs.writeFileSync(path.join(MEDIA, rel), data); } catch (e) { console.warn('[percy] could not save ' + rel + ':', e.message); } }
-function readImage(rel) {
-  try { const buf = fs.readFileSync(path.join(MEDIA, rel)); const ext = path.extname(rel).slice(1); const mt = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[ext]; return mt ? { mediaType: mt, data: buf.toString('base64') } : null; } catch { return null; }
-}
 function parseDataURL(u) {
-  const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(u || ''));
-  if (!m) return null;
+  const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(u || '')); if (!m) return null;
   const buf = Buffer.from(m[3], 'base64'); if (buf.length > 4 * 1024 * 1024) return null;
   return { mediaType: m[1], ext: m[2] === 'jpeg' ? 'jpg' : m[2], buf, data: m[3] };
 }
-// his website: re-render the index whenever something new goes up
-function siteUpdate(files, message) { if (!Pub.enabled()) return; for (const [p, c] of files) Pub.queueFile(p, c, message); Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index'); shopUpdate(); }
-// his shop page: he designs it (mind.makeShopPage); the server keeps its stock list current
-const SHOP_TEMPLATE = path.join(MEDIA, 'web', '_shop.html');
-function shopData() {
-  const items = S.shop.filter(x => !x.withdrawn && (!x.sold || W.dayOf(S.t) - (x.soldDay || 0) < 30)).slice(-60).map(x => {
-    const w = x.kind === 'web' ? (S.webPages || []).find(p => p.id === x.ref) : null, pg = x.kind === 'page' ? S.pages.find(p => p.id === x.ref) : null;
-    return { code: x.code, title: x.title, blurb: x.blurb || '', price: x.price, pounds: W.pounds(x.price), kind: x.kind, img: x.kind === 'drawing' ? 'drawings/' + x.ref + '.svg' : '', link: w ? 'made/' + w.slug + '.html' : pg ? 'pages/' + Pub.slug(pg.title) + '.html' : '', sold: !!x.sold, day: x.day };
-  });
-  return { items, sign: S.advert || '', kofi: config.kofiUrl, townUrl: config.publicUrl, coinsPerPound: config.coinsPerPound, updated: 'day ' + W.dayOf(S.t) };
-}
-function shopUpdate() {
-  if (!Pub.enabled() || !S.shopPage) return;
-  let html; try { html = fs.readFileSync(SHOP_TEMPLATE, 'utf8'); } catch { return; }
-  const json = JSON.stringify(shopData()).replace(/</g, '\\u003c');
-  Pub.queueFile('shop.html', html.replace(M.SHOP_SLOT, () => '<script type="application/json" id="' + M.SHOP_MARK + '">' + json + '</script>'), 'percy\'s shop');
-}
 
-/* ---------- load or create the world ---------- */
+/* ---------- load the world (P0: anything older is archived, never deleted) ---------- */
 let S = loadJSON(SAVE);
 if (!S && fs.existsSync(SAVE)) {
-  // the save is there but can't be read: never start over on top of it. Try the last good copies first.
   const bdir = path.join(config.dataDir, 'backups');
   const tries = [SAVE + '.tmp', ...(fs.existsSync(bdir) ? fs.readdirSync(bdir).filter(f => f.startsWith('world-')).sort().reverse().map(f => path.join(bdir, f)) : [])];
   for (const f of tries) { S = loadJSON(f); if (S) { console.warn('[percy] world.json could not be read; restored from ' + f); break; } }
-  const keep = path.join(config.dataDir, 'world-unreadable-' + Date.now() + '.json');
-  try { fs.copyFileSync(SAVE, keep); console.warn('[percy] kept the unreadable save as ' + keep); } catch {}
+  try { fs.copyFileSync(SAVE, path.join(config.dataDir, 'world-unreadable-' + Date.now() + '.json')); } catch {}
 }
-if (S && S.v === 1) {
-  // the first version (Fennel the frog, on an island): keep it safe and start Percy's village, with Fennel's notebook in the cottage
-  const old = S;
-  try { saveJSON(path.join(config.dataDir, 'world-fennel-archive.json'), old); } catch (e) { console.error('[percy] could not archive the old world:', e.message); }
-  S = W.newWorld(); W.setState(S);
-  W.addDiary('event', 'day 1. woke up in the cottage. the stone was humming before the birds started.');
-  W.leaveNotebook(old);
-  console.log('[percy] archived Fennel\'s world to world-fennel-archive.json; Percy\'s village begins');
-} else if (!S) {
-  S = W.newWorld(); W.setState(S);
-  W.addDiary('event', 'day 1. woke up in the cottage. the stone was humming before the birds started.');
-  console.log('[percy] a new world begins');
-} else {
-  // every later version keeps everything: just add whatever is new
-  W.migrate(S); W.setState(S);
-  S.deciding = false;
-  const gapMin = (Date.now() - (S.lastSeenReal || Date.now())) / 60000;
-  if (gapMin > 10) { W.addDiary('event', 'the world went quiet for a while. i don\'t remember any of it. the clock says it\'s still ' + W.hhmm(S.t) + '.'); W.log('the world paused'); }
-  console.log('[percy] world loaded: day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t));
+if (S && (S.v || 1) < W.SCHEMA) {
+  // an earlier design: kept whole in an archive folder, and a new instance begins (the keeper asked for a fresh start)
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-'), adir = path.join(config.dataDir, 'archive-v' + (S.v || 1) + '-' + stamp);
+  fs.mkdirSync(adir, { recursive: true });
+  saveJSON(path.join(adir, 'world.json'), S);
+  try { if (fs.existsSync(MEDIA)) fs.cpSync(MEDIA, path.join(adir, 'media'), { recursive: true }); } catch (e) { console.warn('[percy] could not archive media:', e.message); }
+  for (const d of ['drawings', 'graffiti']) { try { for (const f of fs.readdirSync(path.join(MEDIA, d))) fs.rmSync(path.join(MEDIA, d, f)); } catch {} }
+  console.log('[percy] the previous world (schema v' + (S.v || 1) + ') is archived in ' + adir + '; a new Percy begins');
+  S = null;
 }
+if (!S) { S = W.newWorld(); W.setState(S); console.log('[percy] a new world begins'); }
+else { W.migrate(S); W.setState(S); S.deciding = false; console.log('[percy] world loaded: day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t)); }
 function save() { S.lastSeenReal = Date.now(); try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
 
-/* ---------- things that need Claude and finish later ---------- */
-// Results are attached to the activity; whichever comes last (the activity ending or Claude answering) publishes it.
-function later(a, kind, promise) {
-  a.job = { kind, done: false, ended: false };
-  promise.then(r => { a.job.result = r; }).catch(e => { a.job.error = String(e.message || e); console.warn('[percy] ' + kind + ' failed:', a.job.error); })
-    .finally(() => { a.job.done = true; if (a.job.ended) publish(a); });
-}
-// what one research session taught him
-function learned(a, r) {
-  S.knowledge.push({ topic: r.topic, facts: r.facts, sources: r.sources, day: W.dayOf(S.t), src: 'claude', web: r.web });
-  if (S.knowledge.length > 60) S.knowledge.shift();
-  const subject = r.asked || a.subject || '';
-  S.researchQueue = S.researchQueue.filter(q => q.topic.toLowerCase() !== String(subject).toLowerCase() && q.topic.toLowerCase() !== r.topic.toLowerCase());
-  if (r.newQuestion) { S.questions.unshift(r.newQuestion); S.questions = S.questions.slice(0, 6); }
-  W.addDiary('learn', 'read about ' + r.topic + '.\n' + r.facts.map(f => '· ' + f).join('\n') + (r.feeling ? '\n' + r.feeling : ''), 'claude', { sources: r.sources });
-  W.remember('learned about ' + r.topic + ': ' + r.facts[0], 3);
-  { const words = t => String(t).toLowerCase().match(/[a-z]{4,}/g) || [];
-    const rw = new Set(words(r.topic + ' ' + subject));
-    const it = S.interests.find(i => words(i.topic).some(w => rw.has(w))) || (S.interests[0] && S.interests[0].strength > 50 ? S.interests[0] : null);
-    if (it) { it.sessions++; it.strength = Math.min(100, it.strength + 8); }
-    W.emo('curiosity', 6); W.emo('contentment', 6);
-    // down the rabbit hole: while he's hooked, each session suggests the next thing to look up
-    if (r.nextTopic && (!it || it.strength > 35) && !S.researchQueue.some(q => q.topic.toLowerCase() === r.nextTopic.toLowerCase()) && !S.knowledge.some(k => k.topic.toLowerCase() === r.nextTopic.toLowerCase())) S.researchQueue.unshift({ topic: r.nextTopic, question: 'going deeper' + (it ? ' into ' + it.topic : '') });
-    if (S.researchQueue.length > 8) S.researchQueue.length = 8; }
-  W.log('researched ' + r.topic);
-}
-function publish(a) {
-  const j = a.job; if (!j || j.published) return; j.published = true;
-  if (j.kind === 'research') {
-    const rs = Array.isArray(j.result) ? j.result : [j.result];
-    if (!rs[0]) bookFallback(); else for (const r of rs) if (r) learned(a, r);
-  } else if (j.kind === 'drawing') { finishDrawing(a, j.result);
-  } else if (j.kind === 'graffiti') { if (a.made) finishGraffiti(a, j.result);
-  } else if (j.kind === 'web') {
-    const r = j.result;
-    if (r) {
-      const prev = r.improves ? S.webPages.find(p => p.id === r.improves) : null;
-      let sl = prev ? prev.slug : Pub.slug(r.title); if (!prev && (S.webPages || []).some(p => p.slug === sl)) sl += '-' + W.dayOf(S.t);
-      const page = prev || { id: W.uid(), slug: sl, title: r.title, subject: a.subject || '', day: W.dayOf(S.t), versions: 0 };
-      page.versions = (page.versions || 1) + (prev ? 1 : 0) || 1; page.lastDay = W.dayOf(S.t);
-      if (!prev) { S.webPages.push(page); if (S.webPages.length > 80) S.webPages.shift(); }
-      writeMedia('web/' + sl + '.html', r.html);
-      W.addDiary('page', prev ? 'worked on "' + r.title + '" again. version ' + page.versions + ' now.' : 'made a web page: "' + r.title + '". ' + (Pub.enabled() ? 'it\'s up on my site now.' : 'it\'s sitting on my desk. nowhere to put it.'), 'claude', { web: sl });
-      W.remember('made a web page called "' + r.title + '"', 3); W.log('made a web page: ' + r.title);
-      siteUpdate([['made/' + sl + '.html', r.html]], 'percy made a page: ' + r.title);
-    } else W.log('tried to make a web page but it wouldn\'t come together');
-  } else if (j.kind === 'job') { deliverCommission(a, j.result);
-  } else if (j.kind === 'shop') { openShop(a, j.result);
-  } else if (j.kind === 'page') {
-    const r = j.result;
-    if (r) {
-      const page = { id: W.uid(), day: W.dayOf(S.t), title: r.title, body: r.body };
-      S.pages.push(page);
-      if (S.pages.length > 60) S.pages.shift();
-      siteUpdate([['pages/' + Pub.slug(page.title) + '.html', Pub.pageHTML(page)]], 'percy wrote a page: ' + page.title);
-      W.addDiary('page', 'wrote a page called "' + r.title + '" and pinned it up.', 'claude');
-      W.log('wrote a page: ' + r.title); W.remember('wrote a page called "' + r.title + '"', 2);
-    } else W.log('tried to write but nothing came');
-  }
-  W.bump();
-}
-function finishDrawing(a, art) {
-  const dr = M.makeDrawing(a.subject, a.title, a.scrap);
-  if (art) dr.art = 'claude';
-  const svg = art || drawingSVG(dr); writeMedia('drawings/' + dr.id + '.svg', svg);
-  W.addDiary('drawing', 'drew "' + dr.title + '"' + (a.scrap ? ' on the back of an old envelope. no money for paper.' : '. ' + pick(['pinned it on the board on the high street.', 'it came out wobbly. i like it anyway.', 'not sure about the left side.', 'it looks like how it felt.'])), 'rules', { drawing: dr.id });
-  W.log('drew "' + dr.title + '"');
-  siteUpdate([['drawings/' + dr.id + '.svg', svg]], 'percy drew ' + dr.title);
-}
-// a finished commission: file the work where it belongs, then he gets paid
-function deliverCommission(a, r) {
-  const c = S.commissions.find(x => x.id === a.job.commission); if (!c) return;
-  if (!r) { c.tries = (c.tries || 0) + 1; W.log('worked on a commission but it didn\'t come right'); W.emo('frustration', 10); if (c.tries >= 3) { c.status = 'failed'; c.reply = (c.reply ? c.reply + ' ' : '') + '(he tried three times and couldn\'t get it right.)'; W.addDiary('job', 'gave up on the commission: "' + c.text.slice(0, 80) + '". tried three times. it wouldn\'t come.'); } return; }
-  let result;
-  if (c.kind === 'drawing') {
-    const dr = M.makeDrawing(str(c.text, 80), a.title || str(c.text.replace(/^(please\s+)?(can you\s+)?(draw|make|paint)\s+(me\s+)?/i, ''), 48), false); dr.art = 'claude'; dr.commission = c.id; dr.forWho = c.from || ''; dr.sold = true; dr.soldDay = W.dayOf(S.t);
-    writeMedia('drawings/' + dr.id + '.svg', r); siteUpdate([['drawings/' + dr.id + '.svg', r]], 'percy drew a commission: ' + dr.title);
-    result = { type: 'drawing', id: dr.id, title: dr.title, url: '/media/drawings/' + dr.id + '.svg' };
-  } else if (c.kind === 'page') {
-    const page = { id: W.uid(), day: W.dayOf(S.t), title: r.title, body: r.body, forWho: c.from || '', commission: c.id };
-    S.pages.push(page); if (S.pages.length > 60) S.pages.shift();
-    siteUpdate([['pages/' + Pub.slug(page.title) + '.html', Pub.pageHTML(page)]], 'percy wrote a commission: ' + page.title);
-    result = { type: 'page', id: page.id, title: page.title };
-  } else {
-    let sl = Pub.slug(r.title); if ((S.webPages || []).some(p => p.slug === sl)) sl += '-' + W.dayOf(S.t);
-    const page = { id: W.uid(), slug: sl, title: r.title, subject: c.text.slice(0, 80), day: W.dayOf(S.t), versions: 1, lastDay: W.dayOf(S.t), forWho: c.from || '', commission: c.id };
-    S.webPages.push(page); if (S.webPages.length > 80) S.webPages.shift();
-    writeMedia('web/' + sl + '.html', r.html); siteUpdate([['made/' + sl + '.html', r.html]], 'percy made a commission: ' + r.title);
-    result = { type: 'web', id: page.id, title: r.title, slug: sl, url: Pub.enabled() ? Pub.siteUrl() + 'made/' + sl + '.html' : '/media/web/' + sl + '.html' };
-  }
-  const pay = W.finishCommission(c, result);
-  W.addDiary('job', 'finished the commission for ' + (c.from || 'whoever wrote the letter') + ': "' + result.title + '". posted it off. ' + pay + ' coins came back. ' + pick(['i hope they like it.', 'i keep thinking about them opening it.', 'my own money, from my own work.', 'i checked it four times before i let it go.']), 'claude', result.type === 'drawing' ? { drawing: result.id } : {});
-}
-// a shop session: listings, his sign, and maybe a new design for his shop page
-function openShop(a, r) {
-  if (!r || !r.plan) { W.log('sat down to sort out the shop but couldn\'t decide anything'); return; }
-  const p = r.plan, listed = [];
-  if (Array.isArray(p.withdraw)) for (const ref of p.withdraw.slice(0, 10)) W.withdrawListing(String(ref));
-  if (Array.isArray(p.list)) for (const it of p.list.slice(0, 8)) { const l = it && W.setListing({ ref: String(it.ref || ''), price: it.price, blurb: it.blurb }); if (l) listed.push(l); }
-  if (str(p.sign, 300)) S.advert = str(p.sign, 300);
-  if (r.html) { writeMedia('web/_shop.html', r.html); S.shopPage = { versions: ((S.shopPage && S.shopPage.versions) || 0) + 1, day: W.dayOf(S.t), idea: str(p.design_idea, 200) }; }
-  if (str(p.thought, 400)) W.setThought(str(p.thought, 400), 'claude');
-  W.addDiary('shop', (listed.length ? 'put ' + listed.map(l => '"' + l.title + '" (' + l.price + ')').join(', ') + ' in the shop. ' : 'looked at everything and didn\'t put anything new in the shop. ') + (r.html ? (S.shopPage.versions === 1 ? 'made a proper shop page on my website. ' + (Pub.enabled() ? 'it\'s open.' : '') : 'redid the shop page.') : '') + (p.sign ? '\nthe sign says: "' + str(p.sign, 300) + '"' : ''), 'claude');
-  siteUpdate([], 'percy worked on his shop');
-}
-function finishGraffiti(a, art) {
-  const g = a.made; const svg = art || graffitiSVG({ key: keyFor(g.subject), seed: g.seed, tag: g.tag });
-  writeMedia('graffiti/' + g.id + '.svg', svg); g.img = '/media/graffiti/' + g.id + '.svg'; if (art) { g.h = g.w * 840 / 800; }
-  W.addDiary('graffiti', 'painted ' + (g.subject || 'something') + ' ' + g.where + (g.tag ? '. it says "' + g.tag + '".' : '.'), a.src === 'claude' ? 'claude' : 'rules');
-  siteUpdate([['graffiti/' + g.id + '.svg', svg]], 'percy painted on a wall'); W.bump();
-}
-// something grabbed him: line up several things to look up, and let it absorb him for a while
-function takeInterests(r, about) {
-  const topics = Array.isArray(r && r.interests) ? r.interests.map(t => str(t, 60)).filter(Boolean).slice(0, 3) : [];
-  topics.forEach((t, i) => { W.interest(t, 70 - i * 15); if (!S.researchQueue.some(q => q.topic.toLowerCase() === t.toLowerCase())) S.researchQueue.push({ topic: t, question: about ? 'because of ' + about : '' }); });
-  if (S.researchQueue.length > 8) S.researchQueue.splice(0, S.researchQueue.length - 8);
-}
-function bookFallback() {
-  const b = W.builtinBook();
-  if (b) { S.knowledge.push({ topic: b.topic, facts: b.facts, sources: [], day: W.dayOf(S.t), src: 'book' }); W.addDiary('learn', 'read about ' + b.topic + '.\n' + b.facts.map(f => '· ' + f).join('\n')); W.log('read about ' + b.topic); }
-  else { W.log('reread an old book'); W.setThought('read the moon book again. still far.'); }
+/* ---------- the keeper's live settings ---------- */
+setBudgetSource(() => S.settings);
+const searchVia = () => Search.via(S.settings.searchVia || 'auto');
+function permissions() {
+  const via = searchVia();
+  return { web_search: config.webResearch && (via !== 'claude' || !!config.apiKey), run_code: true, browser: B.available(), publish_site: Pub.enabled() && (config.autoPublish || !!S.settings.publishApproved), requests: true };
 }
 
-W.setHooks({
-  onArrive(a, p) {
-    const claude = canCall();
-    if (a.id === 'read') {
-      const q = S.researchQueue[0];
-      const topic = a.subject || (q && q.topic) || '';
-      const book = q && q.topic === topic ? q : null;
-      // a long list and a full session: he gets through two things
-      const next = S.researchQueue.find(x => x.topic !== topic && !x.text);
-      const two = !(book && book.text) && next && S.researchQueue.length >= 3;
-      const one = (t, bk) => M.research(t, bk ? bk.question : '', bk && bk.text).then(r => (r.asked = t, r));
-      if (claude && topic) { a.subject = topic; later(a, 'research', two ? one(topic, book).then(async r1 => [r1, await one(next.topic, next).catch(() => null)]) : one(topic, book)); W.setThought(book && book.text ? 'someone left a book about ' + topic + '. reading it.' : 'looking up ' + topic + '.'); }
-    }
-    if (a.id === 'write' && claude) later(a, 'page', M.writePage(a.subject, a.title));
-    if (a.id === 'web' && claude) {
-      const prev = (S.webPages || []).find(p => p.id === a.target || (a.subject && p.title.toLowerCase() === a.subject.toLowerCase()));
-      let existing = null; if (prev) { try { existing = { page: prev, html: fs.readFileSync(path.join(MEDIA, 'web', prev.slug + '.html'), 'utf8') }; } catch {} }
-      later(a, 'web', M.makeWebPage(a.subject, a.title, existing));
-    }
-    if (a.id === 'draw' && claude) later(a, 'drawing', M.paintDrawing({ subject: a.subject, title: a.title }));
-    if (a.id === 'job' && claude) {
-      const c = S.commissions.find(x => x.id === a.target && x.status === 'accepted') || S.commissions.filter(x => x.status === 'accepted').slice(-1)[0];
-      if (c) {
-        a.doing = a.doing || 'working on ' + W.COMMISSION_KINDS[c.kind] + ' for ' + (c.from || 'someone outside');
-        const work = c.kind === 'drawing' ? M.paintDrawing({ subject: c.text.slice(0, 120), title: a.title, commission: c }) : c.kind === 'page' ? M.writePage(c.text.slice(0, 120), a.title, c) : W.webEnabled ? M.makeWebPage(c.text.slice(0, 120), a.title, null, c) : M.writePage(c.text.slice(0, 120), a.title, c);
-        if (c.kind === 'web' && !W.webEnabled) c.kind = 'page';
-        later(a, 'job', work); a.job.commission = c.id;
-      }
-    }
-    if (a.id === 'shopfront' && claude) {
-      later(a, 'shop', (async () => {
-        const plan = await M.planShop();
-        let html = null;
-        if (W.webEnabled && (!S.shopPage || plan.redesign)) {
-          let current = null; try { if (S.shopPage) current = fs.readFileSync(SHOP_TEMPLATE, 'utf8'); } catch {}
-          html = await M.makeShopPage(str(plan.design_idea, 300), current).catch(e => { console.warn('[percy] shop page failed:', e.message); return null; });
-        }
-        return { plan, html };
-      })());
-    }
-    if (a.id === 'graffiti' && claude && a.wall) later(a, 'graffiti', M.paintGraffiti({ subject: a.subject, tag: a.title }));
-    if (a.id === 'shrine') readNotes(claude);
-    if (a.id === 'visit' && p && !p.inside && claude && !['home', 'green', 'lookout', 'stone', 'market', 'garden'].includes(p.type)) {
-      p.inside = { pending: true };
-      M.furnish(p).then(r => { p.inside = r; W.bump(); save(); }).catch(e => { p.inside = null; console.warn('[percy] furnishing failed:', e.message); });
-    }
-    if (a.id === 'inspect') { const th = W.thingById(a.thing); if (th && !th.seen) firstLook(th, claude); }
-    if (claude && a.total >= 60 && Math.random() < 0.65) a.museAt = a.total * (0.35 + Math.random() * 0.3);
-    if (claude && a.id === 'sleep') a.museAt = a.total * 0.5;
-  },
-  onFinish(a) {
-    if (a.job) { a.job.ended = true; if (a.job.done) publish(a); }
-    else if (a.id === 'read') bookFallback();
-    if (a.id === 'draw' && !(a.job && a.job.kind === 'drawing')) finishDrawing(a, null);
-    if (a.id === 'graffiti' && a.made && !(a.job && a.job.kind === 'graffiti')) finishGraffiti(a, null);
-    if (a.id === 'visit' && a.examined) {
-      const p = W.placeById(a.place), it = a.examined;
-      W.addDiary('inside', (p && p.inside && p.inside.firstVisitDone ? '' : (p && p.inside && p.inside.feel ? 'inside ' + p.name + ': ' + p.inside.feel + '\n' : '')) + 'found ' + it.name + '. ' + it.finds + (it.taken ? '\ntook it home.' : ''), 'claude');
-      if (p && p.inside) p.inside.firstVisitDone = true;
-    } else if (a.id === 'visit') { const p = W.placeById(a.place); if (p && p.inside && p.inside.items) W.addDiary('inside', 'went back into ' + p.name + '. ' + pick(['everything just as i left it.', 'sat for a bit in the quiet.', 'the dust has settled again.'])); }
-    if (a.id === 'buy' && a.bought) {
-      W.addDiary('bought', 'bought ' + a.bought.name + ' for ' + a.bought.price + ' coins. ' + pick(['carried it home very carefully.', 'counted the coins out one at a time.', 'it\'s mine now. that feels strange.']));
-    }
-    if (a.id === 'fog' && (S.fogTests <= 3 || S.fogTests % 3 === 0)) {
-      W.addDiary('fog', pick(['walked to the end of ' + (a.road || 'the road') + ' until my feet stopped. not tired. just stopped.', 'pushed into the fog with one hand. soft, like a wall made of pillows.', 'threw a pebble into the fog. no sound when it landed.', 'stood where ' + (a.road || 'the road') + ' runs out for a long time. nothing out there looked back.']) + ' test #' + S.fogTests + '.');
-    }
-  },
-  onDiscover(p) {
-    const plain = { first_sight: 'found ' + p.name + '. nobody there. the door ' + pick(['was open', 'was locked', 'had a bell that didn\'t ring']) + '.', question: 'who built ' + p.name + '?', wonder: 8 };
-    const done = (r, src) => { W.applyFeel(r); takeInterests(r, p.name); W.addDiary('found', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
-    if (canCall()) M.reactToPlace(p).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
-  },
-  onGraffitiSeen(g) {
-    const image = g.by === 'keeper' && g.file ? readImage(g.file) : null;
-    const plain = { reaction: 'someone painted on the wall ' + (g.where || '') + '. i stood and looked at it for a long time.', wonder: 8 };
-    const done = (r, src) => { W.applyFeel(r); takeInterests(r); W.addDiary('graffiti', str(r.reaction, 700), src); if (str(r.belief, 140)) { S.beliefs.unshift(str(r.belief, 140)); S.beliefs = S.beliefs.slice(0, 8); } if (str(r.remember, 220)) W.remember(r.remember, 3); W.bump(); };
-    if (canCall()) M.reactToGraffiti(g, image).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
-  },
-  onItemSeen(it, p) {
-    W.addDiary('window', 'saw ' + it.name + ' in the window of ' + p.name + '. ' + it.price + ' coins.' + (it.price > S.coins ? ' i have ' + S.coins + '.' : ''));
-  },
-  onWake(mood) {
-    const plain = { 'a low day': 'heavy this morning. didn\'t want to get up.', 'a grey day': 'woke up and lay there a while.', 'an ordinary day': 'morning. legs work.', 'a good day': 'woke up before the clock. felt like getting on with things.', 'a bright day': 'woke up light. like something good is going to happen.' }[mood.label] || 'morning.';
-    const done = (t, src) => { W.setThought(t, src); W.addDiary('morning', t, src, { mood: mood.label }); };
-    if (canCall()) M.wakeUp(mood).then(t => done(t, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
-  },
-  onGrow(g, by) {
-    // several pull-backs close together make one diary entry, not five
-    const last = S.diary[S.diary.length - 1];
-    if (last && last.kind === 'event' && last.fog && S.t - last.t < 120) {
-      last.fog = last.fog.concat(g.road ? [g.road] : []); last.fogN = (last.fogN || 1) + 1;
-      const roads = [...new Set(last.fog)];
-      last.text = 'the fog has pulled back in ' + last.fogN + ' places' + (roads.length ? ' (' + roads.join(', ') + ')' : '') + '. there\'s a lot more town out there than there was.';
-      W.bump(); return;
-    }
-    W.addDiary('event', 'the fog has pulled back' + (g.road ? ' along ' + g.road : '') + '. there\'s more town out there than there was.');
-    const e = S.diary[S.diary.length - 1]; if (e) { e.fog = g.road ? [g.road] : []; e.fogN = 1; e.t = S.t; }
-  },
-  onPost(envs, letters, coins) {
-    const claude = canCall();
-    if (envs.length) {
-      const sold = envs.filter(e => e.forTitle).map(e => e.forTitle);
-      const plain = { diary: 'found ' + (envs.length === 1 ? 'an envelope' : envs.length + ' envelopes') + ' at the post office. ' + coins + ' coins.' + (sold.length ? ' for ' + sold.join(', ') + '.' : '') + ' ' + pick(['somebody out there paid for something i made.', 'i held them for a long time before i put them in my pocket.', 'no return address. there never is.']), joy: 8, wonder: 6 };
-      const done = (r, src) => {
-        W.applyFeel(r); W.addDiary('post', str(r.diary, 900), src, { coins });
-        if (str(r.thought, 400)) W.setThought(str(r.thought, 400), src);
-        if (Array.isArray(r.replies)) for (const n of r.replies.slice(0, 3)) if (n && str(n.text, 400)) { S.percyNotes.push({ text: str(n.text, 400), to: str(n.to, 40), inReplyTo: 'an envelope', day: W.dayOf(S.t) }); if (S.percyNotes.length > 60) S.percyNotes.shift(); }
-        if (str(r.remember, 220)) W.remember(r.remember, 4);
-        W.bump(); save();
-      };
-      if (claude) M.reactToPost(envs, coins).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
-    }
-    if (letters.length) {
-      if (!claude) { for (const c of letters) { c.status = 'posted'; c.waitDay = W.dayOf(S.t); } W.log('left the letters for later'); return; } // he'll read them properly another time
-      M.considerCommissions(letters).then(r => {
-        for (const c of letters) { const ans = r.letters.find(x => x && x.id === c.id); if (ans) W.answerCommission(c, { accept: !!ans.accept, reply: ans.reply }); else c.status = 'posted'; }
-        if (str(r.thought, 400)) W.setThought(str(r.thought, 400), 'claude');
-        const took = letters.filter(c => c.status === 'accepted').length, no = letters.filter(c => c.status === 'declined').length;
-        W.addDiary('letters', (str(r.diary, 700) || 'letters at the post office.') + (took ? '\ntook on ' + took + '.' : '') + (no ? (took ? ' ' : '\n') + 'said no to ' + no + '.' : ''), 'claude');
-        W.bump(); save();
-      }).catch(e => { for (const c of letters) c.status = 'posted'; console.warn('[percy] reading letters failed:', e.message); });
-    }
-  },
-  onVanished(v) {
-    const plain = { first_sight: v.name + ' is gone. i walked round the spot twice. nothing. not even a mark.', wonder: 4, calm: -6 };
-    const done = (r, src) => { W.applyFeel(r); W.addDiary('gone', str(r.first_sight, 700), src); if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); } if (str(r.remember, 220)) W.remember(r.remember, 4); W.bump(); };
-    if (canCall()) M.reactToGone(v).then(r => done(r, 'claude')).catch(() => done(plain, 'rules')); else done(plain, 'rules');
-  },
-  onBedtime(day) {
-    if (!canCall()) return;
-    M.reflect(day).then(() => { W.bump(); save(); }).catch(e => console.warn('[percy] reflection failed:', e.message));
-  },
+/* ---------- his website ---------- */
+function shopData() {
+  const items = S.shop.filter(x => !x.withdrawn && (!x.sold || W.dayOf(S.t) - (x.soldDay || 0) < 30)).slice(-60).map(x => {
+    const pr = x.kind === 'project' ? S.projects.find(p => p.id === x.ref) : null, pg = x.kind === 'page' ? S.pages.find(p => p.id === x.ref) : null;
+    return { code: x.code, title: x.title, blurb: x.blurb || '', price: x.price, pounds: W.pounds(x.price), kind: x.kind, img: x.kind === 'drawing' ? '../../drawings/' + x.ref + '.svg' : '', link: pr && pr.url ? pr.url : pg && pg.published ? '../../pages/' + Pub.slug(pg.title) + '.html' : '', sold: !!x.sold };
+  });
+  return { items, kofi: config.kofiUrl, townUrl: config.publicUrl, coinsPerPound: config.coinsPerPound, updated: 'day ' + W.dayOf(S.t) };
+}
+function siteIndex() { if (Pub.enabled()) Pub.queueFile('index.html', Pub.indexHTML(S), 'update index'); }
+function publishProject(pr) {
+  if (!permissions().publish_site) return { error: 'publishing is not permitted' };
+  const r = Pub.publishFiles(pr.slug, WS.readAll(pr.slug), shopData(), 'percy published ' + pr.title);
+  pr.url = r.url; pr.publishedDay = W.dayOf(S.t); siteIndex(); W.wlog('published project ' + pr.title); return { url: r.url, files: r.files, note: 'queued for upload; usually live within a couple of minutes' };
+}
+function publishPage(page) {
+  if (!permissions().publish_site) return '';
+  Pub.queueFile('pages/' + Pub.slug(page.title) + '.html', Pub.pageHTML(page), 'percy wrote ' + page.title); page.published = true; siteIndex();
+  return 'published it on his website';
+}
+// when his listings change: drawings in the shop need their pictures online, and pages with a shop slot need fresh stock
+function shopChanged() {
+  if (!Pub.enabled()) return;
+  for (const l of W.openListings()) if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d && !d.published) { try { Pub.queueFile('drawings/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'drawing for the shop'); d.published = true; } catch {} } }
+  for (const pr of S.projects) if (pr.url) { const files = WS.readAll(pr.slug).filter(f => /\.html?$/i.test(f.path) && Pub.SHOP_SLOT.test(f.content)); if (files.length) Pub.publishFiles(pr.slug, files, shopData(), 'shop stock'); }
+  siteIndex();
+}
+function saveDrawing({ subject, svg, atStall, order }) {
+  const d = { id: 'd' + uid(), day: W.dayOf(S.t), time: W.hhmm(S.t), title: str(subject, 60), subject: str(subject, 300), offerAtStall: !!atStall, forOrder: order || '', sold: false };
+  writeMedia('drawings/' + d.id + '.svg', svg); S.drawings.push(d); if (S.drawings.length > 400) S.drawings.shift();
+  return { facts: ['finished a drawing: "' + d.title + '" (' + d.id + ')' + (atStall ? '; it is to go out on the stall next time he is there' : '')], refs: { drawing: [d.id] }, lifeExtra: { drawing: d.id } };
+}
+function saveWall(g, svg) { if (typeof svg !== 'string') return; writeMedia('graffiti/' + g.id + '.svg', svg); g.img = '/media/graffiti/' + g.id + '.svg'; g.h = g.w * 840 / 800; W.bump(); }
+
+/* ---------- connect the parts ---------- */
+const streams = new Set();
+Agent.init(S, {
+  save, permissions, watchers: () => streams.size, saveDrawing, saveWall, shopChanged,
+  research: o => Sessions.research({ ...o, how: searchVia() }),
+  code: o => Code.code({ ...o, how: searchVia(), permissions: permissions(), publishProject }),
+  writePage: o => Sessions.writePage({ ...o, publishPage }),
+  readText: o => Sessions.readText(o),
 });
+W.setHooks({ onComplete: Agent.onComplete, onArrive: Agent.onArrive });
+B.setOwnPort(config.port);
 
-function readNotes(claude) {
-  const unread = S.notes.filter(n => !n.read);
-  if (!unread.length) { W.log('visited the Humming Stone. no notes'); return; }
-  for (const n of unread) {
-    n.read = true; n.readDay = W.dayOf(S.t); S.stats.notes++; W.log('found a note at the Humming Stone'); W.contact(28); W.emo('contentment', 15); W.emo('excitement', 12);
-    const done = (r, src) => {
-      n.reaction = { reaction: str(r.reaction, 600) };
-      if (str(r.reply, 400)) { S.percyNotes.push({ text: str(r.reply, 400), to: n.from || '', inReplyTo: n.text.slice(0, 80), day: W.dayOf(S.t) }); if (S.percyNotes.length > 60) S.percyNotes.shift(); W.log('left a note under the stone in reply'); }
-      W.applyFeel(r);
-      if (str(r.belief, 140)) { S.beliefs.unshift(str(r.belief, 140)); S.beliefs = S.beliefs.slice(0, 8); }
-      if (str(r.remember, 220)) W.remember(r.remember, 3);
-      W.addDiary('note', 'found a note under the stone' + (n.from ? ', signed ' + n.from : '') + ':\n“' + n.text + '”\n' + n.reaction.reaction, src);
-    };
-    const plain = { reaction: pick(['i read it three times. i don\'t know who wrote it but i\'m keeping it.', 'someone out there knows i\'m here. that\'s a lot to think about.', 'i folded it small and took it home.']), joy: 7, wonder: 8 };
-    if (claude) M.reactToNote(n).then(r => done(r, 'claude')).catch(() => done(plain, 'rules'));
-    else done(plain, 'rules');
-  }
-  W.setThought('a note! someone was here.');
-}
-function firstLook(th, claude) {
-  th.seen = true; th.noticed = true; th.seenDay = W.dayOf(S.t); S.lastThing = th.id;
-  const nm = plainName(th.name);
-  const done = (r, src) => {
-    W.applyFeel(r);
-    W.addDiary('thing', str(r.first_sight, 600), src);
-    if (str(r.question, 160)) { S.questions.unshift(str(r.question, 160)); S.questions = S.questions.slice(0, 6); }
-    if (str(r.research_topic, 60)) { S.researchQueue.push({ topic: str(r.research_topic, 60), question: str(r.question, 160) }); if (S.researchQueue.length > 8) S.researchQueue.shift(); }
-    takeInterests(r, th.name);
-    if (str(r.remember, 220)) W.remember(r.remember, 3);
-    W.bump();
-  };
-  const plain = { first_sight: 'there\'s a ' + nm + ' near ' + W.nearPlace(th.x, th.z) + '. it wasn\'t there before. nobody saw who brought it.', question: 'who put the ' + nm + ' here?', research_topic: nm, wonder: 10 };
-  if (claude) M.reactToThing(th, th.file ? readImage(th.file) : null).then(r => done(r, 'claude')).catch(() => done(plain, 'rules'));
-  else done(plain, 'rules');
-}
-
-/* ---------- deciding what to do next ---------- */
-let decisionToken = 0;
+let lastDecision = 0;
 function requestDecision() {
-  S.deciding = true; W.bump();
-  const token = ++decisionToken;
-  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('took too long')), 75000));
-  Promise.race([M.decide(), timeout])
-    .then(dec => { if (token === decisionToken && !S.act) W.startAct(dec); })
-    .catch(e => { if (token === decisionToken && !S.act) { if (config.apiKey) console.warn('[percy] decision fell back to rules:', e.message); W.startAct(W.ruleDecision()); } })
-    .finally(() => { if (token === decisionToken) S.deciding = false; });
+  if (S.deciding) return;
+  if (Date.now() - lastDecision < 1500) return; // never more than one decision every 1.5 seconds
+  lastDecision = Date.now(); S.deciding = true;
+  Promise.resolve().then(() => Agent.decide()).catch(e => { console.warn('[percy] decision error:', e.message); if (!S.act) Agent.continuity({ id: 'j' + uid(), t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), trigger: 'error' }, 'error: ' + e.message); })
+    .finally(() => { S.deciding = false; W.bump(); });
 }
 
 /* ---------- the clock ---------- */
-let last = Date.now(), lastSave = Date.now();
+let last = Date.now(), lastSave = Date.now(), lastGlance = 0;
 setInterval(() => {
   const now = Date.now(); const dt = Math.min(5, (now - last) / 1000); last = now;
-  W.tick(dt, requestDecision);
-  const a = S.act;
-  if (a && a.phase === 'do' && a.museAt && !a.mused && a.total - a.left >= a.museAt) { a.mused = true; M.muse().catch(() => {}); }
+  try { W.tick(dt, requestDecision); } catch (e) { console.error('[percy] tick error:', e); }
+  if (S.act && S.act.phase === 'walk' && now - lastGlance > 2000) { lastGlance = now; try { Agent.glance(); } catch {} }
   if (now - lastSave > 30000) { lastSave = now; save(); }
 }, 250);
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); process.exit(0); });
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); B.stop(); process.exit(0); });
+
+/* ---------- what the pages show ---------- */
+function publicState() {
+  const m = S.mind, day = W.dayOf(S.t);
+  return {
+    t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: config.timeScale, rev: S.rev,
+    pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, caption: S.act.caption, place: S.act.place, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
+    doing: doingText(), thought: S.thought, feeling: S.feeling, body: S.body, coins: S.coins, pantry: S.pantry,
+    town: W.publicTown(), things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, size: t.size, model: t.model, status: t.status, day: t.day, known: !!m.knownThings[t.id], hisName: (m.knownThings[t.id] || {}).name || '' })),
+    graffiti: S.graffiti, items: S.items.filter(i => !i.sold).map(i => ({ id: i.id, shop: i.shop, name: i.name, price: i.price, model: i.model, img: i.img || '', status: i.status })), inventory: S.inventory,
+    drawings: S.drawings.slice(-120).map(d => ({ id: d.id, day: d.day, title: d.title, onStall: !!d.onStall, sold: !!d.sold, price: d.price || 0, listed: !!d.listed, forOrder: d.forOrder })),
+    pages: S.pages.slice(-80).map(p => p.kind === 'notes' ? { id: p.id, day: p.day, title: p.title, kind: 'notes', private: true } : p),
+    projects: S.projects.map(p => ({ id: p.id, slug: p.slug, title: p.title, goal: p.goal, status: p.status, day: p.day, sittings: p.sittings, files: p.files, url: p.url, lastTest: p.lastTest, next: p.next, notes: p.notes.slice(-30), history: p.history.slice(-30) })),
+    mind: { intentions: m.intentions.filter(i => i.status === 'active' || i.status === 'paused').concat(m.intentions.filter(i => ['done', 'abandoned'].includes(i.status)).slice(-12)), questions: m.questions.slice(-40), semantic: m.semantic.filter(s => !s.superseded).slice(-120), personal: m.personal.slice(-60), procedural: m.procedural.slice(-40), summaries: m.summaries.slice(-10), counts: Mem.counts(), named: Object.entries(m.knownThings).filter(([, k]) => k.name).map(([id, k]) => ({ id, name: k.name })), placesKnown: Object.keys(m.knownPlaces).length, roadsWalked: m.roadsWalked },
+    life: S.life.slice(-200), requests: S.requests.slice(-60), ideas: S.ideas.slice(-30), researchLog: S.researchLog.slice(-120),
+    notes: S.notes.map(n => ({ id: n.id, text: n.text, from: n.from, day: n.day, read: !!n.read })), percyNotes: S.percyNotes.slice(-30),
+    shop: S.shop.filter(x => !x.withdrawn).slice(-60).map(x => ({ ...x, pounds: W.pounds(x.price) })), commissions: S.commissions.slice(0, 40), coinsPerPound: config.coinsPerPound,
+    post: S.post.slice(-20).map(e => ({ coins: e.coins, from: e.public ? e.from : '', message: e.public ? e.message : '', day: e.day, collected: e.collected, forTitle: e.forTitle || '' })), earned: S.earned,
+    mindStatus: claudeStatus(), watchers: streams.size, keeper: !!config.keeperKey, siteUrl: Pub.enabled() ? Pub.siteUrl() : '', publicUrl: config.publicUrl, kofiUrl: config.kofiUrl, kofiOn: !!config.kofiToken, printShopUrl: config.printShopUrl,
+  };
+}
+function doingText() {
+  const a = S.act;
+  if (!a) return S.deciding ? 'thinking about what to do' : 'pausing';
+  const p = a.place ? W.placeById(a.place) : null;
+  if (a.phase === 'walk') return a.caption && /^walking|^going/.test(a.caption) ? a.caption : 'walking' + (p ? ' to ' + (S.mind.knownPlaces[p.id] ? p.name : 'somewhere') : '') + (a.caption ? ' (' + a.caption + ')' : '');
+  return a.caption || a.type;
+}
+const actId = a => a.type === 'paint_wall' ? 'graffiti' : a.type;
+function live() {
+  return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
+    doing: doingText(), thought: S.thought, feeling: S.feeling, body: S.body, coins: S.coins, weather: S.weather.kind, season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: config.timeScale };
+}
+setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
 /* ---------- web server ---------- */
-const TYPES = { '.jpg': 'image/jpeg', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
-const streams = new Set();
+const TYPES = { '.jpg': 'image/jpeg', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.csv': 'text/plain; charset=utf-8', '.xml': 'text/xml' };
 const ipOf = req => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+const isLoopback = req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.headers['x-forwarded-for'];
 const lastNoteBy = new Map(), lastBuyBy = new Map(), jobsBy = new Map();
-function readRaw(req, limit = 65536) {
-  return new Promise((resolve, reject) => { let data = ''; req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } }); req.on('end', () => resolve(data)); req.on('error', reject); });
-}
-function tokenOK(given, expected) { if (!expected || typeof given !== 'string') return false; const a = crypto.createHash('sha256').update(given).digest(), b = crypto.createHash('sha256').update(expected).digest(); return crypto.timingSafeEqual(a, b); }
-// money from outside becomes coins in an envelope at the post office
-function payIn(opts) { const r = W.receivePayment(opts); if (!r.duplicate) { save(); siteUpdate([], r.listing ? 'something sold from percy\'s shop' : 'percy got some post'); } return r; }
-
-function send(res, code, body, type = 'application/json') {
-  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
-  res.end(typeof body === 'string' ? body : JSON.stringify(body));
-}
-function readBody(req, limit = 10000) {
-  return new Promise((resolve, reject) => {
-    let data = ''; req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } });
-    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('bad json')); } });
+function readRaw(req, limit = 65536) { return new Promise((resolve, reject) => { let data = ''; req.on('data', c => { data += c; if (data.length > limit) { reject(new Error('too large')); req.destroy(); } }); req.on('end', () => resolve(data)); req.on('error', reject); }); }
+function readBody(req, limit = 10000) { return readRaw(req, limit).then(d => { try { return d ? JSON.parse(d) : {}; } catch { throw new Error('bad json'); } }); }
+const eq = (a, b) => { if (!b || typeof a !== 'string') return false; const x = crypto.createHash('sha256').update(a).digest(), y = crypto.createHash('sha256').update(b).digest(); return crypto.timingSafeEqual(x, y); };
+function send(res, code, body, type = 'application/json') { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' }); res.end(typeof body === 'string' ? body : JSON.stringify(body)); }
+function payIn(opts) { const r = W.receivePayment(opts); if (!r.duplicate) { save(); if (r.listing) shopChanged(); } return r; }
+// his project files, served with a sandbox policy so their scripts can never touch this site's storage or the keeper's key
+function serveProjectFile(res, req, slugPart, rest) {
+  const base = WS.dir(slugPart), file = path.normalize(path.join(base, decodeURIComponent(rest || 'index.html')));
+  if (!file.startsWith(base) || file.includes(path.sep + '.git')) return send(res, 403, 'no', 'text/plain');
+  fs.stat(file, (err, st) => {
+    const f = !err && st.isDirectory() ? path.join(file, 'index.html') : file;
+    fs.readFile(f, 'utf8', (e2, data) => {
+      if (e2) return send(res, 404, 'not found', 'text/plain');
+      if (/\.html?$/i.test(f)) data = Pub.fillShop(data, shopData());
+      res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': 'sandbox allow-scripts allow-forms allow-popups allow-modals', 'x-content-type-options': 'nosniff' });
+      res.end(req.method === 'HEAD' ? undefined : data);
+    });
   });
 }
-function keeperOK(key) {
-  if (!config.keeperKey || typeof key !== 'string') return false;
-  const a = crypto.createHash('sha256').update(key).digest(), b = crypto.createHash('sha256').update(config.keeperKey).digest();
-  return crypto.timingSafeEqual(a, b);
-}
-const extra = () => ({ siteUrl: Pub.enabled() ? Pub.siteUrl() : '', mind: M.status(), watchers: streams.size, keeper: !!config.keeperKey, deciding: S.deciding, printShopUrl: config.printShopUrl, publicUrl: config.publicUrl, kofiUrl: config.kofiUrl, kofiOn: !!config.kofiToken, shopUrl: Pub.enabled() && S.shopPage ? Pub.siteUrl() + 'shop.html' : '' });
-function live() {
-  return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, act: S.act ? { id: S.act.id, phase: S.act.phase, inside: S.act.phase === 'do' ? S.act.inside || null : null } : null,
-    doing: W.doingText(), thought: S.thought, needs: S.needs, mood: W.moodWord(), coins: S.coins, weather: S.weather.kind,
-    season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: config.timeScale };
-}
-setInterval(() => { M.setWatchers(streams.size); W.setWatchers(streams.size); const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
-  const p = url.pathname;
+  const url = new URL(req.url, 'http://x'); const p = url.pathname;
   try {
-    if (req.method === 'GET' && p === '/api/state') return send(res, 200, W.publicState(extra()));
+    if (req.method === 'GET' && p === '/api/state') return send(res, 200, publicState());
     if (req.method === 'GET' && p === '/api/live') return send(res, 200, live());
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...M.status(), website: Pub.pubStatus, kofi: { on: !!config.kofiToken, payments: S.payments.filter(x => x.source === 'kofi').length } });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, day: W.dayOf(S.t), time: W.hhmm(S.t), ...claudeStatus(), freeSearch: { via: searchVia(), ...Search.local }, browser: B.available(), git: await WS.hasGit(), website: Pub.pubStatus, kofi: { on: !!config.kofiToken } });
     if (req.method === 'GET' && p === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
-      res.write('retry: 3000\n\n'); streams.add(res);
-      req.on('close', () => streams.delete(res)); return;
+      res.write('retry: 3000\n\n'); streams.add(res); req.on('close', () => streams.delete(res)); return;
     }
     if (req.method === 'POST' && p === '/api/notes') {
       const b = await readBody(req); const text = str(b.text, 1000), from = str(b.from, 30);
       if (!text) return send(res, 400, { error: 'Write something first.' });
-      const ip = ipOf(req), lastAt = lastNoteBy.get(ip) || 0;
-      if (Date.now() - lastAt < 90000) return send(res, 429, { error: 'One note at a time. Try again in a minute or two.' });
-      if (S.notes.filter(n => !n.read).length >= 15) return send(res, 429, { error: 'The stone is full of unread notes. Try again after he visits.' });
-      lastNoteBy.set(ip, Date.now());
-      S.notes.unshift({ id: W.uid(), text, from, day: W.dayOf(S.t), read: false });
-      if (S.notes.length > 80) S.notes.pop();
-      W.bump(); save(); return send(res, 200, { ok: true });
+      const ip = ipOf(req); if (Date.now() - (lastNoteBy.get(ip) || 0) < 90000) return send(res, 429, { error: 'One note at a time. Try again in a minute or two.' });
+      if (S.notes.filter(n => !n.read).length >= 15) return send(res, 429, { error: 'The stone is full of unread notes. Try again later.' });
+      lastNoteBy.set(ip, Date.now()); S.notes.unshift({ id: uid(), text, from, day: W.dayOf(S.t), read: false }); if (S.notes.length > 100) S.notes.pop();
+      W.wlog('a visitor left a note under the stone'); W.bump(); save(); return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && p === '/api/buy') {
-      const b = await readBody(req); const ip = ipOf(req), lastAt = lastBuyBy.get(ip) || 0;
-      if (Date.now() - lastAt < 10 * 60000) return send(res, 429, { error: 'One drawing at a time. Come back in a few minutes.' });
-      const r = W.buyDrawing(String(b.id || ''));
-      if (r.error) return send(res, 400, { error: r.error });
-      lastBuyBy.set(ip, Date.now()); save(); siteUpdate([], 'a drawing was taken from the stall');
-      return send(res, 200, { ok: true, img: '/media/drawings/' + b.id + '.svg' });
+      const b = await readBody(req); const ip = ipOf(req);
+      if (Date.now() - (lastBuyBy.get(ip) || 0) < 10 * 60000) return send(res, 429, { error: 'One drawing at a time. Come back in a few minutes.' });
+      const r = W.buyDrawing(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error });
+      lastBuyBy.set(ip, Date.now()); save(); return send(res, 200, { ok: true, img: '/media/drawings/' + b.id + '.svg' });
     }
     if (req.method === 'POST' && p === '/api/commissions') {
-      const b = await readBody(req); const ip = ipOf(req), now = Date.now();
-      const mine = (jobsBy.get(ip) || []).filter(t => now - t < 24 * 3600000);
-      if (mine.length && now - mine[mine.length - 1] < 10 * 60000) return send(res, 429, { error: 'One letter at a time. Try again in a few minutes.' });
+      const b = await readBody(req); const ip = ipOf(req), now = Date.now(); const mine = (jobsBy.get(ip) || []).filter(t => now - t < 86400000);
+      if (mine.length && now - mine[mine.length - 1] < 600000) return send(res, 429, { error: 'One letter at a time. Try again in a few minutes.' });
       if (mine.length >= 3) return send(res, 429, { error: 'That\'s three letters today. Give him a chance to catch up.' });
-      const r = W.postCommission({ text: b.text, kind: b.kind, from: b.from, offer: b.offer });
-      if (r.error) return send(res, 400, { error: r.error });
-      jobsBy.set(ip, mine.concat([now])); save();
-      return send(res, 200, { ok: true, id: r.commission.id, code: r.commission.code });
+      const r = W.postCommission(b); if (r.error) return send(res, 400, { error: r.error });
+      jobsBy.set(ip, mine.concat([now])); save(); return send(res, 200, { ok: true, id: r.commission.id, code: r.commission.code });
     }
     if (req.method === 'POST' && p === '/api/kofi') {
-      // Ko-fi's webhook: form data with a "data" field holding JSON (https://ko-fi.com/manage/webhooks)
       if (!config.kofiToken) return send(res, 404, { error: 'not found' });
       const raw = await readRaw(req); let d = null;
-      try { const form = new URLSearchParams(raw); d = JSON.parse(form.get('data') || raw); } catch { try { d = JSON.parse(raw); } catch {} }
-      if (!d || !tokenOK(d.verification_token, config.kofiToken)) return send(res, 403, { error: 'bad token' });
+      try { d = JSON.parse(new URLSearchParams(raw).get('data') || raw); } catch { try { d = JSON.parse(raw); } catch {} }
+      if (!d || !eq(d.verification_token, config.kofiToken)) return send(res, 403, { error: 'bad token' });
       const amount = Number.parseFloat(d.amount) || 0;
-      if (amount > 0) {
-        const r = payIn({ coins: Math.round(amount * config.coinsPerPound), from: d.from_name, message: d.message, amount: amount.toFixed(2) + ' ' + (d.currency || ''), ref: d.message_id || d.kofi_transaction_id, isPublic: d.is_public !== false, source: 'kofi' });
-        console.log('[percy] ko-fi: ' + amount.toFixed(2) + ' ' + (d.currency || '') + (r.duplicate ? ' (already counted)' : ' became ' + Math.round(amount * config.coinsPerPound) + ' coins' + (r.listing ? ' for "' + r.listing.title + '"' : '')));
-      }
+      if (amount > 0) { const r = payIn({ coins: Math.round(amount * config.coinsPerPound), from: d.from_name, message: d.message, amount: amount.toFixed(2) + ' ' + (d.currency || ''), ref: d.message_id || d.kofi_transaction_id, isPublic: d.is_public !== false, source: 'kofi' }); console.log('[percy] ko-fi: ' + amount.toFixed(2) + ' ' + (d.currency || '') + (r.duplicate ? ' (already counted)' : ' became coins')); }
       return send(res, 200, { ok: true });
     }
-    if (req.method === 'POST' && p.startsWith('/api/keeper/')) {
-      const b = await readBody(req, 7 * 1024 * 1024);
-      if (!config.keeperKey) return send(res, 403, { error: 'Keeper tools are off. Set KEEPER_KEY in the container settings to use them.' });
-      if (!keeperOK(b.key)) return send(res, 403, { error: 'That keeper key is wrong.' });
-      const what = p.slice('/api/keeper/'.length);
-      if (what === 'check') return send(res, 200, { ok: true });
-      if (what === 'make') {
-        const desc = str(b.description, 200), img = b.image ? parseDataURL(b.image) : null;
-        if (!desc && !img) return send(res, 400, { error: 'Describe it or add a picture.' });
-        if (b.image && !img) return send(res, 400, { error: 'That picture couldn\'t be read. Try a JPEG or PNG under 4 MB.' });
-        const size = Math.max(1, Math.min(8, Number(b.size) || 3));
-        const x = Number(b.x), z = Number(b.z); const prob = W.spotProblem(x, z, size * 0.7); if (prob) return send(res, 400, { error: prob });
-        const th = W.addThing({ name: desc || 'something from a picture', desc, x, z, size, wish: str(b.wish, 120) });
-        if (img) { th.file = 'uploads/' + th.id + '.' + img.ext; writeMedia(th.file, img.buf); }
-        save(); send(res, 200, { ok: true, id: th.id });
-        if (!canCall()) { th.status = 'failed'; W.bump(); return; }
-        M.buildModel(desc || 'the thing in this picture', img ? { mediaType: img.mediaType, data: img.data } : null, size)
-          .then(m => { th.model = m.parts; if (m.name) th.name = m.name; th.status = 'ready'; })
-          .catch(e => { th.status = 'failed'; console.warn('[percy] building a model failed:', e.message); })
-          .finally(() => { W.bump(); save(); });
-        return;
-      }
-      if (what === 'graffiti') {
-        const img = parseDataURL(b.image); if (!img) return send(res, 400, { error: 'Draw something or add a picture first.' });
-        const x = Number(b.x), y = Number(b.y), z = Number(b.z), nx = Number(b.nx), nz = Number(b.nz);
-        if (![x, y, z, nx, nz].every(Number.isFinite)) return send(res, 400, { error: 'Tap a wall to paint on.' });
-        const w = Math.max(0.6, Math.min(5, Number(b.w) || 2)), h = Math.max(0.4, Math.min(5, Number(b.h) || w));
-        const g = { id: W.uid(), by: 'keeper', x, y, z, nx, nz, w, h, text: str(b.text, 80), where: 'near ' + W.nearPlace(x, z), day: W.dayOf(S.t), seen: false };
-        g.file = 'graffiti/' + g.id + '.' + img.ext; g.img = '/media/' + g.file; writeMedia(g.file, img.buf);
-        S.graffiti.push(g); W.log('new graffiti appeared ' + g.where); W.bump(); save();
-        return send(res, 200, { ok: true, id: g.id });
-      }
-      if (what === 'stock') {
-        const img = b.image ? parseDataURL(b.image) : null;
-        const r = W.stockItem({ shop: b.shop, name: b.name, price: b.price, desc: b.desc });
-        if (r.error) return send(res, 400, { error: r.error });
-        const it = r.item;
-        if (img) { it.file = 'uploads/' + it.id + '.' + img.ext; it.img = '/media/' + it.file; writeMedia(it.file, img.buf); }
-        save(); send(res, 200, { ok: true, id: it.id });
-        if (!canCall()) { it.status = 'failed'; return; }
-        M.buildModel(it.name + (it.desc ? ', ' + it.desc : '') + ' (an item for sale in a shop window)', img ? { mediaType: img.mediaType, data: img.data } : null, 0.9)
-          .then(m => { it.model = m.parts; it.status = 'ready'; })
-          .catch(e => { it.status = 'failed'; console.warn('[percy] building an item failed:', e.message); })
-          .finally(() => { W.bump(); save(); });
-        return;
-      }
-      if (what === 'print-sold') { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); save(); return send(res, 200, { ok: true }); }
-      if (what === 'remove-graffiti') { S.graffiti = S.graffiti.filter(g => g.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
-      if (what === 'remove-item') { S.items = S.items.filter(i => i.id !== b.id || i.sold); W.bump(); save(); return send(res, 200, { ok: true }); }
-      if (what === 'remove-thing') { W.removeThing(b.id); save(); return send(res, 200, { ok: true }); }
-      if (what === 'remove-building') { const r = W.removeBuilding(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error }); save(); return send(res, 200, { ok: true }); }
-      if (what === 'give') {
-        const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' });
-        payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) });
-        return send(res, 200, { ok: true });
-      }
-      if (what === 'record-sale') {
-        const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' });
-        payIn({ coins: l.price, from: str(b.from, 40), message: '', code: l.code, source: 'keeper' }); return send(res, 200, { ok: true });
-      }
-      if (what === 'remove-commission') { S.commissions = S.commissions.filter(c => c.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
-      if (what === 'remove-note') { S.notes = S.notes.filter(n => n.id !== b.id); W.bump(); save(); return send(res, 200, { ok: true }); }
-      if (what === 'build') {
-        const r = W.addBuilding({ kind: b.kind, name: b.name, desc: b.desc, x: Number(b.x), z: Number(b.z) });
-        if (r.error) return send(res, 400, { error: r.error });
-        save(); return send(res, 200, { ok: true, id: r.place.id });
-      }
-      if (what === 'grow') { const g = W.growTown('keeper'); save(); return send(res, 200, { ok: true, road: g.road }); }
-      if (what === 'book') {
-        const topic = str(b.topic, 60); if (!topic) return send(res, 400, { error: 'What is the book about?' });
-        const text = String(b.text || '').slice(0, 20000).trim();
-        S.researchQueue.unshift({ topic, question: '', text, given: true }); S.researchQueue = S.researchQueue.slice(0, 8);
-        W.log('someone left a book about ' + topic + ' at the library'); W.bump(); save(); return send(res, 200, { ok: true });
-      }
-      return send(res, 404, { error: 'Unknown keeper action.' });
-    }
+    if (req.method === 'POST' && p.startsWith('/api/keeper/')) return keeper(req, res, p.slice(12));
     if ((req.method === 'GET' || req.method === 'HEAD') && p.startsWith('/media/')) {
-      const file = path.normalize(path.join(MEDIA, decodeURIComponent(p.slice(7))));
-      if (!file.startsWith(MEDIA)) return send(res, 403, 'no', 'text/plain');
-      fs.readFile(file, (err, data) => {
-        if (err) return send(res, 404, 'not found', 'text/plain');
-        res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'public, max-age=86400', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:", 'x-content-type-options': 'nosniff' });
-        res.end(req.method === 'HEAD' ? undefined : data);
-      });
-      return;
+      const file = path.normalize(path.join(MEDIA, decodeURIComponent(p.slice(7)))); if (!file.startsWith(MEDIA)) return send(res, 403, 'no', 'text/plain');
+      return fs.readFile(file, (err, data) => { if (err) return send(res, 404, 'not found', 'text/plain'); res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'public, max-age=86400', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:", 'x-content-type-options': 'nosniff' }); res.end(req.method === 'HEAD' ? undefined : data); });
     }
+    let m;
+    if ((req.method === 'GET' || req.method === 'HEAD') && (m = p.match(/^\/__preview\/([a-z0-9-]+)\/?(.*)$/))) { if (!isLoopback(req)) return send(res, 403, 'preview is only for his own browser', 'text/plain'); return serveProjectFile(res, req, m[1], m[2]); }
+    if ((req.method === 'GET' || req.method === 'HEAD') && (m = p.match(/^\/projects\/([a-z0-9-]+)\/?(.*)$/))) { if (!S.projects.some(x => x.slug === m[1])) return send(res, 404, 'not found', 'text/plain'); return serveProjectFile(res, req, m[1], m[2]); }
     if (req.method === 'GET' || req.method === 'HEAD') {
-      const file = path.normalize(path.join(PUBLIC, p === '/' ? 'index.html' : ['/shop', '/requests'].includes(p.replace(/\/$/, '')) ? p.replace(/\/$/, '') + '.html' : p));
-      if (!file.startsWith(PUBLIC)) return send(res, 403, 'no', 'text/plain');
-      fs.readFile(file, (err, data) => {
-        if (err) return send(res, 404, 'not found', 'text/plain');
-        res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
-        res.end(req.method === 'HEAD' ? undefined : data);
-      });
-      return;
+      const route = { '/': 'index.html', '/shop': 'shop.html', '/requests': 'requests.html', '/research': 'research.html' }[p.replace(/(.)\/$/, '$1')];
+      const file = path.normalize(path.join(PUBLIC, route || p)); if (!file.startsWith(PUBLIC)) return send(res, 403, 'no', 'text/plain');
+      return fs.readFile(file, (err, data) => { if (err) return send(res, 404, 'not found', 'text/plain'); res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' }); res.end(req.method === 'HEAD' ? undefined : data); });
     }
     send(res, 404, { error: 'not found' });
-  } catch (e) {
-    send(res, 400, { error: e.message === 'too large' ? 'That was too long.' : 'Something about that request was off.' });
-  }
+  } catch (e) { send(res, 400, { error: e.message === 'too large' ? 'That was too long.' : 'Something about that request was off.' }); }
 });
-server.listen(config.port, () => {
+
+/* ---------- the keeper's tools: environment, budget, requests; never his choices ---------- */
+async function keeper(req, res, what) {
+  const b = await readBody(req, 7 * 1024 * 1024);
+  if (!config.keeperKey) return send(res, 403, { error: 'Keeper tools are off. Set KEEPER_KEY in the container settings to use them.' });
+  if (!eq(b.key, config.keeperKey)) return send(res, 403, { error: 'That keeper key is wrong.' });
+  const ok = (extra = {}) => { save(); W.bump(); return send(res, 200, { ok: true, ...extra }); };
+  switch (what) {
+    case 'check': return send(res, 200, { ok: true });
+    case 'private': // the keeper's view: budget, journal, world log, permissions
+      return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), publishing: Pub.enabled(), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
+        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
+    case 'settings': {
+      const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
+      if ('callsPerDay' in b) s.callsPerDay = n(b.callsPerDay, 0, 5000);
+      if ('searchesPerDay' in b) s.searchesPerDay = n(b.searchesPerDay, 0, 500);
+      if ('spendPerDay' in b) s.spendPerDay = n(b.spendPerDay, 0, 200);
+      if ('paused' in b) s.paused = !!b.paused;
+      if ('quality' in b) s.quality = b.quality === 'better' ? 'better' : 'economy';
+      if ('searchVia' in b) s.searchVia = ['auto', 'searxng', 'browser', 'claude'].includes(b.searchVia) ? b.searchVia : 'auto';
+      if ('publishApproved' in b) s.publishApproved = !!b.publishApproved;
+      for (const k of Object.keys(s)) if (s[k] === undefined) delete s[k];
+      W.wlog('keeper changed settings: ' + JSON.stringify(s)); return ok({ settings: s, budget: budget() });
+    }
+    case 'respond': { // answer one of Percy's requests: a letter goes to the post office; approvals change nothing by themselves
+      const q = S.requests.find(x => x.id === b.id); if (!q) return send(res, 400, { error: 'No such request.' });
+      const st = ['approved', 'declined', 'modified', 'fulfilled', 'open'].includes(b.status) ? b.status : 'open';
+      q.status = st; q.response = str(b.note, 600); q.updatedDay = W.dayOf(S.t);
+      if (b.letter !== false) W.keeperLetter((st === 'open' ? 'About your request' : 'Your request') + ' ("' + q.what.slice(0, 80) + '"): ' + ({ approved: 'yes.', declined: 'no.', modified: 'yes, but not quite as you asked.', fulfilled: 'it\'s done.', open: 'still thinking about it.' })[st] + (q.response ? ' ' + q.response : ''), 'request ' + q.id);
+      return ok({ request: q });
+    }
+    case 'make': {
+      const desc = str(b.description, 200), img = b.image ? parseDataURL(b.image) : null;
+      if (!desc && !img) return send(res, 400, { error: 'Describe it or add a picture.' });
+      if (b.image && !img) return send(res, 400, { error: 'That picture couldn\'t be read. Try a JPEG or PNG under 4 MB.' });
+      const size = Math.max(1, Math.min(8, Number(b.size) || 3)), x = Number(b.x), z = Number(b.z);
+      const prob = W.spotProblem(x, z, size * 0.7); if (prob) return send(res, 400, { error: prob });
+      const th = W.addThing({ name: desc || 'something from a picture', desc, x, z, size, forRequest: str(b.forRequest, 20) });
+      if (img) { th.file = 'uploads/' + th.id + '.' + img.ext; writeMedia(th.file, img.buf); }
+      save(); send(res, 200, { ok: true, id: th.id });
+      if (!canCall()) { th.status = 'failed'; W.bump(); return; }
+      C.buildModel(desc || 'the thing in this picture', img ? { mediaType: img.mediaType, data: img.data } : null, size)
+        .then(mm => { th.model = mm.parts; if (mm.name) th.name = mm.name; th.look = mm.look; th.label = mm.label; th.status = 'ready'; const q = th.forRequest && S.requests.find(r => r.id === th.forRequest); if (q) { q.status = 'fulfilled'; q.updatedDay = W.dayOf(S.t); } })
+        .catch(e => { th.status = 'failed'; console.warn('[percy] building a model failed:', e.message); })
+        .finally(() => { W.bump(); save(); });
+      return;
+    }
+    case 'graffiti': {
+      const img = parseDataURL(b.image); if (!img) return send(res, 400, { error: 'Draw something or add a picture first.' });
+      const x = Number(b.x), y = Number(b.y), z = Number(b.z), nx = Number(b.nx), nz = Number(b.nz);
+      if (![x, y, z, nx, nz].every(Number.isFinite)) return send(res, 400, { error: 'Tap a wall to paint on.' });
+      const w = Math.max(0.6, Math.min(5, Number(b.w) || 2)), h = Math.max(0.4, Math.min(5, Number(b.h) || w));
+      const g = { id: uid(), by: 'keeper', x, y, z, nx, nz, w, h, text: str(b.text, 80), look: 'paint on the wall' + (str(b.text, 80) ? ' with the words "' + str(b.text, 80) + '"' : ''), day: W.dayOf(S.t) };
+      g.file = 'graffiti/' + g.id + '.' + img.ext; g.img = '/media/' + g.file; writeMedia(g.file, img.buf);
+      S.graffiti.push(g); W.wlog('the keeper painted on a wall'); return ok({ id: g.id });
+    }
+    case 'stock': {
+      const img = b.image ? parseDataURL(b.image) : null;
+      const r = W.stockItem({ shop: b.shop, name: b.name, price: b.price, desc: b.desc }); if (r.error) return send(res, 400, { error: r.error });
+      const it = r.item; if (img) { it.file = 'uploads/' + it.id + '.' + img.ext; it.img = '/media/' + it.file; writeMedia(it.file, img.buf); }
+      save(); send(res, 200, { ok: true, id: it.id });
+      if (!canCall()) { it.status = 'ready'; it.look = it.desc; W.bump(); return; }
+      C.buildModel(it.name + (it.desc ? ', ' + it.desc : '') + ' (an item in a shop window)', img ? { mediaType: img.mediaType, data: img.data } : null, 0.9)
+        .then(mm => { it.model = mm.parts; it.look = mm.look; it.status = 'ready'; }).catch(() => { it.status = 'ready'; it.look = it.desc; }).finally(() => { W.bump(); save(); });
+      return;
+    }
+    case 'book': { // a book left in the library: an object he may or may not ever read
+      const lib = S.town.places.find(pl => pl.type === 'library'); if (!lib) return send(res, 400, { error: 'There is no library.' });
+      const topic = str(b.topic, 80); if (!topic) return send(res, 400, { error: 'What is the book called?' });
+      const text = String(b.text || '').slice(0, 20000).trim();
+      lib.inside = lib.inside || { feel: 'tall shelves, dust in the light from the windows, the smell of old paper', items: [] };
+      lib.inside.items.push({ id: 'bk' + uid().slice(0, 5), name: 'a book: ' + topic, look: 'a book left on a reading table; the cover says "' + topic + '"', text: text || topic, canTake: true, examined: false, taken: false, book: true });
+      W.wlog('the keeper left a book in the library: ' + topic); return ok();
+    }
+    case 'print-sold': { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
+    case 'remove-graffiti': S.graffiti = S.graffiti.filter(g => g.id !== b.id); return ok();
+    case 'remove-item': S.items = S.items.filter(i => i.id !== b.id || i.sold); return ok();
+    case 'remove-thing': W.removeThing(b.id); return ok();
+    case 'remove-building': { const r = W.removeBuilding(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
+    case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
+    case 'record-sale': { const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' }); payIn({ coins: l.price, from: str(b.from, 40), code: l.code, source: 'keeper' }); return send(res, 200, { ok: true }); }
+    case 'remove-commission': S.commissions = S.commissions.filter(c => c.id !== b.id); return ok();
+    case 'remove-note': S.notes = S.notes.filter(n => n.id !== b.id); return ok();
+    case 'build': { const r = W.addBuilding({ kind: b.kind, name: b.name, desc: b.desc, x: Number(b.x), z: Number(b.z) }); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.place.id }); }
+    case 'grow': { const g = W.growTown('keeper'); return ok({ road: g.road }); }
+  }
+  return send(res, 404, { error: 'Unknown keeper action.' });
+}
+
+server.listen(config.port, async () => {
   console.log(`[percy] Mossbrook is open on port ${config.port}`);
-  console.log('[percy] mind: ' + (config.apiKey ? `Claude (${config.modelThink} / ${config.modelReflect})` : 'simple rules only (no ANTHROPIC_API_KEY set)'));
-  console.log('[percy] keeper tools: ' + (config.keeperKey ? 'on' : 'off (set KEEPER_KEY to turn on)'));
-  console.log('[percy] website: ' + (Pub.enabled() ? 'publishing to ' + config.githubRepo : 'off (set GITHUB_TOKEN and GITHUB_REPO to turn on)'));
-  console.log('[percy] ko-fi: ' + (config.kofiToken ? 'listening at /api/kofi (' + config.coinsPerPound + ' coins per pound)' : 'off (set KOFI_TOKEN to turn on)'));
-  if (Pub.enabled()) Pub.queueFile('index.html', Pub.indexHTML(S), 'percy updated his index');
+  const b = budget();
+  console.log('[percy] mind: ' + (config.apiKey ? `Claude (decisions ${config.modelDecide}, work ${config.modelWork}); today's limits: ${b.callsPerDay} calls, $${b.spendPerDay || '∞'}` : 'continuity rules only (no ANTHROPIC_API_KEY set)'));
+  console.log('[percy] search: ' + searchVia() + (config.searxngUrl ? ' (SearXNG at ' + config.searxngUrl + ')' : '') + ' · browser: ' + (B.available() ? config.chromiumPath : 'none') + ' · git: ' + (await WS.hasGit() ? 'yes' : 'no'));
+  console.log('[percy] website: ' + (Pub.enabled() ? 'publishing to ' + config.githubRepo + (config.autoPublish ? ' (he may publish on his own)' : ' (publishing needs approval)') : 'off'));
+  console.log('[percy] keeper tools: ' + (config.keeperKey ? 'on' : 'off (set KEEPER_KEY)') + ' · ko-fi: ' + (config.kofiToken ? 'on' : 'off'));
+  siteIndex();
 });

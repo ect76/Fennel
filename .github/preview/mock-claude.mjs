@@ -1,34 +1,64 @@
-// A stand-in for the Claude API, used only by the screenshot preview job.
+// A stand-in for the Claude API, for tests and preview screenshots. It plays along with every tool Percy uses,
+// including multi-step research and coding sittings, so the whole loop can be exercised without real calls.
 import http from 'node:http';
-const acts = ['visit', 'explore', 'pond', 'visit', 'wander', 'draw'];
-let n = 0;
-const cat = { name: 'cat statue', parts: [
-  { shape: 'box', size: [1.6, 0.5, 1.2], pos: [0, 0.25, 0], color: '#9a9a92' },
-  { shape: 'sphere', size: [0.55], pos: [0, 1.05, 0], scale: [1, 1.15, 0.9], color: '#d08a3a', finish: 'shiny' },
-  { shape: 'sphere', size: [0.38], pos: [0, 1.85, 0.12], color: '#d08a3a', finish: 'shiny' },
-  { shape: 'cone', size: [0.13, 0.32], pos: [-0.2, 2.2, 0.1], color: '#d08a3a' }, { shape: 'cone', size: [0.13, 0.32], pos: [0.2, 2.2, 0.1], color: '#d08a3a' },
-  { shape: 'sphere', size: [0.06], pos: [-0.13, 1.9, 0.46], color: '#1b1b1b' }, { shape: 'sphere', size: [0.06], pos: [0.13, 1.9, 0.46], color: '#1b1b1b' },
-  { shape: 'capsule', size: [0.09, 0.9], pos: [0.55, 0.9, -0.3], rot: [30, 0, -40], color: '#d08a3a' } ] };
-http.createServer((req, res) => { let b = ''; req.on('data', c => b += c); req.on('end', () => {
-  const body = JSON.parse(b);
-  if (/sonnet/.test(body.model) && body.tool_choice && body.tool_choice.type !== 'auto') { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'tool_choice: type "tool" and "any" are not supported for this model.' } })); } const c0 = body.messages[0].content; const p = typeof c0 === 'string' ? c0 : c0.filter(x => x.type === 'text').map(x => x.text).join(' ');
-  n++; let text;
-  if (p.includes('Design a charming low-poly')) text = JSON.stringify(cat);
-  else if (p.includes('Paint it as an SVG illustration') || p.includes('Paint it as an SVG: a real spray')) text = '<svg viewBox="0 0 800 800"><rect width="800" height="800" fill="#f3ead8"/><circle cx="400" cy="380" r="160" fill="#2c6670" opacity=".5"/><path d="M180 600 Q400 500 620 600" stroke="#333" stroke-width="6" fill="none"/><text x="740" y="770" font-size="28">P.</text></svg>';
-  else if (p.includes('things have been left behind')) text = JSON.stringify({ feel: 'dust in the light. it smells of old paper.', items: [{ name: 'a map of the Outer Hebrides', finds: 'islands like dropped crumbs. one is called Barra.', topic: 'the Outer Hebrides', can_take: true }, { name: 'a globe with a dent in it', finds: 'the dent is somewhere in the pacific.', topic: 'globes', can_take: false }] });
-  else if (p.includes('each asking him to make something for coins')) { const ids = [...p.matchAll(/LETTER id (\S+)/g)].map(m => m[1]); text = JSON.stringify({ letters: ids.map((id, i) => ({ id, accept: i % 3 !== 2, reply: i % 3 !== 2 ? 'yes. i can do that. give me a few days.' : 'no, sorry. not this one.', feeling: 'nervous' })), thought: 'letters. for me.', diary: 'there were letters at the post office. people want things from me.' }); }
-  else if (p.includes('he has just opened')) text = JSON.stringify({ diary: 'an envelope with coins in it. someone out there paid for my drawing.', thought: 'somebody paid for something i made.', replies: [{ to: 'Ewan', text: 'thank you for the coins. i bought bread.' }], remember: 'got paid by someone outside', joy: 8 });
-  else if (p.includes('He is at his desk, working on his shop')) { const refs = [...p.matchAll(/ref (\S+): "/g)].map(m => m[1]); text = JSON.stringify({ list: refs.slice(0, 3).map((ref, i) => ({ ref, price: 20 + i * 10, blurb: 'one of mine. it has a smudge i like.' })), withdraw: [], sign: 'drawings, pages and things. i also make things to order.', redesign: true, design_idea: 'like a little market stall', thought: 'my own shop.' }); }
-  else if (p.includes('his shop page on his website (shop.html)')) text = '<!doctype html><html><head><title>percy\'s shop</title></head><body><h1>percy\'s shop</h1><div id="s"></div><script type="application/json" id="percy-shop">{}</script><script>const d=JSON.parse(document.getElementById("percy-shop").textContent);for(const i of d.items){const p=document.createElement("p");p.textContent=i.title+" "+i.price;document.getElementById("s").append(p)}</script><footer>i am percy, a small autonomous penguin. i made this page myself.</footer></body></html>';
-  else if (p.includes('making a real web page')) text = '<!doctype html><html><head><title>lighthouse toy</title></head><body><h1>lighthouse</h1><footer>i am percy, a small autonomous penguin. i made this page myself.</footer></body></html>';
-  else if (p.includes('choosing what to do next') && (p.includes('post waiting') || p.includes('COMMISSIONS HE HAS ACCEPTED') || (p.includes('shopfront:') && !p.includes('His shop page: version')))) {
-    const job = (p.match(/COMMISSIONS HE HAS ACCEPTED[^\n]*\n- id (\S+):/) || [])[1];
-    const a = p.includes('post waiting') ? 'post' : job ? 'job' : 'shopfront';
-    text = JSON.stringify({ thought: 'right. ' + a + '.', action: a, target: job || '', doing: '', subject: '', title: '', remember: '', diary: '' }); }
-  else if (p.includes('choosing what to do next')) { const a = acts[n % acts.length]; text = JSON.stringify({ thought: 'the fog looks thick down mill lane today. i wonder if it is thicker on purpose.', action: a, target: '', doing: 'doing something quietly', subject: a === 'draw' ? 'the clock tower in the rain' : '', title: '', remember: '', diary: '' }); }
-  else text = JSON.stringify({ thought: 'a small thought.', reaction: 'a reaction.', first_sight: 'something new.', diary: 'a reflection.', facts: ['a fact.'], topic: 'fog', title: 'a page', body: 'some words.' });
-  const wantsTool = (body.tools || []).some(t => t.name === 'respond');
-  const content = wantsTool && text.trim().startsWith('{') ? [{ type: 'tool_use', id: 'toolu_' + n, name: 'respond', input: JSON.parse(text) }] : [{ type: 'text', text }];
-  res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ content, stop_reason: wantsTool ? 'tool_use' : 'end_turn', usage: { input_tokens: 10, output_tokens: 10 } }));
-}); }).listen(3099, () => console.log('mock claude on 3099'));
+const port = Number(process.env.MOCK_PORT || 3099);
+let n = 0, plan = 0;
+const ids = (text, re) => [...String(text).matchAll(re)].map(m => m[1]);
+const textOf = c => typeof c === 'string' ? c : (c || []).map(b => b.text || (b.type === 'tool_result' ? (typeof b.content === 'string' ? b.content : (b.content || []).map(x => x.text || '').join(' ')) : '')).join('\n');
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"><rect width="800" height="800" fill="#f3ead8"/><circle cx="400" cy="420" r="210" fill="#7aa6c2" stroke="#223" stroke-width="10"/><rect x="330" y="200" width="140" height="120" fill="#c94" stroke="#223" stroke-width="8"/><text x="720" y="770" font-size="36">P.</text></svg>';
+const PLAN = ['look', 'go', 'enter', 'look', 'research', 'code', 'write', 'draw', 'request', 'code', 'research', 'wait', 'eat', 'think'];
+
+function decide(prompt) {
+  const places = ids(prompt, /place (\w+): /g), things = ids(prompt, /thing (\w+): /g), projects = ids(prompt, /project (pr\w+) /g), inv = ids(prompt, /(R\w+) "/g);
+  const step = PLAN[plan++ % PLAN.length];
+  const base = { intention: { op: 'new', text: 'see what this place is', why: 'everything is unfamiliar', horizon: 'today' }, expectation: 'something will happen', thought: 'a small thought.', caption: '' };
+  const a = { look: { type: 'look', args: { at: things[0] || 'around' } }, go: { type: 'go', args: { to: places[0] || 'home' } }, enter: { type: 'enter', args: { place: places[0] || 'x' } },
+    research: { type: 'research', args: inv[0] && plan > 12 ? { continue: inv[0], question: '' } : { question: 'how does a clock keep time', why: 'the tower clock', where: 'home' } },
+    code: { type: 'code', args: projects[0] ? { project: projects[0], goal: 'fix what is broken' } : { project: 'new', title: 'Clock face', goal: 'a page that shows a ticking clock', where: 'home' } },
+    write: { type: 'write', args: { kind: 'page', about: 'the clock', title: 'Notes on the clock', publish: true } }, draw: { type: 'draw', args: { subject: 'the clock tower in fog', offer_at_stall: true } },
+    request: { type: 'request', args: { kind: 'object', what: 'a small brass telescope', why: 'to see the clock face from home', missing: 'nothing to see far with', alternatives: 'walking there', dependencies: 'none', interest: 'medium' } },
+    wait: { type: 'wait', args: { minutes: 30 } }, eat: { type: 'eat', args: { where: 'home' } }, think: { type: 'think', args: { about: 'the clock', minutes: 15 } } }[step];
+  return { ...base, action: a, notes: n % 5 === 0 ? [{ kind: 'question', text: 'why does the clock strike?' }] : [] };
+}
+function sittingTurn(body) {
+  const names = body.tools.map(t => t.name), turn = body.messages.filter(m => m.role === 'assistant').length;
+  const last = textOf(body.messages[body.messages.length - 1].content);
+  const use = (name, input) => ({ type: 'tool_use', id: 'tu' + (++n), name, input });
+  if (names.includes('record_finding')) {
+    if (turn === 0) return [use('search', { query: 'how does a pendulum clock keep time' })];
+    if (turn === 1) { const u = (last.match(/"url":"(https?:[^"]+)"/) || [])[1] || 'https://en.wikipedia.org/wiki/Pendulum_clock'; return [use('open_page', { url: u })]; }
+    if (turn === 2) { const u = (last.match(/"url":"(https?:[^"]+)"/) || [])[1] || ''; return [use('record_finding', { claim: 'A pendulum swings at a steady rate, which is what keeps the clock regular.', support: 'source', url: u, confidence: 0.8 }), use('record_finding', { claim: 'The tower clock probably has a pendulum.', support: 'speculation' }), use('note_lead', { what: 'what is a railway timetable?', url: u, why: 'mentioned on the clock page' })]; }
+    return [use('finish', { summary: 'Pendulums keep clocks regular.', status: 'partly answered', why_stopped: 'end of sitting', new_questions: ['how are railway clocks kept in time?'] })];
+  }
+  if (names.includes('write_file')) {
+    if (turn === 0) return [use('write_file', { path: 'index.html', content: '<!doctype html><title>Clock</title><h1>Clock</h1><p id="t"></p><script>setInterval(()=>{ document.getElementById("t").textContent = new Date().toLocaleTimeString(); tick(); }, 500)</script>' }), use('write_file', { path: 'check.js', content: 'console.log("2+2 =", 2 + 2);' })];
+    if (turn === 1) return [use('run_script', { path: 'check.js' }), ...(names.includes('preview') ? [use('preview', { path: 'index.html' })] : [])];
+    if (turn === 2) return [use('edit_file', { path: 'index.html', old_text: ' tick();', new_text: '' }), use('note', { kind: 'bug', text: 'tick() was not defined; removed it' })];
+    if (turn === 3) return [...(names.includes('preview') ? [use('preview', { path: 'index.html' })] : []), use('commit', { message: 'clock page works' })];
+    if (turn === 4 && names.includes('publish')) return [use('publish', {})];
+    return [use('finish', { summary: 'Made a clock page and fixed an error the browser showed.', status: 'continuing', next_step: 'add a second hand', learned: 'preview shows errors that are easy to miss' })];
+  }
+  return [{ type: 'text', text: 'done' }];
+}
+function respond(body) {
+  const sys = JSON.stringify(body.system), p = textOf(body.messages[0].content);
+  if (/3D toy designer/.test(sys)) return { name: 'cat statue', look: 'a grey four-legged figure sitting upright on a stone block, with pointed ears and a red band at its neck, about twice your height', label: '', parts: [{ shape: 'box', size: [1, 0.3, 1], pos: [0, 0.15, 0], color: '#888888' }, { shape: 'sphere', size: [0.6], pos: [0, 1, 0], color: '#bbbbbb' }] };
+  if (/describe places/.test(sys)) return { feel: 'Dim and quiet, with dust in the light.', items: [{ name: 'a mantel clock', look: 'a wooden box with a round glass face and two thin hands', text: 'Hattersley & Sons', can_take: true }, { name: 'a railway timetable', look: 'a folded sheet of thin paper printed with columns of numbers', text: 'Mossbrook 08:12, 09:40, 11:05', can_take: true }, { name: 'a chair', look: 'a wooden seat with four legs and a back', text: '', can_take: false }] };
+  if (/write as Percy/.test(sys)) return { title: 'Notes on the clock', body: 'The tower has a face with two hands. I do not know yet how it keeps going.' };
+  if (/help Percy read/.test(sys)) return { points: ['clocks were once set by the sun'], questions: ['who sets the tower clock?'], gist: 'a short book about clocks' };
+  if (/consolidate memories/.test(sys)) return { summary: 'He looked around, went out, and read about clocks.', views: [], lessons: [] };
+  if (/Do not name it/.test(p)) return { look: 'a small object' };
+  return {};
+}
+http.createServer((req, res) => {
+  let b = ''; req.on('data', c => b += c); req.on('end', () => {
+    const body = JSON.parse(b || '{}'); const names = (body.tools || []).map(t => t.name);
+    let content;
+    if (names.includes('decide')) content = [{ type: 'tool_use', id: 'd' + (++n), name: 'decide', input: decide(textOf(body.messages[0].content)) }];
+    else if (names.includes('finish')) content = sittingTurn(body);
+    else if (names.includes('respond')) content = [{ type: 'tool_use', id: 'r' + (++n), name: 'respond', input: respond(body) }];
+    else content = [{ type: 'text', text: SVG }];
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ id: 'm' + n, type: 'message', role: 'assistant', content, stop_reason: content.some(c => c.type === 'tool_use') ? 'tool_use' : 'end_turn', usage: { input_tokens: 3000, output_tokens: 300, cache_read_input_tokens: 1000 } }));
+  });
+}).listen(port, () => console.log('mock claude on ' + port));
