@@ -100,7 +100,8 @@
         <span class="hint" id="keyStatus" role="status"></span>
       </form>
       <div id="keeperTools" hidden style="display:grid;gap:14px">
-        <form class="card" id="budgetForm">
+        <nav class="ksub" id="kSub" aria-label="Keeper sections"><button type="button" data-g="him" aria-pressed="true">Percy</button><button type="button" data-g="make" aria-pressed="false">Make &amp; give</button><button type="button" data-g="shop" aria-pressed="false">Shops &amp; sales</button><button type="button" data-g="vil" aria-pressed="false">The village</button><button type="button" data-g="set" aria-pressed="false">Budget &amp; settings</button><button type="button" data-g="all" aria-pressed="false">Everything</button></nav>
+        <form class="card" data-g="set" id="budgetForm">
           <h2 style="margin:0">Budget</h2>
           <p class="hint" id="usageLine"></p>
           <p class="hint" id="costLine"></p>
@@ -116,9 +117,9 @@
           <div class="row"><button type="submit" class="btn primary">Save</button><button type="button" class="btn" id="bPause">Pause his thinking</button><span class="hint" id="budgetStatus" role="status"></span></div>
           <p class="hint">While paused, or when a limit is reached, he keeps living on simple rules (eating, sleeping, resting) and keeps his plans for later. The cap is an estimate from the tokens each call actually used.</p>
         </form>
-        <div class="card"><h2 style="margin:0">His requests</h2><p class="hint">Answering sends him a letter at the post office. Approving doesn't make anything happen by itself: for objects, use "Make something" below; new abilities need building.</p><div id="kReqs" style="display:grid;gap:10px"></div></div>
-        <div class="card"><h2 style="margin:0">Why did he do that?</h2><p class="hint">His private decision journal: what triggered each decision, what he perceived and intended, what he expected, and what actually happened.</p><div id="kJournal" style="display:grid;gap:8px"></div></div>
-        <form class="card" id="makeForm">
+        <div class="card" data-g="him"><h2 style="margin:0">His requests</h2><p class="hint">Answering sends him a letter at the post office. Approving doesn't make anything happen by itself: for objects, use "Make something" below; new abilities need building.</p><div id="kReqs" style="display:grid;gap:10px"></div></div>
+        <div class="card" data-g="him"><h2 style="margin:0">Why did he do that?</h2><p class="hint">His private decision journal: what triggered each decision, what he perceived and intended, what he expected, and what actually happened.</p><div id="kJournal" style="display:grid;gap:8px"></div></div>
+        <form class="card" data-g="make" id="makeForm">
           <h2 style="margin:0">Make something</h2>
           <p class="hint">Describe it, add a picture, or both. Claude builds a 3D version and you choose where it goes.</p>
           <label class="fld">What is it?<input type="text" id="makeDesc" maxlength="200" placeholder="a statue of a cat sitting on a plinth"></label>
@@ -127,7 +128,7 @@
           <label class="fld">Size<select id="makeSize"><option value="1.4">Small, like a bench</option><option value="3" selected>Medium, like a statue</option><option value="5.5">Large, like a car or a tree</option><option value="8">Huge, like a spaceship</option></select></label>
           <div class="row"><button type="submit" class="btn primary">Choose a spot</button><span class="hint" id="makeStatus" role="status"></span></div>
         </form>
-        <form class="card" id="graffitiForm">
+        <form class="card" data-g="make" id="graffitiForm">
           <h2 style="margin:0">Paint graffiti</h2>
           <p class="hint">Draw with your finger or mouse, or upload a picture. Then tap a wall.</p>
           <canvas class="pad" id="pad" width="840" height="420"></canvas>
@@ -136,14 +137,14 @@
           <label class="fld">Size on the wall<select id="graffitiSize"><option value="1.2">Small</option><option value="2.2" selected>Medium</option><option value="3.6">Large</option></select></label>
           <div class="row"><button type="submit" class="btn primary">Choose a wall</button><span class="hint" id="graffitiStatus" role="status"></span></div>
         </form>
-        <form class="card" id="buildForm">
+        <form class="card" data-g="make" id="buildForm">
           <h2 style="margin:0">Build</h2>
           <label class="fld">Kind of building<select id="buildKind"><option value="house">House</option><option value="shop">Shop</option><option value="cafe">Café</option><option value="workshop">Workshop</option><option value="garden">Garden</option><option value="museum">Museum</option><option value="hall">Hall</option><option value="tower">Clock tower</option><option value="market">Market stall</option><option value="bakery">Bakery</option><option value="library">Library</option><option value="station">Railway station</option><option value="lookout">Lookout hill</option></select></label>
           <label class="fld">Name<input type="text" id="buildName" maxlength="50" placeholder="Hattersley's Hats"></label>
           <label class="fld">Anything about it (optional)<textarea id="buildDesc" maxlength="240"></textarea></label>
           <div class="row"><button type="submit" class="btn primary">Choose a spot</button><button type="button" class="btn" id="growBtn">Push back the fog</button><span class="hint" id="buildStatus" role="status"></span></div>
         </form>
-        <form class="card" id="stockForm">
+        <form class="card" data-g="make" id="stockForm">
           <h2 style="margin:0">Stock a shop</h2>
           <p class="hint">Put something in a shop for him to find. He decides if it's worth saving up for.</p>
           <label class="fld">Shop<select id="stockShop"></select></label>
@@ -153,7 +154,7 @@
           <label class="fld">Picture (optional)<input type="file" id="stockImg" accept="image/*"></label>
           <div class="row"><button type="submit" class="btn primary">Put it in the window</button><span class="hint" id="stockStatus" role="status"></span></div>
         </form>
-        <form class="card" id="bookForm">
+        <form class="card" data-g="make" id="bookForm">
           <h2 style="margin:0">Leave a book at the library</h2>
           <p class="hint">It sits on a reading table in the library. He may find it, read it, or never notice it.</p>
           <label class="fld">Title (taken from the page if you give a link)<input type="text" id="bookTopic" maxlength="80"></label>
@@ -161,14 +162,14 @@
           <label class="fld">Or paste the text (optional; long texts are fine: he reads them a part at a time)<textarea id="bookText" maxlength="400000" rows="5"></textarea></label>
           <div class="row"><button type="submit" class="btn">Leave the book</button><span class="hint" id="bookStatus" role="status"></span></div>
         </form>
-        <form class="card" id="letterForm">
+        <form class="card" data-g="him" id="letterForm">
           <h2 style="margin:0">Write Percy a letter</h2>
           <p class="hint">It waits for him at the post office. The lamp there lights and a card on his doormat tells him post is waiting; when or whether he collects it is up to him.</p>
           <label class="fld">Letter<textarea id="letterText" maxlength="1500" rows="4" required></textarea></label>
           <div class="row"><label class="fld" style="flex:1;min-width:150px">Signed (optional)<input type="text" id="letterFrom" maxlength="40"></label></div>
           <div class="row"><button type="submit" class="btn">Post the letter</button><span class="hint" id="letterStatus" role="status"></span></div>
         </form>
-        <form class="card" id="giveForm">
+        <form class="card" data-g="him" id="giveForm">
           <h2 style="margin:0">Give Percy coins</h2>
           <p class="hint">An envelope waits for him at the post office, with your message if you write one. Use this to record real money from somewhere other than Ko-fi too.</p>
           <div class="row"><label class="fld" style="flex:1;min-width:110px">Coins<input type="number" id="giveCoins" min="1" max="1000" value="10"></label><label class="fld" style="flex:2;min-width:150px">From (optional)<input type="text" id="giveFrom" maxlength="40"></label></div>
@@ -176,23 +177,23 @@
           <div class="row"><button type="submit" class="btn">Send the envelope</button><span class="hint" id="giveStatus" role="status"></span></div>
           <p class="hint" id="kofiState"></p>
         </form>
-        <div class="card" id="kShopWrap" hidden><h2 style="margin:0">Percy's shop</h2><p class="hint">If someone pays you some other way, record the sale here and the coins go to him.</p><ul class="list" id="kShop"></ul></div>
-        <div class="card" id="kJobsWrap" hidden><h2 style="margin:0">Commission letters</h2><ul class="list" id="kJobs"></ul></div>
-        <div class="card"><h2 style="margin:0">Things you've made</h2><ul class="list" id="kThings"></ul></div>
-        <div class="card"><h2 style="margin:0">Buildings</h2><p class="hint">Take a building out of Mossbrook. If he knew it, he'll notice it's gone when he's next nearby.</p><ul class="list" id="kBuildings"></ul></div>
-        <div class="card"><h2 style="margin:0">Graffiti</h2><ul class="list" id="kGraffiti"></ul></div>
-        <div class="card"><h2 style="margin:0">In the shops</h2><ul class="list" id="kItems"></ul></div>
-        <form class="card" id="forgetForm">
+        <div class="card" data-g="shop" id="kShopWrap" hidden><h2 style="margin:0">Percy's shop</h2><p class="hint">If someone pays you some other way, record the sale here and the coins go to him.</p><ul class="list" id="kShop"></ul></div>
+        <div class="card" data-g="shop" id="kJobsWrap" hidden><h2 style="margin:0">Commission letters</h2><ul class="list" id="kJobs"></ul></div>
+        <div class="card" data-g="vil"><h2 style="margin:0">Things you've made</h2><ul class="list" id="kThings"></ul></div>
+        <div class="card" data-g="vil"><h2 style="margin:0">Buildings</h2><p class="hint">Take a building out of Mossbrook. If he knew it, he'll notice it's gone when he's next nearby.</p><ul class="list" id="kBuildings"></ul></div>
+        <div class="card" data-g="vil"><h2 style="margin:0">Graffiti</h2><ul class="list" id="kGraffiti"></ul></div>
+        <div class="card" data-g="shop"><h2 style="margin:0">In the shops</h2><ul class="list" id="kItems"></ul></div>
+        <form class="card" data-g="him" id="forgetForm">
           <h2 style="margin:0">Make him forget something</h2>
           <p class="hint">A last resort: this reaches into his mind, which nothing else here does. Every memory, question, intention, investigation and private note that mentions any of these words is taken out (kept in forgotten.jsonl on the server, not shown to him). His published work and the world's own record are left alone. Preview first.</p>
           <label class="fld">Words or names, separated by commas<input type="text" id="forgetWords" maxlength="400" placeholder="e.g. Hollow Fields, Inkberrow"></label>
           <div class="row"><button type="submit" class="btn small" id="forgetPreview">Preview</button><button type="button" class="btn small" id="forgetGo" disabled>Forget these</button><span class="hint" id="forgetStatus" role="status"></span></div>
           <ul class="list" id="forgetSample"></ul>
         </form>
-        <div class="card"><h2 style="margin:0">Inside buildings</h2><p class="hint">What was left in rooms when he first went in. If he has already seen something, he may notice it's gone.</p><div id="kRooms" style="display:grid;gap:10px"></div></div>
-        <div class="card" id="kPrintsWrap" hidden><h2 style="margin:0">Real print sales</h2><p class="hint">When someone buys a real print through your shop link, record it here so Percy finds coins in his tin.</p><ul class="list" id="kPrints"></ul></div>
-        <div class="card"><h2 style="margin:0">Notes</h2><ul class="list" id="kNotes"></ul></div>
-        <details class="card"><summary><b>World log</b> <span class="hint">what actually happened, day by day</span></summary><div id="kWorld" class="hint" style="white-space:pre-line;max-height:420px;overflow:auto"></div></details>
+        <div class="card" data-g="vil"><h2 style="margin:0">Inside buildings</h2><p class="hint">What was left in rooms when he first went in. If he has already seen something, he may notice it's gone.</p><div id="kRooms" style="display:grid;gap:10px"></div></div>
+        <div class="card" data-g="shop" id="kPrintsWrap" hidden><h2 style="margin:0">Real print sales</h2><p class="hint">When someone buys a real print through your shop link, record it here so Percy finds coins in his tin.</p><ul class="list" id="kPrints"></ul></div>
+        <div class="card" data-g="him"><h2 style="margin:0">Notes under the stone</h2><ul class="list" id="kNotes"></ul></div>
+        <details class="card" data-g="vil"><summary><b>World log</b> <span class="hint">what actually happened, day by day</span></summary><div id="kWorld" class="hint" style="white-space:pre-line;max-height:420px;overflow:auto"></div></details>
       </div>
     </div>
     <footer>Percy lives here day and night. His decisions are made with Claude from what he perceives and remembers; his world runs on its own. <span id="siteLink"></span></footer>
