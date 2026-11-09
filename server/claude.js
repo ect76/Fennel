@@ -44,8 +44,10 @@ export function pace() {
   rollDay(); const b = budget(); if (!canCall()) return 'none';
   const frac = (Date.now() % 86400000) / 86400000; // how much of the real day has gone
   const callShare = usage.calls / Math.max(1, b.callsPerDay), spendShare = b.spendPerDay > 0 ? usage.cost / b.spendPerDay : 0;
-  const used = Math.max(callShare, spendShare), allowance = frac + 0.12;
-  return used > allowance + 0.15 ? 'scarce' : used > allowance ? 'limited' : 'plenty';
+  const used = Math.max(callShare, spendShare);
+  // he thinks freely until most of the day's allowance is gone; only then does he ration what is left
+  if (used < 0.7 || used < frac + 0.2) return 'plenty';
+  return used > 0.9 && used > frac + 0.3 ? 'scarce' : 'limited';
 }
 function costOf(model, u) {
   const [pi, po] = PRICES[model] || PRICES.default;
