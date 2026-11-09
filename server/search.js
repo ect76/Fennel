@@ -78,4 +78,13 @@ export function parseSearxHTML(html) {
   }
   return out;
 }
+// pictures: SearXNG's image search, with each picture's own address and the page it comes from
+export async function images(q) {
+  roll(); if (!canLocal()) throw new Error('no more searches today'); if (!config.searxngUrl) throw new Error('image search needs SearXNG');
+  local.searches++;
+  const u = config.searxngUrl.replace(/\/$/, '') + '/search?format=json&categories=images&safesearch=1&q=' + encodeURIComponent(str(q, 200));
+  const res = await get(u, 'application/json'); if (!res.ok) throw new Error('SearXNG answered ' + res.status + (res.status === 403 ? ' (JSON needs to be enabled for image search)' : ''));
+  const j = await res.json();
+  return (j.results || []).filter(r => r.img_src).slice(0, 12).map(r => ({ title: str(r.title, 120), image: r.img_src, page: r.url, size: r.resolution || r.img_format || '', source: r.source || (r.engines || [r.engine]).join(', ') }));
+}
 export async function open(url) { roll(); local.pages++; return B.read(url); }
