@@ -365,6 +365,7 @@ async function keeper(req, res, what) {
     case 'remove-item': S.items = S.items.filter(i => i.id !== b.id || i.sold); return ok();
     case 'remove-thing': W.removeThing(b.id); return ok();
     case 'remove-building': { const r = W.removeBuilding(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
+    case 'letter': { const text = str(b.text, 1500); if (!text) return send(res, 400, { error: 'Write something first.' }); const from = str(b.from, 40); W.keeperLetter(text + (from ? ' — ' + from : ''), 'letter'); save(); return ok(); }
     case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
     case 'record-sale': { const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' }); payIn({ coins: l.price, from: str(b.from, 40), code: l.code, source: 'keeper' }); return send(res, 200, { ok: true }); }
     case 'remove-commission': S.commissions = S.commissions.filter(c => c.id !== b.id); return ok();

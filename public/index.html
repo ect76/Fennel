@@ -160,6 +160,13 @@
           <label class="fld">Or paste the text (optional; long texts are fine: he reads them a part at a time)<textarea id="bookText" maxlength="400000" rows="5"></textarea></label>
           <div class="row"><button type="submit" class="btn">Leave the book</button><span class="hint" id="bookStatus" role="status"></span></div>
         </form>
+        <form class="card" id="letterForm">
+          <h2 style="margin:0">Write Percy a letter</h2>
+          <p class="hint">It waits for him at the post office. The lamp there lights and a card on his doormat tells him post is waiting; when or whether he collects it is up to him.</p>
+          <label class="fld">Letter<textarea id="letterText" maxlength="1500" rows="4" required></textarea></label>
+          <div class="row"><label class="fld" style="flex:1;min-width:150px">Signed (optional)<input type="text" id="letterFrom" maxlength="40"></label></div>
+          <div class="row"><button type="submit" class="btn">Post the letter</button><span class="hint" id="letterStatus" role="status"></span></div>
+        </form>
         <form class="card" id="giveForm">
           <h2 style="margin:0">Give Percy coins</h2>
           <p class="hint">An envelope waits for him at the post office, with your message if you write one. Use this to record real money from somewhere other than Ko-fi too.</p>
