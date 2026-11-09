@@ -65,18 +65,29 @@ function permissions() {
 }
 
 /* ---------- his website ---------- */
-function shopData() {
+function shopData(base = '../../') {
   const items = S.shop.filter(x => !x.withdrawn && (!x.sold || W.dayOf(S.t) - (x.soldDay || 0) < 30)).slice(-60).map(x => {
     const pr = x.kind === 'project' ? S.projects.find(p => p.id === x.ref) : null, pg = x.kind === 'page' ? S.pages.find(p => p.id === x.ref) : null;
-    return { code: x.code, title: x.title, blurb: x.blurb || '', price: x.price, pounds: W.pounds(x.price), kind: x.kind, img: x.kind === 'drawing' ? '../../drawings/' + x.ref + '.svg' : '', link: pr && pr.url ? pr.url : pg && pg.published ? '../../pages/' + Pub.slug(pg.title) + '.html' : '', sold: !!x.sold };
+    return { code: x.code, title: x.title, blurb: x.blurb || '', price: x.price, pounds: W.pounds(x.price), kind: x.kind, img: x.kind === 'drawing' ? base + 'drawings/' + x.ref + '.svg' : '', link: pr && pr.url ? pr.url : pg && pg.published ? base + 'pages/' + Pub.slug(pg.title) + '.html' : '', sold: !!x.sold };
   });
   return { items, kofi: config.kofiUrl, townUrl: config.publicUrl, coinsPerPound: config.coinsPerPound, updated: 'day ' + W.dayOf(S.t) };
 }
-function siteIndex() { if (Pub.enabled()) Pub.queueFile('index.html', Pub.indexHTML(S), 'update index'); }
-function publishProject(pr) {
+// the generated list of everything he has published; if he has chosen one of his projects as his front page,
+// that project is the site's root and this list lives at everything.html instead
+function siteIndex() {
+  if (!Pub.enabled()) return;
+  const home = S.siteHome && S.projects.find(p => p.slug === S.siteHome);
+  if (home) Pub.queueFile('everything.html', Pub.indexHTML(S, { asArchive: true }), 'update the list of everything');
+  else Pub.queueFile('index.html', Pub.indexHTML(S), 'update index');
+}
+function publishProject(pr, { asHome = false } = {}) {
   if (!permissions().publish_site) return { error: 'publishing is not permitted' };
-  const r = Pub.publishFiles(pr.slug, WS.readAll(pr.slug), shopData(), 'percy published ' + pr.title);
-  pr.url = r.url; pr.publishedDay = W.dayOf(S.t); siteIndex(); W.wlog('published project ' + pr.title); return { url: r.url, files: r.files, note: 'queued for upload; usually live within a couple of minutes' };
+  if (asHome) S.siteHome = pr.slug;
+  const files = WS.readAll(pr.slug), r = Pub.publishFiles(pr.slug, files, shopData(), 'percy published ' + pr.title);
+  let home = '';
+  if (S.siteHome === pr.slug) { Pub.publishFiles('', files, shopData(''), 'percy updated his front page'); home = Pub.siteUrl(); }
+  pr.url = r.url; pr.publishedDay = W.dayOf(S.t); siteIndex(); W.wlog('published project ' + pr.title + (home ? ' (his front page)' : ''));
+  return { url: r.url, ...(home ? { frontPage: home, everythingList: home + 'everything.html' } : {}), files: r.files, note: 'queued for upload; usually live within a couple of minutes' };
 }
 function publishPage(page) {
   if (!permissions().publish_site) return '';
@@ -84,10 +95,15 @@ function publishPage(page) {
   return 'published it on his website';
 }
 // when his listings change: drawings in the shop need their pictures online, and pages with a shop slot need fresh stock
+// what he knows about his own website, for coding sittings
+function siteInfo() {
+  return { url: Pub.enabled() ? Pub.siteUrl() : '', frontPage: S.siteHome || '', published: S.projects.filter(p => p.url).map(p => ({ id: p.id, title: p.title, path: S.siteHome === p.slug ? '/ (front page) and /projects/' + p.slug + '/' : '/projects/' + p.slug + '/' })),
+    pages: S.pages.filter(p => p.published).map(p => ({ title: p.title, path: '/pages/' + Pub.slug(p.title) + '.html' })) };
+}
 function shopChanged(all = false) {
   if (!Pub.enabled()) return;
   for (const l of W.openListings()) if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d && (all || !d.published)) { try { Pub.queueFile('drawings/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'drawing for the shop'); d.published = true; } catch {} } }
-  for (const pr of S.projects) if (pr.url) { const files = WS.readAll(pr.slug).filter(f => /\.html?$/i.test(f.path) && Pub.SHOP_SLOT.test(f.content)); if (files.length) Pub.publishFiles(pr.slug, files, shopData(), 'shop stock'); }
+  for (const pr of S.projects) if (pr.url) { const files = WS.readAll(pr.slug).filter(f => /\.html?$/i.test(f.path) && Pub.SHOP_SLOT.test(f.content)); if (files.length) { Pub.publishFiles(pr.slug, files, shopData(), 'shop stock'); if (S.siteHome === pr.slug) Pub.publishFiles('', files, shopData(''), 'shop stock'); } }
   siteIndex();
 }
 // a title from a description: the first clause, cut at a word boundary
@@ -104,7 +120,7 @@ const streams = new Set();
 Agent.init(S, {
   save, permissions, watchers: () => streams.size, saveDrawing, saveWall, shopChanged,
   research: o => Sessions.research({ ...o, how: searchVia() }),
-  code: o => Code.code({ ...o, how: searchVia(), permissions: permissions(), publishProject }),
+  code: o => Code.code({ ...o, how: searchVia(), permissions: permissions(), publishProject, shopChanged, siteInfo }),
   writePage: o => Sessions.writePage({ ...o, publishPage }),
   readText: o => Sessions.readText(o),
 });

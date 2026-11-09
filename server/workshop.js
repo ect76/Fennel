@@ -11,7 +11,7 @@ export const ROOT = path.resolve(config.dataDir, 'workspace');
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BLOCK = path.join(here, 'sandbox-block.mjs');
 const TEXT = /\.(html?|css|m?js|json|svg|txt|md|csv|xml)$/i;
-const LIMITS = { file: 200 * 1024, project: 3 * 1024 * 1024, files: 80 };
+const LIMITS = { file: 400 * 1024, project: 6 * 1024 * 1024, files: 120 };
 fs.mkdirSync(ROOT, { recursive: true });
 
 let gitOK = null;
@@ -42,11 +42,11 @@ export function read(slug, rel, from = 1, to = 0) {
 export function write(slug, rel, content) {
   const p = safe(slug, rel); content = String(content ?? '');
   if (!TEXT.test(p)) throw new Error('only text files (html, css, js, json, svg, txt, md, csv, xml)');
-  if (Buffer.byteLength(content) > LIMITS.file) throw new Error('file too large (limit 200 KB)');
+  if (Buffer.byteLength(content) > LIMITS.file) throw new Error('file too large (limit 400 KB)');
   const files = list(slug); const exists = fs.existsSync(p);
   if (!exists && files.length >= LIMITS.files) throw new Error('too many files in this project');
   const total = files.reduce((s, f) => s + f.size, 0) - (exists ? fs.statSync(p).size : 0) + Buffer.byteLength(content);
-  if (total > LIMITS.project) throw new Error('project too large (limit 3 MB)');
+  if (total > LIMITS.project) throw new Error('project too large (limit 6 MB)');
   fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, content);
   return { path: rel, bytes: Buffer.byteLength(content), lines: content.split('\n').length, created: !exists };
 }

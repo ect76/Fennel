@@ -38,6 +38,16 @@ function sittingTurn(body) {
     if (turn === 2) { const u = (last.match(/"url":"(https?:[^"]+)"/) || [])[1] || ''; return [use('record_finding', { claim: 'A pendulum swings at a steady rate, which is what keeps the clock regular.', support: 'source', url: u, confidence: 0.8 }), use('record_finding', { claim: 'The tower clock probably has a pendulum.', support: 'speculation' }), use('note_lead', { what: 'what is a railway timetable?', url: u, why: 'mentioned on the clock page' })]; }
     return [use('finish', { summary: 'Pendulums keep clocks regular.', status: 'partly answered', why_stopped: 'end of sitting', new_questions: ['how are railway clocks kept in time?'] })];
   }
+  if (names.includes('write_file') && process.env.MOCK_SITE) {
+    const steps = [
+      [use('add_drawing', { drawing: (textOf(body.messages[0].content).match(/\b(d[a-z0-9]{6,})\b "/) || [])[1] || 'none', path: 'images/art.svg' }), use('write_file', { path: 'index.html', content: '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"><title>Shop</title></head><body><h1>Shop</h1><img src="images/art.svg" alt="art"><img src="images/missing.png"><a href="about.html">About</a><script type="application/json" id="percy-shop"></script></body></html>' })],
+      [use('check_page', { path: 'index.html' }), use('preview', { path: 'index.html', device: 'phone', full_page: true })],
+      [use('shop', { action: 'list' }), use('make_graphic', { description: 'a small round blue logo', path: 'images/logo.svg', width: 64, height: 64 })],
+      [use('publish', { as_front_page: true })],
+    ];
+    if (turn < steps.length) return steps[turn];
+    return [use('finish', { summary: 'site tools test', status: 'continuing' })];
+  }
   if (names.includes('write_file')) {
     if (turn === 0) return [use('write_file', { path: 'index.html', content: '<!doctype html><title>Clock</title><h1>Clock</h1><p id="t"></p><script>setInterval(()=>{ document.getElementById("t").textContent = new Date().toLocaleTimeString(); tick(); }, 500)</script>' }), use('write_file', { path: 'check.js', content: 'console.log("2+2 =", 2 + 2);' })];
     if (turn === 1) return [use('run_script', { path: 'check.js' }), ...(names.includes('preview') ? [use('preview', { path: 'index.html' })] : [])];
@@ -50,6 +60,7 @@ function sittingTurn(body) {
 }
 function respond(body) {
   const sys = JSON.stringify(body.system), p = textOf(body.messages[0].content);
+  if (/SVG graphics for websites/.test(sys)) return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="#3a6fd8"/><circle cx="32" cy="32" r="14" fill="#ffffff"/><path d="M10 32h44" stroke="#123" stroke-width="3"/></svg>' };
   if (/3D toy designer/.test(sys)) return { name: 'cat statue', look: 'a grey four-legged figure sitting upright on a stone block, with pointed ears and a red band at its neck, about twice your height', label: '', parts: [{ shape: 'box', size: [1, 0.3, 1], pos: [0, 0.15, 0], color: '#888888' }, { shape: 'sphere', size: [0.6], pos: [0, 1, 0], color: '#bbbbbb' }] };
   if (/describe places/.test(sys)) return { feel: 'Dim and quiet, with dust in the light.', items: [{ name: 'a mantel clock', look: 'a wooden box with a round glass face and two thin hands', text: 'Hattersley & Sons', can_take: true }, { name: 'a railway timetable', look: 'a folded sheet of thin paper printed with columns of numbers', text: 'Mossbrook 08:12, 09:40, 11:05', can_take: true }, { name: 'a chair', look: 'a wooden seat with four legs and a back', text: '', can_take: false }] };
   if (/write as Percy/.test(sys)) return { title: 'Notes on the clock', body: 'The tower has a face with two hands. I do not know yet how it keeps going.' };

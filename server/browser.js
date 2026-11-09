@@ -102,12 +102,47 @@ async function withPage(url, fn, { width = 1000, height = 750, waitMs = 1200 } =
 }
 
 // Preview one of his own pages: what really happens when it runs
-export async function preview(url) {
-  return withPage(url, async ({ evalJS, call, log, loaded }) => {
-    const info = await evalJS(`JSON.stringify({ title: document.title, text: (document.body ? document.body.innerText : '').replace(/\\s+\\n/g, '\\n').slice(0, 1500), elements: document.querySelectorAll('*').length, canvas: document.querySelectorAll('canvas').length })`);
-    const shot = await call('Page.captureScreenshot', { format: 'jpeg', quality: 55 });
-    return { loaded, ...(JSON.parse(info || '{}')), console: log.console.slice(0, 30), errors: log.errors.slice(0, 20), failed: log.failed.slice(0, 15), blocked: log.blocked.slice(0, 10), screenshot: shot.data };
-  }, { waitMs: 1500 });
+// devices he can look at his pages on
+const DEVICES = { desktop: { width: 1280, height: 800 }, laptop: { width: 1000, height: 750 }, tablet: { width: 820, height: 1100 }, phone: { width: 390, height: 844 } };
+// preview: errors, failed requests, visible text and a screenshot; optionally on a phone or tablet, the whole page,
+// after clicking or typing into something, or scrolled to a part of the page
+export async function preview(url, { device = 'laptop', fullPage = false, click = '', type = null, scrollTo = '' } = {}) {
+  const dv = DEVICES[device] || DEVICES.laptop;
+  return withPage(url, async ({ evalJS, call, log, loaded, sessionId }) => {
+    if (device === 'phone' || device === 'tablet') await call('Emulation.setDeviceMetricsOverride', { width: dv.width, height: dv.height, deviceScaleFactor: 1, mobile: true }, sessionId);
+    const did = [];
+    if (type && type.selector) { did.push('typed: ' + await evalJS(`(() => { const e = document.querySelector(${JSON.stringify(type.selector)}); if (!e) return 'no element matches'; e.focus(); e.value = ${JSON.stringify(String(type.text || ''))}; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); return 'ok'; })()`)); }
+    if (click) { did.push('clicked: ' + await evalJS(`(() => { const e = document.querySelector(${JSON.stringify(click)}); if (!e) return 'no element matches'; e.scrollIntoView({ block: 'center' }); e.click(); return 'ok'; })()`)); await new Promise(r => setTimeout(r, 700)); }
+    if (scrollTo) { did.push('scrolled: ' + await evalJS(`(() => { const e = document.querySelector(${JSON.stringify(scrollTo)}); if (!e) return 'no element matches'; e.scrollIntoView({ block: 'start' }); return 'ok'; })()`)); await new Promise(r => setTimeout(r, 300)); }
+    const info = await evalJS(`JSON.stringify({ title: document.title, text: (document.body ? document.body.innerText : '').replace(/\\s+\\n/g, '\\n').slice(0, 1500), elements: document.querySelectorAll('*').length, pageHeight: document.documentElement.scrollHeight, overflowsSideways: document.documentElement.scrollWidth > innerWidth + 2 })`);
+    let clip;
+    if (fullPage) { const h = Math.min(6000, JSON.parse(info || '{}').pageHeight || dv.height); clip = { x: 0, y: 0, width: dv.width, height: h, scale: dv.width > 900 ? 0.6 : 1 }; }
+    const shot = await call('Page.captureScreenshot', { format: 'jpeg', quality: 55, ...(clip ? { clip, captureBeyondViewport: true } : {}) }, sessionId);
+    return { loaded, device: device in DEVICES ? device : 'laptop', ...(did.length ? { actions: did } : {}), ...(JSON.parse(info || '{}')), console: log.console.slice(0, 30), errors: log.errors.slice(0, 20), failed: log.failed.slice(0, 15), blocked: log.blocked.slice(0, 10), screenshot: shot.data };
+  }, { width: dv.width, height: dv.height, waitMs: 1500 });
+}
+
+// a check of a page for the problems that make a site look broken or hard to use
+export async function checkPage(url) {
+  const out = {};
+  for (const device of ['laptop', 'phone']) {
+    const dv = DEVICES[device];
+    out[device] = await withPage(url, async ({ evalJS, call, log, sessionId }) => {
+      if (device === 'phone') { await call('Emulation.setDeviceMetricsOverride', { width: dv.width, height: dv.height, deviceScaleFactor: 1, mobile: true }, sessionId); await evalJS('new Promise(r => setTimeout(r, 400))'); }
+      const r = JSON.parse(await evalJS(`(async () => {
+        const imgs = [...document.images], broken = imgs.filter(i => i.complete && i.naturalWidth === 0).map(i => i.getAttribute('src')), noAlt = imgs.filter(i => !i.hasAttribute('alt')).map(i => i.getAttribute('src'));
+        const wide = [...document.querySelectorAll('body *')].filter(e => { const b = e.getBoundingClientRect(); return b.right > innerWidth + 2 && getComputedStyle(e).position !== 'fixed'; }).slice(0, 5).map(e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\\s+/)[0] : ''));
+        const small = [...document.querySelectorAll('p, li, a, span, td, label, button')].filter(e => e.innerText && e.innerText.trim() && parseFloat(getComputedStyle(e).fontSize) < 12).length;
+        const links = [...new Set([...document.querySelectorAll('a[href]')].map(a => a.href).filter(h => h.startsWith(location.origin) && !h.includes('#')))].slice(0, 25), badLinks = [];
+        for (const h of links) { try { const res = await fetch(h, { method: 'GET' }); if (!res.ok) badLinks.push(res.status + ' ' + h.replace(location.origin, '')); } catch (e) { badLinks.push('failed ' + h.replace(location.origin, '')); } }
+        const tiny = [...document.querySelectorAll('a, button, input, select')].filter(e => { const b = e.getBoundingClientRect(); return b.width && b.height && (b.width < 24 || b.height < 24); }).length;
+        return JSON.stringify({ title: document.title || '(no title)', hasViewportMeta: !!document.querySelector('meta[name=viewport]'), hasDescription: !!document.querySelector('meta[name=description]'), lang: document.documentElement.lang || '(not set)',
+          brokenImages: broken, imagesWithoutAlt: noAlt.length, sidewaysOverflow: document.documentElement.scrollWidth > innerWidth + 2, tooWide: wide, textUnder12px: small, tinyTapTargets: tiny, brokenLinks: badLinks, headings: [...document.querySelectorAll('h1,h2,h3')].slice(0, 12).map(h => h.tagName + ' ' + h.innerText.trim().slice(0, 60)) });
+      })()`) || '{}');
+      return { ...r, errors: log.errors.slice(0, 10), failed: log.failed.slice(0, 10) };
+    }, { width: dv.width, height: dv.height, waitMs: 1500 });
+  }
+  return out;
 }
 
 // Read a web page: its text (main content first), title, final address, and a few links to follow

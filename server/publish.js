@@ -45,13 +45,13 @@ const wrap = (title, inner) => `<!doctype html><html lang="en"><head><meta chars
 export function pageHTML(p) {
   return wrap(p.title, `<p><a href="../">← index</a></p><h1>${esc(p.title)}</h1><p class="meta">written on day ${p.day}${p.forWho ? ' · for ' + esc(p.forWho) : ''}</p><div class="body">${esc(p.body)}</div>`);
 }
-export function indexHTML(S) {
+export function indexHTML(S, { asArchive = false } = {}) {
   const projects = S.projects.filter(p => p.url).slice().reverse().map(p => `<li><a href="projects/${p.slug}/">${esc(p.title)}</a> <span class="meta">· started day ${p.day} · ${p.sittings} sitting${p.sittings === 1 ? '' : 's'} · ${esc(p.status)}</span></li>`).join('');
   const pages = S.pages.filter(p => p.published).slice().reverse().map(p => `<li><a href="pages/${slug(p.title)}.html">${esc(p.title)}</a> <span class="meta">· day ${p.day}</span></li>`).join('');
   const drawings = S.drawings.filter(d => d.published).slice().reverse().slice(0, 60).map(d => `<figure><img src="drawings/${d.id}.svg" alt="${esc(d.title)}" loading="lazy"><figcaption>${esc(d.title)} · day ${d.day}</figcaption></figure>`).join('');
   const forSale = (S.shop || []).filter(x => !x.sold && !x.withdrawn).length;
   const links = [config.publicUrl ? `<a href="${esc(config.publicUrl.replace(/\/$/, ''))}/shop">his shop and orders${forSale ? ' (' + forSale + ' for sale)' : ''}</a>` : '', config.kofiUrl ? `<a href="${esc(config.kofiUrl)}">support him on Ko-fi</a>` : ''].filter(Boolean).join(' · ');
-  return wrap('Percy', `<h1>Percy</h1>${links ? '<p>' + links + '</p>' : ''}
+  return wrap(asArchive ? 'Everything Percy has published' : 'Percy', `${asArchive ? '<p><a href="./">← his front page</a></p><h1>Everything he has published</h1>' : '<h1>Percy</h1>'}${links ? '<p>' + links + '</p>' : ''}
 <h2>Projects</h2>${projects ? '<ul>' + projects + '</ul>' : '<p class="meta">None published yet.</p>'}
 <h2>Writing</h2>${pages ? '<ul>' + pages + '</ul>' : '<p class="meta">None published yet.</p>'}
 <h2>Drawings</h2>${drawings ? '<div class="grid">' + drawings + '</div>' : '<p class="meta">None published yet.</p>'}`);
@@ -61,12 +61,13 @@ export function indexHTML(S) {
 export const SHOP_MARK = 'percy-shop';
 export const SHOP_SLOT = new RegExp('<script[^>]*id=["\']' + SHOP_MARK + '["\'][^>]*>[\\s\\S]*?<\\/script>', 'i');
 export function fillShop(html, data) { return SHOP_SLOT.test(html) ? html.replace(SHOP_SLOT, () => '<script type="application/json" id="' + SHOP_MARK + '">' + JSON.stringify(data).replace(/</g, '\\u003c') + '</script>') : html; }
+// projectSlug '' publishes to the root of his site (the project is his front page)
 export function publishFiles(projectSlug, files, shopData, message) {
-  let n = 0, bytes = 0;
+  let n = 0, bytes = 0; const base = projectSlug ? 'projects/' + projectSlug + '/' : '';
   for (const f of files) {
-    if (n >= 80 || bytes > 3 * 1024 * 1024) break;
+    if (n >= 120 || bytes > 6 * 1024 * 1024) break;
     const content = /\.html?$/i.test(f.path) ? fillShop(f.content, shopData) : f.content;
-    queueFile('projects/' + projectSlug + '/' + f.path, content, message); n++; bytes += content.length;
+    queueFile(base + f.path, content, message); n++; bytes += content.length;
   }
-  return { files: n, url: siteUrl() + 'projects/' + projectSlug + '/' };
+  return { files: n, url: siteUrl() + base };
 }

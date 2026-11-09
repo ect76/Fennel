@@ -44,6 +44,7 @@ export function capabilities() {
   if (known('green').length) add('fish', '', 'dive for fish in the pond on the green and eat what he catches: free food, daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
   add('sleep', '', 'in his bed at home; ends in the morning'); add('nap', 'minutes', 'at home'); add('rest', 'minutes', 'wherever he is'); add('wait', 'minutes', 'stay and watch what happens');
   add('think', 'about; minutes', 'nothing changes in the world');
+  add('review', 'what: "notes" (his own written notes and pages), a research id (an earlier investigation), a project id, or "ideas"', 'reads back his own past work, wherever he is');
   add('research', 'question; why; continue (optional: the id of an earlier investigation to carry on); where: ' + computers.join(' or '), perms.web_search ? (canSearch() ? 'searches the web and opens pages; a few steps per sitting, continued another time' : 'no web searches left today: only notes and anything already found') : 'web search is not available');
   add('code', 'project: an existing project id, or "new" with a title; goal (what to do this sitting); where: ' + computers.join(' or '), 'writes files, runs code, checks pages in a browser, keeps versions' + (perms.publish_site ? ', publishes to his website' : '') + '; a few steps per sitting, continued another time');
   add('write', 'kind: "page" (something for others to read) or "notes" (private); about; title; publish: true/false', perms.publish_site ? 'pages can go on his website' : '');
@@ -149,6 +150,8 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
   if (mem.procedural.length) L.push('Things he knows how to do:\n' + mem.procedural.map(x => x.skill + ': ' + x.text + (x.worked ? '' : ' (this did not work)')).join('\n'));
   const named = Object.entries(S.mind.knownThings).filter(([, k]) => k.name).map(([id, k]) => id + ' = "' + k.name + '"');
   if (named.length) L.push('Names he has given things: ' + named.join(', '));
+  { const h = W.hourOf(S.t), kp = S.town.places.filter(p => S.mind.knownPlaces[p.id] && p.type !== 'house').slice(0, 30);
+    if (kp.length) L.push('Places he knows (from memory): ' + kp.map(p => { const o = W.TYPES[p.type].open, k = S.mind.knownPlaces[p.id]; return p.id + ' ' + p.name + ' (' + W.TYPES[p.type].label + (o ? ', open ' + o[0] + ':00 to ' + o[1] + ':00, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') : '') + (k.entered ? ', been inside' : '') + ')'; }).join('; ')); }
   L.push('\nINTENTIONS\n' + (active.length ? active.map(i => 'intention ' + i.id + ' (' + i.horizon + ', since day ' + i.day + '): ' + i.text + (i.why ? ' (because ' + i.why + ')' : '') + (i.history.length ? ' [last: ' + JSON.stringify(i.history[i.history.length - 1]).slice(0, 160) + ']' : '') + effortOn(i)).join('\n') : 'none right now'));
   const paused = S.mind.intentions.filter(i => i.status === 'paused').slice(-4);
   if (paused.length) L.push('Paused: ' + paused.map(i => i.id + ': ' + i.text).join('; '));
@@ -279,6 +282,16 @@ function chooseModel() {
   return { model: config.modelBetter, why: why + ' (' + S.betterUse.n + ' of ' + b.betterPerDay + ' today)' };
 }
 
+// his own past work, read back to him (his notes and pages, an investigation, a project's notes, his ideas)
+function reviewText(what) {
+  const w = what.trim();
+  if (/^notes?$|^pages?$/i.test(w)) { const ps = S.pages.slice(-6); return ps.length ? 'looked back over his writing: ' + ps.map(p => '"' + p.title + '" (day ' + p.day + '): ' + String(p.body || '').slice(0, 500)).join(' / ') : 'he has not written anything yet'; }
+  if (/^ideas?$/i.test(w)) { const id = (S.mind.ideas || []).slice(-8); return id.length ? 'looked back over his ideas: ' + id.map(x => x.text || x).join(' / ') : 'he has not written down any ideas'; }
+  const r = S.researchLog.find(l => l.id === w); if (r) return 'looked back over the investigation "' + r.question + '" (day ' + r.day + ', ' + r.status + '): ' + String(r.summary || '').slice(0, 900) + (r.findings && r.findings.length ? ' Findings: ' + r.findings.map(f => f.claim).join('; ').slice(0, 900) : '') + (r.leads && r.leads.length ? ' Leads: ' + r.leads.map(l => l.what).join('; ') : '');
+  const pj = S.projects.find(p => p.id === w); if (pj) return 'looked back over project "' + pj.title + '" (' + pj.status + ', ' + pj.files + ' files' + (pj.url ? ', published at ' + pj.url : '') + '): goal: ' + pj.goal + '; notes: ' + pj.notes.slice(-12).map(n => '[' + n.kind + '] ' + n.text).join(' / ').slice(0, 1200) + (pj.next ? '; next: ' + pj.next : '');
+  return 'there is nothing of his called "' + w.slice(0, 40) + '" to look back over';
+}
+
 function resolveGo(to) {
   const s = String(to || '').trim(); const home = W.home();
   if (!s || /^home$/i.test(s) || s === home.id) return { place: home.id, label: 'home' };
@@ -362,6 +375,7 @@ function plan(type, args, minutes) {
     case 'look': return planLook(args);
     case 'take': { const p = W.placeById(S.inside); if (!p || !p.inside) return fail(null, 'he is not inside anywhere with things to take'); return { place: p.id, enter: true }; }
     case 'read': return planRead(args);
+    case 'review': return { minutes: 10, caption: 'looking back over his work', instant: { facts: [reviewText(String(args.what || ''))] } };
     case 'eat': {
       const w = String(args.where || 'home'); const p = /^home$/i.test(w) ? home : W.placeById(w);
       if (!p || !S.mind.knownPlaces[p.id] || !['home', 'bakery', 'cafe'].includes(p.type)) return fail(null, p && S.mind.knownPlaces[p.id] ? p.name + ' does not sell food' : 'nothing he has seen matches "' + str(args.said_where || w, 30) + '"');
