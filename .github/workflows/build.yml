@@ -39,6 +39,8 @@ jobs:
           platforms: linux/amd64
           provenance: false
           push: true
+          # classic Docker format, which Unraid's update checker reads reliably
+          outputs: type=registry,oci-mediatypes=false
           tags: |
             ${{ env.IMAGE }}:latest
       # keep only the newest few images so old builds don't pile up in storage
