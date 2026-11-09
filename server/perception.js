@@ -44,7 +44,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
     noteSeen(inside, 'knownPlaces', inside.id, { name: inside.name }); inside.known = true;
     const km = mind().knownPlaces[inside.id]; km.entered = (km.entered || 0) + (km.lastInT === S.t ? 0 : 1); km.lastInT = S.t;
     if (inside.type === 'home') {
-      out.room = [S.initial.cottage, 'food left in the cupboard: ' + S.pantry, ...(S.inventory.length ? ['things he keeps here: ' + S.inventory.map(i => i.name).join(', ')] : []),
+      out.room = [S.initial.cottage, 'food in the cupboard: ' + S.pantry + (S.pantry === 1 ? ' thing' : ' things') + ' to eat (tins, loaves or fish he has kept)', ...(S.inventory.length ? ['things he keeps here: ' + S.inventory.map(i => i.name).join(', ')] : []),
         ...(S.drawings.filter(d => !d.sold).length ? [S.drawings.filter(d => !d.sold).length + ' of his drawings lying about'] : []),
         ...(W.postWaiting() ? ['a card on the doormat: "There is post waiting for you at the post office."'] : [])];
     } else if (inside.inside && inside.inside.items) {

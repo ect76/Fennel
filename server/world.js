@@ -205,7 +205,8 @@ function finish(a) {
       const price = 2;
       if (S.coins < price) { ok = false; f.push('could not pay: had ' + S.coins + ' coins, it costs ' + price); break; }
       // buying food to take home: it goes in the cupboard for later
-      const takeHome = Math.max(0, Math.min(6, Math.round(Number(a.args && a.args.take_home) || 0)));
+      const th = a.args && a.args.take_home, WORDS = { one: 1, a: 1, an: 1, two: 2, three: 3, four: 4, five: 5, six: 6, some: 3, few: 3, yes: 1, true: 1 };
+      const takeHome = Math.max(0, Math.min(6, th === true ? 1 : Number.isFinite(Number(th)) ? Math.round(Number(th)) : (String(th || '').toLowerCase().match(/\d+/) ? Number(String(th).match(/\d+/)[0]) : WORDS[(String(th || '').toLowerCase().match(/[a-z]+/) || [''])[0]] || 0)));
       if (takeHome && p && p.type === 'bakery') { const n = Math.min(takeHome, Math.floor(S.coins / price)); S.coins -= n * price; S.pantry += n; f.push('bought ' + n + ' loa' + (n === 1 ? 'f' : 'ves') + ' to take home for ' + n * price + ' coins (' + S.pantry + ' in the cupboard now)'); break; }
       S.coins -= price; S.body.fullness = clamp(S.body.fullness + (p && p.type === 'cafe' ? 30 : 45), 0, 100);
       f.push(p && p.type === 'cafe' ? 'had tea and a slice of cake at ' + p.name + ' for 2 coins' : 'bought a loaf at ' + (p ? p.name : 'the bakery') + ' for 2 coins and ate it');

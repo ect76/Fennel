@@ -40,11 +40,12 @@ export function capabilities() {
   add('take', 'item: something in the room he is in (id or name)', 'only small things');
   add('read', 'what: "notes" (papers under the standing stone, when he is there), "letters" (post he has collected), or an item in this room that has writing (id or name)', '');
   const foodNotes = ['home: ' + S.pantry + ' left in the cupboard'].concat(known('bakery').concat(known('cafe')).map(p => p.id + ' (' + p.name + ', 2 coins, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') + ')'));
-  add('eat', 'where: ' + foodNotes.join('; ') + '; take_home: a number of loaves to buy for the cupboard instead of eating now (bakery only)', 'he has ' + S.coins + ' coins')
+  add('eat', 'where: ' + foodNotes.join('; '), 'eat now; he has ' + S.coins + ' coins');
+  if (known('bakery').length) add('stock_up', 'loaves: how many to buy (1 to 6, 2 coins each); where: the bakery (optional)', 'buy loaves at the bakery to carry home and keep in the cupboard for later, whether or not he is hungry now');
   if (known('green').length) add('fish', 'keep: true to keep the catch for the cupboard instead of eating it', 'dive for fish in the pond on the green: free food, daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
   add('sleep', '', 'in his bed at home; ends in the morning'); add('nap', 'minutes', 'at home'); add('rest', 'minutes', 'wherever he is'); add('wait', 'minutes', 'stay and watch what happens');
   add('think', 'about; minutes', 'nothing changes in the world');
-  add('review', 'what: "notes" (his own written notes and pages), a research id (an earlier investigation), a project id, or "ideas"', 'reads back his own past work, wherever he is');
+  add('review', 'what: "notes" (his own written notes and pages), "requests", "letters", a research id (an earlier investigation), a project id, or "ideas"', 'reads back his own past work, wherever he is');
   add('research', 'question; why; continue (optional: the id of an earlier investigation to carry on); where: ' + computers.join(' or '), perms.web_search ? (canSearch() ? 'searches the web and opens pages; a few steps per sitting, continued another time' : 'no web searches left today: only notes and anything already found') : 'web search is not available');
   add('code', 'project: an existing project id, or "new" with a title; goal (what to do this sitting); where: ' + computers.join(' or '), 'writes files, runs code, checks pages in a browser, keeps versions' + (perms.publish_site ? ', publishes to his website' : '') + '; a few steps per sitting, continued another time');
   add('write', 'kind: "page" (something for others to read) or "notes" (private); about; title; publish: true/false', perms.publish_site ? 'pages can go on his website' : '');
@@ -288,6 +289,8 @@ function reviewText(what) {
   const w = what.trim();
   if (/^notes?$|^pages?$/i.test(w)) { const ps = S.pages.slice(-6); return ps.length ? 'looked back over his writing: ' + ps.map(p => '"' + p.title + '" (day ' + p.day + '): ' + String(p.body || '').slice(0, 500)).join(' / ') : 'he has not written anything yet'; }
   if (/^ideas?$/i.test(w)) { const id = (S.mind.ideas || []).slice(-8); return id.length ? 'looked back over his ideas: ' + id.map(x => x.text || x).join(' / ') : 'he has not written down any ideas'; }
+  if (/^(my |his )?requests?$/i.test(w)) { const rq = S.requests.slice(-8); return rq.length ? 'looked back over his requests: ' + rq.map(q => 'request ' + q.id + ' (day ' + q.day + ', ' + q.status + '): ' + String(q.text || q.what || '').slice(0, 200) + (q.response ? ' — reply: "' + String(q.response).slice(0, 300) + '"' : '')).join(' / ') : 'he has not made any requests'; }
+  if (/^(my |his )?(letters?|post)$/i.test(w)) { const ls = S.letters.filter(l => l.collected).slice(-6); return ls.length ? 'looked back over the letters he has collected: ' + ls.map(l => '(day ' + (l.day || '?') + ') "' + String(l.text || '').slice(0, 400) + '"').join(' / ') : 'he has not collected any letters'; }
   const r = S.researchLog.find(l => l.id === w); if (r) return 'looked back over the investigation "' + r.question + '" (day ' + r.day + ', ' + r.status + '): ' + String(r.summary || '').slice(0, 900) + (r.findings && r.findings.length ? ' Findings: ' + r.findings.map(f => f.claim).join('; ').slice(0, 900) : '') + (r.leads && r.leads.length ? ' Leads: ' + r.leads.map(l => l.what).join('; ') : '');
   const pj = S.projects.find(p => p.id === w); if (pj) return 'looked back over project "' + pj.title + '" (' + pj.status + ', ' + pj.files + ' files' + (pj.url ? ', published at ' + pj.url : '') + '): goal: ' + pj.goal + '; notes: ' + pj.notes.slice(-12).map(n => '[' + n.kind + '] ' + n.text).join(' / ').slice(0, 1200) + (pj.next ? '; next: ' + pj.next : '');
   return 'there is nothing of his called "' + w.slice(0, 40) + '" to look back over';
@@ -351,13 +354,22 @@ function canonical(type, args) {
   if (type === 'look' && a.at && !/^around$/i.test(a.at) && !W.thingById(a.at) && !W.placeById(a.at)) { const it = findItem(a.at), t = !it && findThing(a.at), p = !it && !t && findPlace(a.at); swap('at', it ? it.id : t ? t.id : p ? p.id : null); }
   if (type === 'read' && a.what && !['notes', 'letters'].includes(a.what)) { if (/^(the )?(notes?|notes under the stone)$/i.test(a.what)) swap('what', 'notes'); else if (/^(the )?(letters?|post|my post)$/i.test(a.what)) swap('what', 'letters'); else { const it = findItem(a.what); swap('what', it && it.id); } }
   if (type === 'take' && a.item) { const it = findItem(a.item); swap('item', it && it.id); }
+  if (type === 'stock_up' || type === 'restock' || type === 'buy_food') {
+    const b = (a.where && findPlace(a.where)) || S.town.places.find(p => p.type === 'bakery' && S.mind.knownPlaces[p.id]);
+    return { where: b ? b.id : a.where, take_home: a.loaves || a.count || a.quantity || a.take_home || 3, _as: 'eat' };
+  }
+  if (type === 'eat') { const alt = a.take_home ?? a.takeHome ?? a.to_take_home ?? a.loaves ?? a.carry_home ?? a.quantity; if (alt != null && a.take_home == null) a.take_home = alt; }
+  if (type === 'buy' && a.item && /\b(loaf|loaves|bread|tins?|sardines?|food|groceries|provisions)\b/i.test(a.item) && !S.items.some(i => i.id === a.item)) {
+    const bakery = S.town.places.find(p => p.type === 'bakery' && S.mind.knownPlaces[p.id]);
+    if (bakery) return { where: bakery.id, take_home: a.quantity || a.count || (String(a.item).match(/\d+/) || [])[0] || (/loaves|tins|sardines|groceries|provisions/i.test(a.item) ? 3 : 1), said_buy: a.item, _as: 'eat' };
+  }
   if (type === 'buy' && a.item && !S.items.some(i => i.id === a.item)) { const it = bestMatch(S.items.filter(i => i.seen && !i.sold), a.item, i => [i.name, i.look]); swap('item', it && it.id); }
   return a;
 }
 const knownPlacesList = () => S.town.places.filter(p => S.mind.knownPlaces[p.id]).map(p => p.id + ' (' + p.name + ')').join(', ');
 
 function act(r, j) {
-  const a = r.action, type = String(a.type || '').toLowerCase(), args = canonical(type, a.args && typeof a.args === 'object' ? a.args : {}); a.args = args;
+  const a = r.action; let type = String(a.type || '').toLowerCase(); const args = canonical(type, a.args && typeof a.args === 'object' ? a.args : {}); if (args._as) { type = args._as; delete args._as; a.type = type; } a.args = args;
   const minutes = Number.isFinite(Number(a.minutes)) ? Number(a.minutes) : Number.isFinite(Number(args.minutes)) ? Number(args.minutes) : undefined;
   j.choice = { type, args }; j.minutes = minutes;
   const spec = plan(type, args, minutes);
@@ -381,6 +393,7 @@ function plan(type, args, minutes) {
     case 'read': return planRead(args);
     case 'review': return { minutes: 10, caption: 'looking back over his work', instant: { facts: [reviewText(String(args.what || ''))] } };
     case 'eat': {
+      if (args.take_home && /^home$/i.test(String(args.where || 'home'))) { const b = S.town.places.find(x => x.type === 'bakery' && S.mind.knownPlaces[x.id]); if (b) args.where = b.id; }
       const w = String(args.where || 'home'); const p = /^home$/i.test(w) ? home : W.placeById(w);
       if (!p || !S.mind.knownPlaces[p.id] || !['home', 'bakery', 'cafe'].includes(p.type)) return fail(null, p && S.mind.knownPlaces[p.id] ? p.name + ' does not sell food' : 'nothing he has seen matches "' + str(args.said_where || w, 30) + '"');
       if (p.type === 'home' && S.pantry <= 0) return fail(null, 'the cupboard at home is empty');
