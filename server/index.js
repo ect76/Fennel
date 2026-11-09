@@ -54,7 +54,7 @@ else { W.migrate(S); W.setState(S); S.deciding = false; console.log('[percy] wor
 // today's calls, spending and searches survive restarts, so updating the container never resets the daily limits
 setTimeout(() => { try { shopChanged(true); } catch {} }, 5000); // make sure everything in his shop has its picture online
 if (S.meters) { const today = new Date().toISOString().slice(0, 10); if (S.meters.usage && S.meters.usage.day === today) Object.assign(usage, S.meters.usage); if (S.meters.local && S.meters.local.day === today) Object.assign(Search.local, S.meters.local); }
-function save() { S.lastSeenReal = Date.now(); S.meters = { usage: { ...usage, byPurpose: { ...usage.byPurpose } }, local: { ...Search.local } }; try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
+function save() { S.lastSeenReal = Date.now(); S.meters = { usage: { ...usage, byPurpose: { ...usage.byPurpose }, costBy: { ...(usage.costBy || {}) } }, local: { ...Search.local } }; try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
 
 /* ---------- the keeper's live settings ---------- */
 setBudgetSource(() => S.settings);

@@ -3,10 +3,10 @@
 import { config, PRICES, SEARCH_PRICE } from './config.js';
 
 // Today's spending (real calendar day, UTC). Shown on the Budget panel; never shown to Percy as a score.
-export const usage = { day: '', calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, errors: 0, lastError: '', byPurpose: {} };
+export const usage = { day: '', calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, errors: 0, lastError: '', byPurpose: {}, costBy: {} };
 function rollDay() {
   const d = new Date().toISOString().slice(0, 10);
-  if (usage.day !== d) Object.assign(usage, { day: d, calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, byPurpose: {} });
+  if (usage.day !== d) Object.assign(usage, { day: d, calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, byPurpose: {}, costBy: {} });
 }
 
 // Live limits from the Keeper → Budget panel (saved with the world). index.js hands us a getter.
@@ -61,6 +61,7 @@ function account(model, purpose, u = {}) {
   usage.searches += s; usage.fetches += f;
   const c = costOf(model, u) + s * SEARCH_PRICE; usage.cost += c;
   usage.byPurpose[purpose] = (usage.byPurpose[purpose] || 0) + 1;
+  const key = purpose + (/sonnet|opus/i.test(model) ? ' (Sonnet)' : ''); usage.costBy = usage.costBy || {}; usage.costBy[key] = (usage.costBy[key] || 0) + c;
   return c;
 }
 
@@ -164,5 +165,5 @@ export function status() {
   rollDay(); const b = budget();
   return { mode: !config.apiKey ? 'rules' : b.paused ? 'paused' : canCall() ? 'claude' : 'resting', calls: usage.calls, maxCalls: b.callsPerDay,
     searches: usage.searches, maxSearches: b.searchesPerDay, fetches: usage.fetches, cost: Math.round(usage.cost * 1000) / 1000, maxSpend: b.spendPerDay,
-    quality: b.quality, errors: usage.errors, lastError: usage.lastError, pace: pace(), byPurpose: usage.byPurpose };
+    quality: b.quality, errors: usage.errors, lastError: usage.lastError, pace: pace(), byPurpose: usage.byPurpose, costBy: usage.costBy || {} };
 }

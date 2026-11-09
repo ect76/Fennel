@@ -103,6 +103,7 @@
         <form class="card" id="budgetForm">
           <h2 style="margin:0">Budget</h2>
           <p class="hint" id="usageLine"></p>
+          <p class="hint" id="costLine"></p>
           <div class="row"><label class="fld" style="flex:1;min-width:120px">Claude calls per day<input type="number" id="bCalls" min="0" max="5000"></label><label class="fld" style="flex:1;min-width:120px">Spending cap per day ($)<input type="number" id="bSpend" min="0" max="200" step="0.5"></label></div>
           <div class="row"><label class="fld" style="flex:1;min-width:120px">Paid web searches per day<input type="number" id="bSearch" min="0" max="500"></label><label class="fld" style="flex:1;min-width:150px">Search with<select id="bVia"><option value="auto">Automatic (free first)</option><option value="searxng">SearXNG</option><option value="browser">His own browser</option><option value="claude">Claude's web search (1p each)</option></select></label></div>
           <label class="fld">Thinking<select id="bQuality"><option value="economy">Economical (Haiku, cheapest)</option><option value="mixed">Mixed (Haiku, with Sonnet only when he wakes or gets stuck)</option><option value="better">Better (Sonnet, about 20× the cost)</option></select></label>
