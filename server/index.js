@@ -119,7 +119,7 @@ function saveWall(g, svg) { if (typeof svg !== 'string') return; writeMedia('gra
 const streams = new Set();
 Agent.init(S, {
   save, permissions, watchers: () => streams.size, saveDrawing, saveWall, shopChanged,
-  research: o => Sessions.research({ ...o, how: searchVia() }),
+  research: o => Sessions.research({ ...o, how: searchVia(), siteInfo }),
   code: o => Code.code({ ...o, how: searchVia(), permissions: permissions(), publishProject, shopChanged, siteInfo }),
   writePage: o => Sessions.writePage({ ...o, publishPage }),
   readText: o => Sessions.readText(o),
