@@ -91,7 +91,7 @@ async function withPage(url, fn, { width = 1000, height = 750, waitMs = 1200 } =
     await call('Network.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36' }, sessionId);
     if (!(await allowed(url))) throw new Error('that address is not reachable from here');
     await call('Page.navigate', { url }, sessionId);
-    for (let i = 0; i < 40 && !loaded; i++) await new Promise(r => setTimeout(r, 250));
+    for (let i = 0; i < 80 && !loaded; i++) await new Promise(r => setTimeout(r, 250));
     await new Promise(r => setTimeout(r, waitMs));
     const evalJS = async expr => { const r = await call('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }, sessionId); return r.result ? r.result.value : null; };
     return await fn({ evalJS, call: (m, p) => call(m, p, sessionId), log, loaded });
