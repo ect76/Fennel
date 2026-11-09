@@ -39,8 +39,8 @@ export function capabilities() {
   add('look', 'at: "around", a thing, an item in this room or a place (id or how he knows it), "sky" or "fog"; minutes (optional)', '');
   add('take', 'item: something in the room he is in (id or name)', 'only small things');
   add('read', 'what: "notes" (papers under the standing stone, when he is there), "letters" (post he has collected), or an item in this room that has writing (id or name)', '');
-  const foodNotes = ['home: ' + S.pantry + ' tins left'].concat(known('bakery').concat(known('cafe')).map(p => p.id + ' (' + p.name + ', 2 coins, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') + ')'));
-  add('eat', 'where: ' + foodNotes.join('; '), 'he has ' + S.coins + ' coins');
+  const foodNotes = ['home: ' + S.pantry + ' left in the cupboard'].concat(known('bakery').concat(known('cafe')).map(p => p.id + ' (' + p.name + ', 2 coins, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') + ')'));
+  add('eat', 'where: ' + foodNotes.join('; ') + '; take_home: a number of loaves to buy for the cupboard instead of eating now (bakery only)', 'he has ' + S.coins + ' coins')
   if (known('green').length) add('fish', '', 'dive for fish in the pond on the green and eat what he catches: free food, daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
   add('sleep', '', 'in his bed at home; ends in the morning'); add('nap', 'minutes', 'at home'); add('rest', 'minutes', 'wherever he is'); add('wait', 'minutes', 'stay and watch what happens');
   add('think', 'about; minutes', 'nothing changes in the world');

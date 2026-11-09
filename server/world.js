@@ -201,9 +201,12 @@ function finish(a) {
   let ok = true, data = {};
   switch (a.type) {
     case 'eat': {
-      if (p && p.type === 'home') { if (S.pantry > 0) { S.pantry--; S.body.fullness = clamp(S.body.fullness + 38, 0, 100); f.push('ate a tin of sardines from the cupboard (' + S.pantry + ' left)'); } else { ok = false; f.push('the cupboard was empty'); } break; }
+      if (p && p.type === 'home') { if (S.pantry > 0) { S.pantry--; S.body.fullness = clamp(S.body.fullness + 38, 0, 100); f.push('ate something from the cupboard (' + S.pantry + ' left)'); } else { ok = false; f.push('the cupboard was empty'); } break; }
       const price = 2;
       if (S.coins < price) { ok = false; f.push('could not pay: had ' + S.coins + ' coins, it costs ' + price); break; }
+      // buying food to take home: it goes in the cupboard for later
+      const takeHome = Math.max(0, Math.min(6, Math.round(Number(a.args && a.args.take_home) || 0)));
+      if (takeHome && p && p.type === 'bakery') { const n = Math.min(takeHome, Math.floor(S.coins / price)); S.coins -= n * price; S.pantry += n; f.push('bought ' + n + ' loa' + (n === 1 ? 'f' : 'ves') + ' to take home for ' + n * price + ' coins (' + S.pantry + ' in the cupboard now)'); break; }
       S.coins -= price; S.body.fullness = clamp(S.body.fullness + (p && p.type === 'cafe' ? 30 : 45), 0, 100);
       f.push(p && p.type === 'cafe' ? 'had tea and a slice of cake at ' + p.name + ' for 2 coins' : 'bought a loaf at ' + (p ? p.name : 'the bakery') + ' for 2 coins and ate it');
       break;
