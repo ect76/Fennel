@@ -362,7 +362,10 @@ function act(r, j) {
   const spec = plan(type, args, minutes);
   if (spec.error) { j.outcome = { ok: false, facts: ['could not do that: ' + spec.error] }; finishJournal(j); S.journal.push(j); if (S.journal.length > 300) S.journal.shift(); lastOutcome = { text: type + ' was not possible: ' + spec.error }; lastTrigger = 'previous choice was not possible'; badStreak++; if (badStreak >= 2) { badStreak = 0; return continuity(j, 'two impossible choices in a row'); } return null; }
   badStreak = 0;
-  W.begin({ ...spec, type, args, minutes: spec.minutes ?? minutes, caption: j.caption || spec.caption || '', decision: j });
+  // sensible upper limits: a meal is a meal, not a morning (waiting, resting and work can still be long)
+  const MAXMIN = { eat: 45, buy: 15, enter: 10, take: 10, check_post: 30, leave_note: 20, look: 90, read: 120, fish: 120, request: 30, list_for_sale: 20, unlist: 10, answer_order: 30, deliver_order: 20, propose: 15, go: 0 };
+  let mins = spec.minutes ?? minutes; if (Number.isFinite(mins) && MAXMIN[type] !== undefined && !spec.work) mins = Math.min(mins, MAXMIN[type]);
+  W.begin({ ...spec, type, args, minutes: mins, caption: j.caption || spec.caption || '', decision: j });
   S.journal.push(j); if (S.journal.length > 300) S.journal.shift();
   return j;
 }
