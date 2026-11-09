@@ -214,7 +214,8 @@ function finish(a) {
     case 'fish': {
       if (isDark(h)) { ok = false; f.push('too dark to see anything in the water'); break; }
       const caught = Math.random() < 0.7;
-      if (caught) { S.body.fullness = clamp(S.body.fullness + 22, 0, 100); f.push('dived into the pond and caught a fish, and ate it'); } else f.push('dived into the pond several times and caught nothing');
+      if (caught && a.args && a.args.keep) { S.pantry++; f.push('dived into the pond and caught a fish, and kept it for the cupboard at home (' + S.pantry + ' in the cupboard now)'); }
+      else if (caught) { S.body.fullness = clamp(S.body.fullness + 22, 0, 100); f.push('dived into the pond and caught a fish, and ate it'); } else f.push('dived into the pond several times and caught nothing');
       data.caught = caught; break;
     }
     case 'sleep': f.push('slept until ' + hhmm(S.t)); break;

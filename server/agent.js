@@ -41,7 +41,7 @@ export function capabilities() {
   add('read', 'what: "notes" (papers under the standing stone, when he is there), "letters" (post he has collected), or an item in this room that has writing (id or name)', '');
   const foodNotes = ['home: ' + S.pantry + ' left in the cupboard'].concat(known('bakery').concat(known('cafe')).map(p => p.id + ' (' + p.name + ', 2 coins, ' + (W.isOpen(p, h) ? 'open now' : 'shut now') + ')'));
   add('eat', 'where: ' + foodNotes.join('; ') + '; take_home: a number of loaves to buy for the cupboard instead of eating now (bakery only)', 'he has ' + S.coins + ' coins')
-  if (known('green').length) add('fish', '', 'dive for fish in the pond on the green and eat what he catches: free food, daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
+  if (known('green').length) add('fish', 'keep: true to keep the catch for the cupboard instead of eating it', 'dive for fish in the pond on the green: free food, daylight only' + (W.isDark(h) ? ' (it is dark now)' : ''));
   add('sleep', '', 'in his bed at home; ends in the morning'); add('nap', 'minutes', 'at home'); add('rest', 'minutes', 'wherever he is'); add('wait', 'minutes', 'stay and watch what happens');
   add('think', 'about; minutes', 'nothing changes in the world');
   add('review', 'what: "notes" (his own written notes and pages), a research id (an earlier investigation), a project id, or "ideas"', 'reads back his own past work, wherever he is');
