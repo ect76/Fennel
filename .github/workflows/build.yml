@@ -35,8 +35,17 @@ jobs:
           context: .
           build-args: |
             BUILD_REF=${{ github.sha }}
-          platforms: linux/amd64,linux/arm64
+          # Unraid runs on ordinary PCs, so one x86 image is all it needs (an ARM copy doubled the build time and storage)
+          platforms: linux/amd64
+          provenance: false
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ github.sha }}
+      # keep only the newest few images so old builds don't pile up in storage
+      - uses: actions/delete-package-versions@v5
+        continue-on-error: true
+        with:
+          package-name: fennel
+          package-type: container
+          min-versions-to-keep: 3
+          token: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}

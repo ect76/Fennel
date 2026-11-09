@@ -3,8 +3,8 @@
 name: Preview screenshots
 
 on:
-  push:
-    branches-ignore: [main]
+  # run by hand from the Actions tab (it used to run on every change, which used up build minutes)
+  workflow_dispatch:
   workflow_dispatch:
 
 jobs:
