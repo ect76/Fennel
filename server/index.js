@@ -385,6 +385,16 @@ async function keeper(req, res, what) {
     }
     case 'print-sold': { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
     case 'remove-graffiti': S.graffiti = S.graffiti.filter(g => g.id !== b.id); return ok();
+    case 'journal-export': {
+      const days = Math.max(0, Math.round(Number(b.days) || 0)), today = W.dayOf(S.t), from = days ? today - days + 1 : 0;
+      let rows = []; try { rows = fs.readFileSync(path.join(config.dataDir, 'journal.jsonl'), 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch {}
+      const ids = new Set(rows.map(r => r.id)); rows = rows.concat(S.journal.filter(j => !ids.has(j.id))).filter(j => (j.day || W.dayOf(j.t || 0)) >= from).sort((a, c) => (a.t || 0) - (c.t || 0));
+      const f = j => { const ch = j.choice || {}, o = j.outcome; const L = ['Day ' + j.day + ' · ' + j.time + ' · ' + (ch.type || '?') + (j.src === 'rules' ? ' (simple rules' + (j.reason ? ': ' + j.reason : '') + ')' : j.model ? ' (' + (/sonnet/i.test(j.model) ? 'Sonnet' : 'Haiku') + (j.modelWhy ? ': ' + j.modelWhy : '') + (j.cost ? ', $' + Number(j.cost).toFixed(4) : '') + ')' : '')];
+        for (const [k, v] of [['Trigger', j.trigger], ['Intent', j.intent && (j.intent.text ? j.intent.op + ': ' + j.intent.text : j.intent.op)], ['Choice', ch.type ? ch.type + ' ' + JSON.stringify(ch.args || {}) : ''], ['Expected', j.expectation], ['Thought', j.thought], ['Outcome', o ? (o.ok === false ? '[did not work] ' : '') + ((o.facts || []).join('; ') || 'done') + (o.error ? ' (error: ' + o.error + ')' : '') : '(still in progress)'], ['Memories used', (j.memories || []).length ? String(j.memories.length) : ''], ['Perceived', j.perceived]]) if (v) L.push(k + ': ' + String(v).replace(/\n/g, '\n    '));
+        return L.join('\n'); };
+      const text = 'Percy\'s decision journal · ' + (days ? 'days ' + Math.max(1, from) + ' to ' + today : 'everything') + ' · ' + rows.length + ' decisions · exported ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC\n\n' + rows.map(f).join('\n\n---\n\n') + '\n';
+      return ok({ text, name: 'percy-journal-' + (days ? 'days-' + Math.max(1, from) + '-' + today : 'all') + '.txt', count: rows.length });
+    }
     case 'forget': { const r = forget(b.words, !b.confirm); if (r.error) return send(res, 400, { error: r.error }); return ok(r); }
     case 'remove-inside': { // take something out of a room (it was left there when the room was first described)
       const pl = W.placeById(b.place); const items = pl && pl.inside && pl.inside.items; if (!items) return send(res, 400, { error: 'No such room.' });
