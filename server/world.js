@@ -448,8 +448,8 @@ export function deliverOrder(id, result) {
 export function setListing({ kind, ref, title, price, blurb }) {
   const ex = S.shop.find(x => x.ref === ref && !x.sold && !x.withdrawn);
   price = clamp(Math.round(Number(price) || 0), 1, 500);
-  if (ex) { ex.price = price; if (blurb) ex.blurb = str(blurb, 300); bump(); return ex; }
-  const l = { id: uid(), code: newCode(), kind, ref, title: str(title, 70), blurb: str(blurb, 300), price, day: dayOf(S.t), sold: false };
+  if (ex) { ex.price = price; if (blurb) ex.blurb = str(blurb, 300); if (title) ex.title = str(title, 100); bump(); return ex; }
+  const l = { id: uid(), code: newCode(), kind, ref, title: str(title, 100), blurb: str(blurb, 300), price, day: dayOf(S.t), sold: false };
   if (kind === 'drawing') { const d = S.drawings.find(x => x.id === ref); if (d) { d.onStall = false; d.listed = true; } }
   S.shop.push(l); if (S.shop.length > 150) S.shop.splice(0, S.shop.length - 150);
   wlog('listed "' + l.title + '" for ' + price + ' coins'); bump(); return l;

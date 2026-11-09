@@ -1,12 +1,18 @@
 // Percy's website on GitHub Pages. When GITHUB_TOKEN and GITHUB_REPO are set (and publishing is permitted),
 // his projects, pages and drawings are uploaded. The index is generated plainly; the work on it is his.
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config.js';
 
 const queue = new Map(); // path -> { content, message }
+// the queue is kept on disk, so files waiting to upload survive a restart (an update) instead of being lost
+const QFILE = () => path.join(config.dataDir, 'publish-queue.json');
+function persist() { try { fs.writeFileSync(QFILE(), JSON.stringify([...queue])); } catch {} }
+try { for (const [k, v] of JSON.parse(fs.readFileSync(QFILE(), 'utf8'))) queue.set(k, v); } catch {}
 export const pubStatus = { enabled: false, pushed: 0, queued: 0, lastPush: 0, lastError: '' };
 export const enabled = () => !!(config.githubToken && config.githubRepo);
-pubStatus.enabled = enabled();
-export function queueFile(path, content, message) { if (enabled()) { queue.set(path, { content, message }); pubStatus.queued = queue.size; } }
+pubStatus.enabled = enabled(); pubStatus.queued = queue.size;
+export function queueFile(path, content, message) { if (enabled()) { queue.set(path, { content, message }); pubStatus.queued = queue.size; persist(); } }
 
 async function putFile(path, content, message) {
   const url = `https://api.github.com/repos/${config.githubRepo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
@@ -22,7 +28,7 @@ export async function flush() {
   if (busy || !enabled() || !queue.size) return;
   busy = true;
   try {
-    for (const [path, item] of [...queue]) { await putFile(path, item.content, item.message); queue.delete(path); pubStatus.pushed++; }
+    for (const [path, item] of [...queue]) { await putFile(path, item.content, item.message); queue.delete(path); persist(); pubStatus.pushed++; }
     pubStatus.lastPush = Date.now(); pubStatus.lastError = '';
   } catch (e) { pubStatus.lastError = String(e.message || e); console.warn('[percy] publishing failed:', pubStatus.lastError); }
   finally { busy = false; pubStatus.queued = queue.size; }

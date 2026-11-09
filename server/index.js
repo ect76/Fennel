@@ -52,6 +52,7 @@ if (S && (S.v || 1) < W.SCHEMA) {
 if (!S) { S = W.newWorld(); W.setState(S); console.log('[percy] a new world begins'); }
 else { W.migrate(S); W.setState(S); S.deciding = false; console.log('[percy] world loaded: day ' + W.dayOf(S.t) + ', ' + W.hhmm(S.t)); }
 // today's calls, spending and searches survive restarts, so updating the container never resets the daily limits
+setTimeout(() => { try { shopChanged(true); } catch {} }, 5000); // make sure everything in his shop has its picture online
 if (S.meters) { const today = new Date().toISOString().slice(0, 10); if (S.meters.usage && S.meters.usage.day === today) Object.assign(usage, S.meters.usage); if (S.meters.local && S.meters.local.day === today) Object.assign(Search.local, S.meters.local); }
 function save() { S.lastSeenReal = Date.now(); S.meters = { usage: { ...usage, byPurpose: { ...usage.byPurpose } }, local: { ...Search.local } }; try { saveJSON(SAVE, S); dailyBackup(config.dataDir, S); } catch (e) { console.error('[percy] save failed:', e.message); } }
 
@@ -83,14 +84,16 @@ function publishPage(page) {
   return 'published it on his website';
 }
 // when his listings change: drawings in the shop need their pictures online, and pages with a shop slot need fresh stock
-function shopChanged() {
+function shopChanged(all = false) {
   if (!Pub.enabled()) return;
-  for (const l of W.openListings()) if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d && !d.published) { try { Pub.queueFile('drawings/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'drawing for the shop'); d.published = true; } catch {} } }
+  for (const l of W.openListings()) if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d && (all || !d.published)) { try { Pub.queueFile('drawings/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'drawing for the shop'); d.published = true; } catch {} } }
   for (const pr of S.projects) if (pr.url) { const files = WS.readAll(pr.slug).filter(f => /\.html?$/i.test(f.path) && Pub.SHOP_SLOT.test(f.content)); if (files.length) Pub.publishFiles(pr.slug, files, shopData(), 'shop stock'); }
   siteIndex();
 }
+// a title from a description: the first clause, cut at a word boundary
+function shortTitle(t) { t = String(t || '').trim().split(/[.;\n]/)[0]; if (t.length <= 70) return t; const cut = t.slice(0, 70); return cut.slice(0, cut.lastIndexOf(' ') > 30 ? cut.lastIndexOf(' ') : 70).replace(/[,\s]+$/, '') + '…'; }
 function saveDrawing({ subject, svg, atStall, order }) {
-  const d = { id: 'd' + uid(), day: W.dayOf(S.t), time: W.hhmm(S.t), title: str(subject, 60), subject: str(subject, 300), offerAtStall: !!atStall, forOrder: order || '', sold: false };
+  const d = { id: 'd' + uid(), day: W.dayOf(S.t), time: W.hhmm(S.t), title: shortTitle(subject), subject: str(subject, 300), offerAtStall: !!atStall, forOrder: order || '', sold: false };
   writeMedia('drawings/' + d.id + '.svg', svg); S.drawings.push(d); if (S.drawings.length > 400) S.drawings.shift();
   return { facts: ['finished a drawing: "' + d.title + '" (' + d.id + ')' + (atStall ? '; it is to go out on the stall next time he is there' : '')], refs: { drawing: [d.id] }, lifeExtra: { drawing: d.id } };
 }
