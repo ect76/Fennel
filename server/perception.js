@@ -24,6 +24,20 @@ function bearing(from, to) {
   return far + ', to the ' + dir;
 }
 const mind = () => W.S.mind;
+// what he notices while walking past: buildings within sight of the path that he had never seen
+export function seeAlong(path) {
+  const S = W.S; if (!Array.isArray(path) || path.length < 2) return [];
+  const h = W.hourOf(S.t), r = W.isDark(h) ? SIGHT * 0.5 : S.weather.kind === 'fog' ? SIGHT * 0.4 : SIGHT * 0.8, pts = [], seen = [];
+  for (let i = 1; i < path.length; i++) { const A = path[i - 1], B = path[i], n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.z - A.z) / 3)); for (let k = 0; k <= n; k++) pts.push({ x: A.x + (B.x - A.x) * k / n, z: A.z + (B.z - A.z) * k / n }); }
+  for (const p of S.town.places) {
+    if (mind().knownPlaces[p.id] || !p.door) continue;
+    if (!pts.some(q => Math.hypot(p.door.x - q.x, p.door.z - q.z) <= r + Math.max(p.w || 0, p.d || 0) / 2)) continue;
+    noteSeen(p, 'knownPlaces', p.id, { name: p.name }); if (!p.known) { p.known = true; S.town.ver++; }
+    const sign = SIGN[p.type] === '' ? '' : (p.signText || p.name), road = W.roadAt(p.door.x, p.door.z);
+    seen.push('place ' + p.id + ': ' + (LOOK[p.type] || W.TYPES[p.type].label) + (sign ? ' with a sign reading "' + sign + '"' : '') + (road ? ' (on ' + road + ')' : ''));
+  }
+  return seen.slice(0, 12);
+}
 export function knowsPlace(id) { return !!mind().knownPlaces[id]; }
 export function thingName(th) { const k = mind().knownThings[th.id]; return (k && k.name) || null; }
 export function thingWords(th) { const n = thingName(th); return n ? n + ' (' + (th.look || 'an object') + ')' : (th.look || 'an object about ' + (th.size || 2) + ' units tall'); }

@@ -34,6 +34,8 @@ export function capabilities() {
   const h = W.hourOf(S.t), perms = hooks.permissions(), C1 = [];
   const add = (type, args, note) => C1.push({ type, args, note });
   const libs = known('library'), computers = ['"home" (the old computer on his desk)'].concat(libs.map(l => l.id + ' (' + l.name + (W.isOpen(l, h) ? ', open now' : ', shut now') + ')'));
+  { const unwalked = [...new Set(S.town.edges.filter(e => !e.path && e.name && !S.mind.roadsWalked.includes(e.name)).map(e => e.name))];
+    add('explore', 'road (optional: one he has not walked yet)', unwalked.length ? 'walk somewhere he has never been and see what is there; ' + unwalked.length + ' road' + (unwalked.length === 1 ? '' : 's') + ' in the village he has not walked yet' : 'wander out past everything he knows'); }
   add('go', 'to: a place or thing he has seen (its id, or how he knows it: a sign he read, what it looks like, a name he gave it), a road name from a street sign, or "home"', 'walking takes a few minutes');
   add('enter', 'place: a place he has seen (id or name)', 'some places only open at certain hours');
   add('look', 'at: "around", a thing, an item in this room or a place (id or how he knows it), "sky" or "fog"; minutes (optional)', '');
@@ -386,6 +388,21 @@ function act(r, j) {
 function plan(type, args, minutes) {
   const h = W.hourOf(S.t), home = W.home();
   switch (type) {
+    case 'explore': {
+      const want = String(args.road || '').toLowerCase().replace(/^(the|up|down|along)\s+/, '');
+      let roads = S.town.edges.filter(e => !e.path && e.name && !S.mind.roadsWalked.includes(e.name));
+      if (want) { const m = roads.filter(e => e.name.toLowerCase() === want); if (m.length) roads = m; }
+      if (roads.length) { // the nearest unwalked road, walked to its far end
+        let best = null;
+        for (const e of roads) { const A = S.town.nodes[e.a], B = S.town.nodes[e.b], dA = Math.hypot(A.x - S.pos.x, A.z - S.pos.z), dB = Math.hypot(B.x - S.pos.x, B.z - S.pos.z), near = Math.min(dA, dB); if (!best || near < best.near) best = { near, e, far: dA > dB ? A : B, other: dA > dB ? B : A }; }
+        const all = S.town.edges.filter(e => e.name === best.e.name); let far = best.far, fd = Math.hypot(far.x - S.pos.x, far.z - S.pos.z);
+        for (const e of all) for (const id of [e.a, e.b]) { const n = S.town.nodes[id], d = Math.hypot(n.x - S.pos.x, n.z - S.pos.z); if (d > fd) { far = n; fd = d; } }
+        return { dest: { x: far.x, z: far.z }, caption: 'exploring ' + best.e.name, minutes: 0 };
+      }
+      const nodes = Object.values(S.town.nodes); if (!nodes.length) return fail(null, 'there is nowhere further to go');
+      const far = nodes.map(n => ({ n, d: Math.min(...S.town.places.filter(p => S.mind.knownPlaces[p.id]).map(p => Math.hypot(p.door.x - n.x, p.door.z - n.z)), 999) })).sort((a, b) => b.d - a.d)[0].n;
+      return { dest: { x: far.x, z: far.z }, caption: 'wandering out past the places he knows', minutes: 0 };
+    }
     case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
     case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
@@ -508,7 +525,7 @@ export function glance() {
   const p = P.perceive({ sinceT: S.t, watchers: 0 });
   for (const n of p.newly) {
     const [kind, id] = n.split(':');
-    if (kind === 'place') { const x = (p.places || []).find(q => q.id === id); if (x) Mem.episode({ what: 'passed ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' for the first time', where: W.whereWords(), kind: 'notice', importance: 2, refs: { place: [id] } }); }
+    if (kind === 'place') { const x = (p.places || []).find(q => q.id === id); if (x && S.act) (S.act.passed = S.act.passed || []).push('place ' + id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '')); if (x) Mem.episode({ what: 'passed ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' for the first time', where: W.whereWords(), kind: 'notice', importance: 2, refs: { place: [id] } }); }
     if (kind === 'thing') { const x = (p.things || []).find(q => q.id === id); if (x) Mem.episode({ what: 'noticed ' + x.what + ' (' + x.where + ') for the first time', where: W.whereWords(), kind: 'notice', importance: 2, refs: { thing: [id] } }); }
   }
 }
@@ -541,6 +558,7 @@ export function onComplete(a, outcome) {
   const extra = interpret(a, outcome, facts);
   if (outcome.error) facts.push('it did not work out: ' + outcome.error);
   noteWalk(a);
+  { const passed = (a.passed || []).concat(P.seeAlong(a.path)); if (passed.length) facts.push('on the way he passed somewhere he had never seen: ' + passed.join('; ')); }
   const text = (a.caption || a.type) + ': ' + (facts.length ? facts.join('; ') : 'done') + '.';
   const imp = extra.importance || (outcome.ok === false ? 2 : ['research', 'code', 'write', 'draw', 'paint_wall', 'check_post', 'request', 'enter'].includes(a.type) ? 3 : 1);
   const ep = Mem.episode({ what: a.caption || a.type, where: W.whereWords(), outcome: facts.join('; '), kind: a.type, importance: imp, refs: extra.refs || {}, words: j.thought || '' });
