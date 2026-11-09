@@ -100,6 +100,34 @@ function siteInfo() {
   return { url: Pub.enabled() ? Pub.siteUrl() : '', frontPage: S.siteHome || '', published: S.projects.filter(p => p.url).map(p => ({ id: p.id, title: p.title, path: S.siteHome === p.slug ? '/ (front page) and /projects/' + p.slug + '/' : '/projects/' + p.slug + '/' })),
     pages: S.pages.filter(p => p.published).map(p => ({ title: p.title, path: '/pages/' + Pub.slug(p.title) + '.html' })) };
 }
+// the keeper's last resort: take a subject out of his mind entirely (removed memories are kept in forgotten.jsonl, not lost)
+function forget(words, dry) {
+  const list = String(words || '').split(/[,;\n]/).map(w => w.trim()).filter(w => w.length >= 3).slice(0, 20);
+  if (!list.length) return { error: 'Give at least one word or name (3+ letters).' };
+  const re = new RegExp(list.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*')).join('|'), 'i');
+  const hit = x => re.test(JSON.stringify(x)), M = S.mind, gone = [], counts = {};
+  const sweep = (name, arr, keepIf = () => false) => { if (!Array.isArray(arr)) return arr; const out = []; for (const x of arr) { if (hit(x) && !keepIf(x)) { gone.push({ ...(typeof x === 'object' ? x : { text: x }), forgottenAs: name }); counts[name] = (counts[name] || 0) + 1; } else out.push(x); } return out; };
+  const next = {
+    episodic: sweep('experiences', M.episodic), semantic: sweep('things he knows', M.semantic), personal: sweep('views of himself', M.personal), procedural: sweep('skills', M.procedural),
+    intentions: sweep('intentions', M.intentions), questions: sweep('questions', M.questions), ideas: sweep('ideas', M.ideas), sIdeas: sweep('ideas', S.ideas),
+    research: sweep('investigations', S.researchLog), pages: sweep('private notes', S.pages, p => p.published)
+  };
+  const strip = t => String(t || '').split(/(?<=[.!?])\s+/).filter(s => !re.test(s)).join(' ');
+  const sums = (M.summaries || []).filter(s => re.test(s.text)); if (sums.length) counts['day summaries trimmed'] = sums.length;
+  const kt = Object.entries(M.knownThings || {}).filter(([id, v]) => hit(v) || hit(W.thingById(id) || {})); if (kt.length) counts['things he remembers seeing'] = kt.length;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const sample = gone.slice(0, 8).map(g => g.forgottenAs + ': ' + String(g.text || g.what || g.question || g.title || '').slice(0, 140));
+  if (dry || !total) return { counts, total, sample, words: list };
+  try { fs.appendFileSync(path.join(config.dataDir, 'forgotten.jsonl'), gone.concat(sums.map(s => ({ kind: 'summary', ...s })), kt.map(([id, v]) => ({ kind: 'knownThing', id, v }))).map(x => JSON.stringify({ forgotten: new Date().toISOString(), words: list, ...x })).join('\n') + '\n'); } catch {}
+  Object.assign(M, { episodic: next.episodic, semantic: next.semantic, personal: next.personal, procedural: next.procedural, intentions: next.intentions, questions: next.questions, ideas: next.ideas });
+  S.ideas = next.sIdeas; S.researchLog = next.research; S.pages = next.pages;
+  for (const s of sums) s.text = strip(s.text);
+  for (const [id] of kt) delete M.knownThings[id];
+  for (const i of M.intentions) if (i.notes && Array.isArray(i.notes)) i.notes = i.notes.filter(n => !hit(n));
+  if (S.thought && re.test(S.thought.text || '')) S.thought = null;
+  W.wlog('the keeper took ' + list.join(', ') + ' out of his memory (' + total + ' memories)'); save(); W.bump();
+  return { counts, total, sample, words: list, done: true };
+}
 function shopChanged(all = false) {
   if (!Pub.enabled()) return;
   for (const l of W.openListings()) if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d && (all || !d.published)) { try { Pub.queueFile('drawings/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'drawing for the shop'); d.published = true; } catch {} } }
@@ -357,6 +385,7 @@ async function keeper(req, res, what) {
     }
     case 'print-sold': { const r = W.buyDrawing(String(b.id || ''), { print: true, coins: config.printCoins }); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
     case 'remove-graffiti': S.graffiti = S.graffiti.filter(g => g.id !== b.id); return ok();
+    case 'forget': { const r = forget(b.words, !b.confirm); if (r.error) return send(res, 400, { error: r.error }); return ok(r); }
     case 'remove-inside': { // take something out of a room (it was left there when the room was first described)
       const pl = W.placeById(b.place); const items = pl && pl.inside && pl.inside.items; if (!items) return send(res, 400, { error: 'No such room.' });
       const it = items.find(i => i.id === b.id); if (!it) return send(res, 400, { error: 'It isn\'t there.' });

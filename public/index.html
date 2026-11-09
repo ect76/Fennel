@@ -181,6 +181,13 @@
         <div class="card"><h2 style="margin:0">Buildings</h2><p class="hint">Take a building out of Mossbrook. If he knew it, he'll notice it's gone when he's next nearby.</p><ul class="list" id="kBuildings"></ul></div>
         <div class="card"><h2 style="margin:0">Graffiti</h2><ul class="list" id="kGraffiti"></ul></div>
         <div class="card"><h2 style="margin:0">In the shops</h2><ul class="list" id="kItems"></ul></div>
+        <form class="card" id="forgetForm">
+          <h2 style="margin:0">Make him forget something</h2>
+          <p class="hint">A last resort: this reaches into his mind, which nothing else here does. Every memory, question, intention, investigation and private note that mentions any of these words is taken out (kept in forgotten.jsonl on the server, not shown to him). His published work and the world's own record are left alone. Preview first.</p>
+          <label class="fld">Words or names, separated by commas<input type="text" id="forgetWords" maxlength="400" placeholder="e.g. Hollow Fields, Inkberrow"></label>
+          <div class="row"><button type="submit" class="btn small" id="forgetPreview">Preview</button><button type="button" class="btn small" id="forgetGo" disabled>Forget these</button><span class="hint" id="forgetStatus" role="status"></span></div>
+          <ul class="list" id="forgetSample"></ul>
+        </form>
         <div class="card"><h2 style="margin:0">Inside buildings</h2><p class="hint">What was left in rooms when he first went in. If he has already seen something, he may notice it's gone.</p><div id="kRooms" style="display:grid;gap:10px"></div></div>
         <div class="card" id="kPrintsWrap" hidden><h2 style="margin:0">Real print sales</h2><p class="hint">When someone buys a real print through your shop link, record it here so Percy finds coins in his tin.</p><ul class="list" id="kPrints"></ul></div>
         <div class="card"><h2 style="margin:0">Notes</h2><ul class="list" id="kNotes"></ul></div>
