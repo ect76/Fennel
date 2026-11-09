@@ -169,7 +169,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p }) {
   if (S.inventory.length) L.push('His belongings: ' + S.inventory.map(i => i.id + ' ' + i.name).join('; '));
   if (orders.length) L.push('Orders from outside: ' + orders.map(c => 'order ' + c.id + ' (' + c.status + ', wants ' + W.COMMISSION_KINDS[c.kind] + ', offers ' + c.offer + ' coins' + (c.from ? ', from ' + c.from : '') + '): "' + c.text + '"').join('; '));
   const listings = W.openListings(); if (listings.length) L.push('In his shop: ' + listings.map(x => '"' + x.title + '" ' + x.price + ' coins').join('; '));
-  if (reqs.length) L.push('His requests: ' + reqs.map(r => 'request ' + r.id + ' (' + r.status + (r.response ? ', reply: "' + r.response + '"' : '') + ', asked day ' + r.day + '): ' + r.what).join('; '));
+  if (reqs.length) L.push('His requests (answers come as letters to the post office, in their own time): ' + reqs.map(r => 'request ' + r.id + ' (' + r.status + (r.response ? ', reply: "' + r.response + '"' : '') + ', asked day ' + r.day + '): ' + r.what).join('; '));
   L.push('\nWHAT HE CAN DO (choose one; ids or the names he knows things by)\n' + caps.map(c => '- ' + c.type + (c.args ? ' {' + c.args + '}' : '') + (c.note ? ': ' + c.note : '')).join('\n'));
   if (p !== 'plenty') L.push('\nHis capacity for long, effortful work is ' + p + ' for the rest of today; simple activities cost nothing.');
   return L.join('\n');
@@ -274,7 +274,8 @@ function chooseModel() {
   else if ((S.body.fullness < 10 || S.body.energy < 10) && gap('body', 180)) why = 'body in trouble';
   else {
     const recent = S.journal.slice(-6).filter(j => j.choice && j.src !== 'body');
-    const stuck = (recent.length >= 5 && recent.every(j => j.choice.type === recent[0].choice.type)) || recent.slice(-4).filter(j => j.outcome && j.outcome.ok === false).length >= 3;
+    const kind = t => ['wait', 'rest', 'think', 'nap'].includes(t) ? 'idle' : t;
+    const stuck = (recent.length >= 5 && recent.every(j => kind(j.choice.type) === kind(recent[0].choice.type))) || recent.slice(-4).filter(j => j.outcome && j.outcome.ok === false).length >= 3;
     if (stuck && gap('stuck', 120)) why = 'stuck';
   }
   if (!why) return { model: modelFor('decide') };
@@ -451,7 +452,7 @@ function planRequest(args) {
   const what = str(args.what, 300); if (!what) return fail(null, 'a request needs to say what');
   const q = { id: 'r' + uid(), day: W.dayOf(S.t), time: W.hhmm(S.t), kind: ['object', 'tool', 'permission', 'space', 'capability', 'other'].includes(args.kind) ? args.kind : 'other', what, why: str(args.why, 500), missing: str(args.missing, 300), alternatives: str(args.alternatives, 300), dependencies: str(args.dependencies, 300), interest: ['low', 'medium', 'high'].includes(args.interest) ? args.interest : 'medium', status: 'open', response: '', notes: [] };
   S.requests.push(q); if (S.requests.length > 200) S.requests.shift();
-  return { minutes: 15, instant: { facts: ['wrote a request to whoever keeps the village: ' + what] } };
+  return { minutes: 15, instant: { facts: ['wrote a request to whoever keeps the village: ' + what + '. It has gone off; any answer will come as a letter to the post office, perhaps hours or days from now, so there is no need to wait in for it'] } };
 }
 function lookInsideWork(placeId) {
   return async () => {
