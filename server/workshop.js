@@ -11,6 +11,7 @@ export const ROOT = path.resolve(config.dataDir, 'workspace');
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BLOCK = path.join(here, 'sandbox-block.mjs');
 const TEXT = /\.(html?|css|m?js|json|svg|txt|md|csv|xml)$/i;
+export const BIN = /\.(png|jpe?g|webp|gif|avif|ico|woff2?|ttf|otf)$/i; // images and fonts, brought in with download_file
 const LIMITS = { file: 400 * 1024, project: 6 * 1024 * 1024, files: 120 };
 fs.mkdirSync(ROOT, { recursive: true });
 
@@ -59,7 +60,18 @@ export function edit(slug, rel, oldStr, newStr) {
   return write(slug, rel, s.replace(String(oldStr), () => String(newStr ?? '')));
 }
 export function remove(slug, rel) { const p = safe(slug, rel); if (!fs.existsSync(p)) throw new Error('no such file'); fs.rmSync(p); return { removed: rel }; }
-export function readAll(slug) { return list(slug).filter(f => TEXT.test(f.path)).map(f => ({ path: f.path, content: fs.readFileSync(path.join(dir(slug), f.path), 'utf8') })); }
+export function readAll(slug) { return list(slug).filter(f => TEXT.test(f.path) || BIN.test(f.path)).map(f => ({ path: f.path, content: BIN.test(f.path) ? fs.readFileSync(path.join(dir(slug), f.path)) : fs.readFileSync(path.join(dir(slug), f.path), 'utf8') })); }
+export function writeBinary(slug, rel, buf) {
+  const p = safe(slug, rel);
+  if (!BIN.test(p)) throw new Error('only images and fonts (png, jpg, webp, gif, avif, ico, woff, woff2, ttf, otf)');
+  if (buf.length > 3 * 1024 * 1024) throw new Error('file too large (limit 3 MB)');
+  const files = list(slug); const exists = fs.existsSync(p);
+  if (!exists && files.length >= LIMITS.files) throw new Error('too many files in this project');
+  const total = files.reduce((s, f) => s + f.size, 0) - (exists ? fs.statSync(p).size : 0) + buf.length;
+  if (total > LIMITS.project) throw new Error('project too large (limit 6 MB)');
+  fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, buf);
+  return { path: rel, bytes: buf.length, created: !exists };
+}
 
 function git(slug, args) {
   return new Promise((res, rej) => execFile('git', ['-C', dir(slug), '-c', 'user.name=Percy', '-c', 'user.email=percy@mossbrook.invalid', '-c', 'commit.gpgsign=false', ...args], { timeout: 15000 }, (e, out, err) => e ? rej(new Error(String(err || e.message).trim().slice(0, 300))) : res(String(out).trim())));

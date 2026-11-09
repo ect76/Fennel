@@ -188,7 +188,7 @@ function live() {
 setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
 /* ---------- web server ---------- */
-const TYPES = { '.jpg': 'image/jpeg', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.csv': 'text/plain; charset=utf-8', '.xml': 'text/xml' };
+const TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.avif': 'image/avif', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.csv': 'text/plain; charset=utf-8', '.xml': 'text/xml' };
 const ipOf = req => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 const isLoopback = req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.headers['x-forwarded-for'];
 const lastNoteBy = new Map(), lastBuyBy = new Map(), jobsBy = new Map();
@@ -203,9 +203,9 @@ function serveProjectFile(res, req, slugPart, rest) {
   if (!file.startsWith(base) || file.includes(path.sep + '.git')) return send(res, 403, 'no', 'text/plain');
   fs.stat(file, (err, st) => {
     const f = !err && st.isDirectory() ? path.join(file, 'index.html') : file;
-    fs.readFile(f, 'utf8', (e2, data) => {
+    fs.readFile(f, (e2, data) => {
       if (e2) return send(res, 404, 'not found', 'text/plain');
-      if (/\.html?$/i.test(f)) data = Pub.fillShop(data, shopData());
+      if (/\.html?$/i.test(f)) data = Pub.fillShop(data.toString('utf8'), shopData());
       res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': 'sandbox allow-scripts allow-forms allow-popups allow-modals', 'x-content-type-options': 'nosniff' });
       res.end(req.method === 'HEAD' ? undefined : data);
     });

@@ -47,7 +47,7 @@ function privateIP(ip) {
   return true;
 }
 const dnsCache = new Map();
-async function hostIsPublic(host) {
+export async function hostIsPublic(host) {
   host = host.replace(/^\[|\]$/g, '');
   if (/^(localhost|.*\.local|.*\.internal|.*\.lan|.*\.home)$/i.test(host)) return false;
   if (net.isIP(host)) return !privateIP(host);

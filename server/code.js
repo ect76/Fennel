@@ -85,10 +85,35 @@ This sitting has up to ${budget().sessionSteps + 1} steps.`;
       const svg = cleanSVG(r && r.svg, w, h); if (!svg) return { error: 'the graphic did not come out usable; try describing it more simply' };
       const out = WS.write(pr.slug, i.path, svg); run.wrote.add(i.path); return { ...out, note: 'saved; preview a page that uses it to see it' };
     }),
+    tool('download_file', 'Bring an image, font, icon set or stylesheet from a public website into the project. Only use openly licensed material (e.g. Wikimedia Commons, Unsplash, Google Fonts, open icon sets) and say where it came from and its licence; that goes in the project notes.', { url: { type: 'string' }, path: { type: 'string' }, source_and_licence: { type: 'string' } }, ['url', 'path', 'source_and_licence'], async i => {
+      let url = String(i.url || ''), res;
+      for (let hop = 0; hop < 4; hop++) { // follow redirects ourselves, checking every address is public
+        let u; try { u = new URL(url); } catch { return { error: 'not a web address' }; }
+        if (!/^https?:$/.test(u.protocol) || !(await B.hostIsPublic(u.hostname))) return { error: 'that address is not on the public internet' };
+        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+        try { res = await fetch(url, { redirect: 'manual', signal: ctl.signal, headers: { 'user-agent': 'Mozilla/5.0 Percy/1.0' } }); } catch (e) { return { error: 'could not fetch it: ' + e.message }; } finally { clearTimeout(t); }
+        if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { url = new URL(res.headers.get('location'), url).href; continue; } break;
+      }
+      if (!res || !res.ok) return { error: 'the site answered ' + (res ? res.status : 'nothing') };
+      const buf = Buffer.from(await res.arrayBuffer()); if (buf.length > 3 * 1024 * 1024) return { error: 'too large (over 3 MB)' };
+      const out = WS.BIN.test(i.path) ? WS.writeBinary(pr.slug, i.path, buf) : WS.write(pr.slug, i.path, buf.toString('utf8'));
+      run.wrote.add(i.path); pr.notes.push({ kind: 'decision', text: str('asset ' + i.path + ' from ' + url + ' — ' + i.source_and_licence, 400), day: W.dayOf(S.t) });
+      return { ...out, type: res.headers.get('content-type') || '' };
+    }),
+    ...(B.available() ? [tool('look_at', 'Look at any public website for ideas (layout, typography, colour, how good sites handle things): a screenshot and its text, on any device size, optionally the whole page.', { url: { type: 'string' }, device: { type: 'string', enum: ['laptop', 'desktop', 'tablet', 'phone'] }, full_page: { type: 'boolean' } }, ['url'], async i => {
+      let u; try { u = new URL(String(i.url)); } catch { return { error: 'not a web address' }; } if (!/^https?:$/.test(u.protocol)) return { error: 'not a web address' };
+      const r = await B.preview(u.href, { device: i.device, fullPage: !!i.full_page }); log.pages.push({ url: u.href, title: r.title || '', via: 'opened', from: 'looking for design ideas' });
+      const { screenshot, console: _c, ...rest } = r; return { text: JSON.stringify({ title: rest.title, text: rest.text, device: rest.device }), image: screenshot, imageType: 'image/jpeg' };
+    }),
+    tool('design_review', 'Get a careful designer\'s critique of how one of his pages looks (layout, hierarchy, typography, spacing, colour, consistency, how it feels on that device), with specific fixes. (Costs a little thinking budget.)', { path: { type: 'string' }, device: { type: 'string', enum: ['laptop', 'desktop', 'tablet', 'phone'] }, what_its_for: { type: 'string' } }, ['path'], async i => {
+      const r = await B.preview(liveOrLocal(i.path), { device: i.device || 'laptop', fullPage: true }); run.previews++;
+      const crit = await ask({ model: modelFor('work'), system: 'You are an experienced, exacting web designer giving practical critique. Reply with JSON only.', images: [{ mediaType: 'image/jpeg', data: r.screenshot }], prompt: 'This is a screenshot of a web page' + (i.what_its_for ? ' meant to ' + str(i.what_its_for, 300) : '') + ', on a ' + (i.device || 'laptop') + '. Critique how it looks: first impression, visual hierarchy, typography (fonts, sizes, line length, contrast), spacing and alignment, colour, imagery, consistency, and anything that looks unfinished or amateur. Then give the most valuable specific changes, in order, each concrete enough to do in CSS or HTML. Reply {"strengths": [""], "problems": [""], "changes": [""]}', maxTokens: 1500, purpose: 'code' });
+      return { ...(crit || { problems: ['no critique came back'] }), page: r.title, errors: r.errors };
+    })] : []),
     tool('copy_from_project', 'Copy a file from another of his projects into this one (to reuse styles, scripts or images).', { project: { type: 'string', description: 'the other project id' }, path: { type: 'string' }, to: { type: 'string' } }, ['project', 'path'], i => {
       const other = S.projects.find(p => p.id === i.project); if (!other) return { error: 'no project with that id' };
       const r = WS.read(other.slug, i.path, 1, 0); if (r.error) return r; const raw = WS.readAll(other.slug).find(f => f.path === String(i.path).replace(/^\/+/, '')); if (!raw) return { error: 'no such file there' };
-      const out = WS.write(pr.slug, i.to || i.path, raw.content); run.wrote.add(i.to || i.path); return out;
+      const out = Buffer.isBuffer(raw.content) ? WS.writeBinary(pr.slug, i.to || i.path, raw.content) : WS.write(pr.slug, i.to || i.path, raw.content); run.wrote.add(i.to || i.path); return out;
     }),
     tool('shop', 'See or change his shop: list what is for sale, list a new item, change an item\'s title, price or description, or take it out of the shop. Pages with <script type="application/json" id="percy-shop"></script> get the current stock filled in when published.', { action: { type: 'string', enum: ['list', 'add', 'change', 'remove'] }, ref: { type: 'string', description: 'for add: a drawing, page, project or belonging id; for change/remove: the item code or id' }, title: { type: 'string' }, price: { type: 'number' }, blurb: { type: 'string' } }, ['action'], i => {
       if (i.action === 'list') return { items: W.openListings().map(x => ({ code: x.code, title: x.title, price: x.price, kind: x.kind, ref: x.ref, blurb: x.blurb })) };

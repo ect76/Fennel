@@ -7,8 +7,8 @@ import { config } from './config.js';
 const queue = new Map(); // path -> { content, message }
 // the queue is kept on disk, so files waiting to upload survive a restart (an update) instead of being lost
 const QFILE = () => path.join(config.dataDir, 'publish-queue.json');
-function persist() { try { fs.writeFileSync(QFILE(), JSON.stringify([...queue])); } catch {} }
-try { for (const [k, v] of JSON.parse(fs.readFileSync(QFILE(), 'utf8'))) queue.set(k, v); } catch {}
+function persist() { try { fs.writeFileSync(QFILE(), JSON.stringify([...queue].map(([k, v]) => [k, Buffer.isBuffer(v.content) ? { ...v, content: null, b64: v.content.toString('base64') } : v]))); } catch {} }
+try { for (const [k, v] of JSON.parse(fs.readFileSync(QFILE(), 'utf8'))) queue.set(k, v.b64 ? { ...v, content: Buffer.from(v.b64, 'base64'), b64: undefined } : v); } catch {}
 export const pubStatus = { enabled: false, pushed: 0, queued: 0, lastPush: 0, lastError: '' };
 export const enabled = () => !!(config.githubToken && config.githubRepo);
 pubStatus.enabled = enabled(); pubStatus.queued = queue.size;
@@ -66,7 +66,7 @@ export function publishFiles(projectSlug, files, shopData, message) {
   let n = 0, bytes = 0; const base = projectSlug ? 'projects/' + projectSlug + '/' : '';
   for (const f of files) {
     if (n >= 120 || bytes > 6 * 1024 * 1024) break;
-    const content = /\.html?$/i.test(f.path) ? fillShop(f.content, shopData) : f.content;
+    const content = /\.html?$/i.test(f.path) && typeof f.content === 'string' ? fillShop(f.content, shopData) : f.content;
     queueFile(base + f.path, content, message); n++; bytes += content.length;
   }
   return { files: n, url: siteUrl() + base };
