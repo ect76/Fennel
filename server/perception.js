@@ -81,7 +81,9 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       const o = W.TYPES[p.type].open, near = Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 12;
       const lit = o ? (W.isOpen(p, h) ? 'lights on, door open' : 'dark, door locked') + (near ? '; a sign on the door: open ' + o[0] + ':00 to ' + o[1] + ':00' : '') : '';
       const vis = W.visitorAt(p.id) && Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 26 ? 'someone is moving about inside' : '';
-      out.places.push({ vis, looks: ((k => k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
+      const wares = near ? S.items.filter(it => it.shop === p.id && !it.sold && it.status !== 'building').slice(0, 4) : [];
+      const window = wares.length ? wares.map(it => it.name + ' (' + it.price + (it.price === 1 ? ' coin' : ' coins') + ')').join(', ') : '';
+      out.places.push({ window, vis, looks: ((k => k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
     }
     if (!inside) {
       out.things = [];
@@ -113,6 +115,10 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
   // a cue, not an analytic: the stone hums while people outside are watching
   const stone = S.town.places.find(p => p.type === 'stone');
   if (watchers > 0 && stone && Math.hypot(stone.x - pos.x, stone.z - pos.z) < HEAR) out.hum = 'the standing stone is humming';
+  // someone is in the village today: it carries across the whole village (smell of baking, voices, a light)
+  for (const v of S.visitors || []) { const vp = W.placeById(v.place); if (!vp || !W.visitorAt(vp.id) || S.inside === vp.id) continue;
+    const d = Math.hypot(vp.door.x - pos.x, vp.door.z - pos.z); if (d > 90) continue;
+    out.news = (out.news ? out.news + ' ' : '') + (vp.type === 'bakery' ? 'The smell of fresh baking, warm and new, is drifting across the village from ' + vp.name : 'There are lights and movement at ' + vp.name) + ' (' + bearing(pos, vp.door) + '); someone seems to be in there today, which has never happened before.'; }
   // things that happened since he last took stock, that he could have seen or heard
   out.events = S.events.filter(e => e.t > sinceT && (e.where === 'anywhere' || (e.where === 'outdoors' && (!inside || e.kind === 'weather')) || (e.where === 'near' && Math.hypot(e.x - pos.x, e.z - pos.z) < SIGHT))).map(e => W.hhmm(e.t) + ' ' + e.text);
   return out;
@@ -129,7 +135,7 @@ export function describe(p) {
   if (p.person) L.push('A person here: ' + p.person + '.');
   if (p.forSale) L.push('For sale here: ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');
   if (p.post) L.push(p.post + '.');
-  if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.vis ? ' [' + x.vis + ']' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times today already]' : '')).join('; ') + '.');
+  if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.window ? ' [in the window: ' + x.window + ']' : '') + (x.vis ? ' [' + x.vis + ']' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times today already]' : '')).join('; ') + '.');
   if (p.things && p.things.length) L.push('Objects in view: ' + p.things.map(x => 'thing ' + x.id + ': ' + x.what + ' (' + x.where + ')' + (x.label ? ' with lettering: "' + x.label + '"' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [looked at closely ' + x.looks + ' times already; looking again shows nothing new]' : '')).join('; ') + '.');
   if (p.graffiti && p.graffiti.length) L.push('Painted walls: ' + p.graffiti.map(g => g.where + ' (' + g.by + '): ' + g.what).join('; ') + '.');
   if (p.roads && p.roads.length) L.push('Street signs nearby: ' + p.roads.map(r => r.name + (r.walked ? '' : ' (not walked yet)')).join(', ') + '.');
@@ -139,6 +145,7 @@ export function describe(p) {
   if (p.postLamp) L.push(p.postLamp + '.');
   if (p.absences) L.push('Missing: ' + p.absences.join('; ') + '.');
   if (p.hum) L.push('Sound: ' + p.hum + '.');
+  if (p.news) L.push('Something new: ' + p.news);
   if (p.events && p.events.length) L.push('Since he last took stock: ' + p.events.join('; ') + '.');
   return L.join('\n');
 }

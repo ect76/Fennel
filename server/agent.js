@@ -96,10 +96,12 @@ function villageFacts() {
 }
 // what he can see right now that might set him wondering
 function pickWhim(percept) {
+  if (percept.news && Math.random() < 0.7) return 'he can\'t stop thinking about ' + (/baking/.test(percept.news) ? 'that smell of fresh baking and who might be making it' : 'the lights and movement, and who might be there');
   const seen = [];
   for (const t of percept.things || []) if ((t.looks || 0) < 2) seen.push({ w: 3, d: t.what });
   for (const r of percept.room || []) { if (/looked at closely \d+ times/.test(r)) continue; const m = String(r).match(/^item \w+: (.*)$/); if (m) seen.push({ w: 2, d: m[1].replace(/\s*\[.*$/, '') }); }
   for (const p of percept.places || []) if (p.look && !/^a house$/.test(p.look) && (p.looks || 0) < 2) seen.push({ w: 1, d: p.look + (p.sign ? ' (the sign says "' + p.sign + '")' : '') });
+  for (const p of percept.places || []) if (p.window) for (const w of p.window.split(', ')) seen.push({ w: 2, d: 'the ' + w.replace(/ \(\d+ coins?\)$/, '') + ' in the window of ' + (p.sign || 'a shop') });
   const ok = seen.filter(s => s.d && !NOT_AGAIN.test(s.d));
   if (ok.length && Math.random() < 0.5) {
     const bag = ok.flatMap(s => Array(s.w).fill(s.d)), d = String(pick(bag)).slice(0, 220);

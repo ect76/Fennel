@@ -218,13 +218,14 @@ function live() {
 }
 // shops fill their shelves, one at a time, the first time the world has the budget for it
 let stocking = false;
-async function stockNext() {
+async function stockNext(all = false) {
   if (stocking || !canCall()) return;
   const p = S.town.places.find(x => W.STOCKED_TYPES.includes(x.type) && !x.stocked && (x.stockTries || 0) < 3); if (!p) return;
   stocking = true;
   try { const list = await C.shopStock(p); W.addStock(p.id, list); W.wlog('new stock on the shelves at ' + p.name + ': ' + list.map(i => i.name).join(', ')); save(); }
   catch (e) { p.stockTries = (p.stockTries || 0) + 1; console.warn('[percy] stocking ' + p.name + ' failed: ' + e.message); }
   finally { stocking = false; }
+  if (all) setTimeout(() => stockNext(true), 2000); // keep going until every shop is done
 }
 setTimeout(stockNext, Number(process.env.STOCK_DELAY) || 20000); setInterval(stockNext, 3 * 60 * 1000);
 setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
@@ -423,6 +424,7 @@ async function keeper(req, res, what) {
     case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
     case 'visitor-add': { const r = W.addVisitor(b); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.visitor.id }); }
     case 'visitor-remove': { S.visitors = (S.visitors || []).filter(v => v.id !== b.id); W.bump(); return ok(); }
+    case 'fill-shops': { const more = !!b.more; let n = 0; for (const p of S.town.places) if (W.STOCKED_TYPES.includes(p.type) && (more || !p.stocked)) { p.stocked = false; p.stockTries = 0; n++; } stockNext(true); return ok({ shops: n }); }
     case 'scatter': { const k = Math.round(Number(b.coins) || 0); if (k < 1 || k > 50) return send(res, 400, { error: 'Between 1 and 50.' }); W.scatterCoins(k); return ok({ lying: S.looseCoins.length }); }
     case 'record-sale': { const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' }); payIn({ coins: l.price, from: str(b.from, 40), code: l.code, source: 'keeper' }); return send(res, 200, { ok: true }); }
     case 'remove-commission': S.commissions = S.commissions.filter(c => c.id !== b.id); return ok();

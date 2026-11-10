@@ -330,6 +330,8 @@ function renderVisitors() {
     const b = el('button', 'btn small', 'Remove'); b.type = 'button'; b.onclick = async () => { try { await kpost('visitor-remove', { id: v.id }); loadPrivate(); } catch {} }; li.append(document.createTextNode(' '), b); ul.append(li); }
   if (!(PRIV.visitors || []).length) ul.append(el('li', 'hint', 'Nobody arranged.'));
 }
+{ const go = more => async () => { const st = $('#fillStatus'); try { const r = await kpost('fill-shops', { more }); st.textContent = r.shops ? 'Stocking ' + r.shops + ' shop' + (r.shops === 1 ? '' : 's') + ', one after another; watch the world log.' : 'Every shop already has stock.'; } catch (err) { st.textContent = err.message; } };
+  $('#fillShops').onclick = go(false); $('#moreStock').onclick = go(true); }
 $('#visitorForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#visStatus'); try { await kpost('visitor-add', { day: $('#visDay').value, place: $('#visPlace').value, who: $('#visWho').value.trim(), name: $('#visName').value.trim() }); $('#visWho').value = ''; $('#visName').value = ''; st.textContent = 'Arranged.'; loadPrivate(); } catch (err) { st.textContent = err.message; } });
 function renderPrivate() {
   renderVisitors();
