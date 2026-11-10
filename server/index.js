@@ -152,6 +152,7 @@ Agent.init(S, {
   writePage: o => Sessions.writePage({ ...o, publishPage }),
   readText: o => Sessions.readText(o),
   closerLook: (p, it) => C.closerLook(p, it),
+  tryOut: (it, how) => C.tryOut(it, how),
 });
 W.setHooks({ onComplete: Agent.onComplete, onArrive: Agent.onArrive });
 B.setOwnPort(config.port);
@@ -214,6 +215,17 @@ function live() {
   return { t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
     doing: doingText(), thought: S.thought, feeling: S.feeling, body: S.body, coins: S.coins, weather: S.weather.kind, season: W.seasonOf(W.dayOf(S.t)), rev: S.rev, watchers: streams.size, deciding: S.deciding, scale: W.timeScale() };
 }
+// shops fill their shelves, one at a time, the first time the world has the budget for it
+let stocking = false;
+async function stockNext() {
+  if (stocking || !canCall()) return;
+  const p = S.town.places.find(x => W.STOCKED_TYPES.includes(x.type) && !x.stocked && (x.stockTries || 0) < 3); if (!p) return;
+  stocking = true;
+  try { const list = await C.shopStock(p); W.addStock(p.id, list); W.wlog('new stock on the shelves at ' + p.name + ': ' + list.map(i => i.name).join(', ')); save(); }
+  catch (e) { p.stockTries = (p.stockTries || 0) + 1; console.warn('[percy] stocking ' + p.name + ' failed: ' + e.message); }
+  finally { stocking = false; }
+}
+setTimeout(stockNext, Number(process.env.STOCK_DELAY) || 20000); setInterval(stockNext, 3 * 60 * 1000);
 setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
 /* ---------- web server ---------- */

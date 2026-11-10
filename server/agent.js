@@ -55,6 +55,7 @@ export function capabilities() {
   const paint = S.inventory.some(i => /paint/i.test(i.name));
   add('paint_wall', 'subject; tag (a few words, optional)', paint ? 'he has paint' : 'needs paint (he has none)');
   add('buy', 'item: an item id seen for sale', '');
+  if (S.inventory.some(i => !/paint/i.test(i.name))) add('use', 'thing: one of his belongings (id); how: what he does with it, in a few words (optional)', 'try out, play with, wear, read, grow or enjoy something he owns');
   if (known('post').length) add('check_post', '', 'collect any letters or parcels waiting for him at the post office (' + known('post').map(p => W.isOpen(p, h) ? 'open now' : 'shut now').join('') + ')');
   if (known('market').length) add('stall', '', 'the market stall: drawings he offered at the stall are left out, and the honesty tin is emptied');
   const orders = S.commissions.filter(c => c.status === 'read' || c.status === 'accepted');
@@ -397,12 +398,15 @@ function canonical(type, args) {
   if (type === 'look' && a.at && !/^around$/i.test(a.at) && !W.thingById(a.at) && !W.placeById(a.at)) { const it = findItem(a.at), t = !it && findThing(a.at), p = !it && !t && findPlace(a.at); swap('at', it ? it.id : t ? t.id : p ? p.id : null); }
   if (type === 'read' && a.what && !['notes', 'letters'].includes(a.what)) { if (/^(the )?(notes?|notes under the stone)$/i.test(a.what)) swap('what', 'notes'); else if (/^(the )?(letters?|post|my post)$/i.test(a.what)) swap('what', 'letters'); else { const it = findItem(a.what); swap('what', it && it.id); } }
   if (type === 'take' && a.item) { const it = findItem(a.item); swap('item', it && it.id); }
+  if (type === 'use' && a.thing && !S.inventory.some(i => i.id === a.thing)) { const q = String(a.thing).toLowerCase(); const m = S.inventory.find(i => i.name.toLowerCase() === q) || S.inventory.find(i => i.name.toLowerCase().includes(q) || q.includes(i.name.toLowerCase())); if (m) return { ...a, thing: m.id, said_thing: a.thing }; }
   if (type === 'stock_up' || type === 'restock' || type === 'buy_food') {
     const b = (a.where && findPlace(a.where)) || S.town.places.find(p => p.type === 'bakery' && S.mind.knownPlaces[p.id]);
     return { where: b ? b.id : a.where, take_home: a.loaves || a.count || a.quantity || a.take_home || 3, _as: 'eat' };
   }
   if (type === 'eat') { const alt = a.take_home ?? a.takeHome ?? a.to_take_home ?? a.loaves ?? a.carry_home ?? a.quantity; if (alt != null && a.take_home == null) a.take_home = alt; }
-  if (type === 'buy' && a.item && /\b(loaf|loaves|bread|tins?|sardines?|food|groceries|provisions)\b/i.test(a.item) && !S.items.some(i => i.id === a.item)) {
+  const forSale = type === 'buy' && a.item && S.items.find(i => !i.sold && i.seen && (i.id === a.item || i.name.toLowerCase() === String(a.item).toLowerCase() || String(a.item).toLowerCase().includes(i.name.toLowerCase())));
+  if (forSale && forSale.id !== a.item) return { ...a, item: forSale.id, said_item: a.item };
+  if (type === 'buy' && a.item && !forSale && /\b(loaf|loaves|bread|tins of|sardines?|food|groceries|provisions)\b/i.test(a.item)) {
     const bakery = S.town.places.find(p => p.type === 'bakery' && S.mind.knownPlaces[p.id]);
     if (bakery) return { where: bakery.id, take_home: a.quantity || a.count || (String(a.item).match(/\d+/) || [])[0] || (/loaves|tins|sardines|groceries|provisions/i.test(a.item) ? 3 : 1), said_buy: a.item, _as: 'eat' };
   }
@@ -447,6 +451,12 @@ function plan(type, args, minutes) {
     case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
     case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
+    case 'use': {
+      const it = S.inventory.find(i => i.id === args.thing); if (!it) return fail(null, 'he does not own anything like that');
+      if (/paint/i.test(it.name)) return fail(null, 'paint is for painting a wall (paint_wall)');
+      const how = String(args.how || '').slice(0, 60);
+      return { minutes: 25, caption: (how || 'trying out') + ' the ' + it.name, work: it.use || !hooks.tryOut || !canCall() ? null : async () => { try { it.use = await hooks.tryOut(it, how); } catch {} return {}; } };
+    }
     case 'take': { const p = W.placeById(S.inside); if (!p || !p.inside) return fail(null, 'he is not inside anywhere with things to take'); return { place: p.id, enter: true }; }
     case 'read': return planRead(args);
     case 'review': return { minutes: 10, caption: 'looking back over his work', instant: { facts: [reviewText(String(args.what || ''))] } };
@@ -654,6 +664,13 @@ function interpret(a, outcome, facts) {
       break;
     }
     case 'take': { x.importance = 3; break; }
+    case 'use': {
+      const it = S.inventory.find(i => i.id === a.args.thing); if (!it) break;
+      it.usedTimes = (it.usedTimes || 0) + 1; const how = String(a.args.how || '').slice(0, 60);
+      facts.push((how ? how + ' (the ' + it.name + ')' : 'tried the ' + it.name) + ': ' + (it.use || 'nothing much happened that he could tell') + (it.usedTimes > 1 ? ' (used it ' + it.usedTimes + ' times now)' : ''));
+      if (it.uses && it.usedTimes >= it.uses) { S.inventory = S.inventory.filter(i => i !== it); facts.push('that used it up; it is gone'); }
+      x.importance = it.usedTimes === 1 ? 3 : 2; break;
+    }
     case 'check_post': {
       const d = outcome.data || {};
       for (const e of d.envelopes || []) { facts.push('envelope: ' + e.coins + ' coins' + (e.forTitle ? ' for ' + e.forTitle : '') + (e.from ? ' from ' + e.from : '') + (e.message ? ', with a message: "' + e.message + '"' : '')); if (e.message) Mem.claim({ text: (e.from || 'Someone') + ' sent ' + e.coins + ' coins with the message: "' + e.message.slice(0, 300) + '"', about: 'post', provenance: 'told', confidence: 1, from: e.from || 'unsigned' }); }

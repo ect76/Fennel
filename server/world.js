@@ -227,7 +227,7 @@ function finish(a) {
       if (S.coins < it.price) { ok = false; f.push('could not pay: it costs ' + it.price + ', had ' + S.coins); break; }
       S.coins -= it.price;
       if (it.food) { S.body.fullness = clamp(S.body.fullness + it.food, 0, 100); f.push('paid ' + it.price + ' coins for the ' + it.name + ' and ate it'); }
-      else { S.inventory.push({ id: uid(), name: it.name, look: it.look || '', desc: it.desc || '', price: it.price, day: dayOf(S.t), img: it.img || '', model: it.model || null }); f.push('paid ' + it.price + ' coins for the ' + it.name + ' and took it'); }
+      else { S.inventory.push({ id: uid(), name: it.name, look: it.look || '', desc: it.desc || '', use: it.use || '', uses: it.uses || 0, price: it.price, day: dayOf(S.t), img: it.img || '', model: it.model || null }); f.push('paid ' + it.price + ' coins for the ' + it.name + ' and took it'); }
       if (it.restock) { it.seen = true; } else { it.sold = true; it.boughtDay = dayOf(S.t); }
       data.item = it.name; break;
     }
@@ -386,6 +386,12 @@ export function removeBuilding(id) {
   S.items = S.items.filter(i => i.shop !== p.id || i.sold);
   S.vanished.push({ id: p.id, x: p.door.x, z: p.door.z, kind: 'building', name: p.name, day: dayOf(S.t) });
   wlog('the keeper removed ' + p.name); bump(); return { place: p };
+}
+export const STOCKED_TYPES = ['shop', 'workshop', 'museum', 'cafe', 'bakery', 'market'];
+export function addStock(placeId, list) {
+  const p = placeById(placeId); if (!p) return 0;
+  for (const i of list) S.items.push({ id: uid(), shop: p.id, name: i.name, look: i.look, desc: i.use, use: i.use, uses: i.uses, food: i.food || 0, price: i.price, day: dayOf(S.t), seen: false, sold: false, status: 'ready', restock: !!i.restock || !!i.food, stocked: true });
+  p.stocked = true; bump(); return list.length;
 }
 export function stockItem({ shop, name, price, desc }) {
   const p = placeById(shop);

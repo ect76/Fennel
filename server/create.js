@@ -60,6 +60,23 @@ export async function appearance(name, desc) {
   const r = await ask({ model: modelFor('world'), system: 'Reply with JSON only.', prompt: `Describe how "${name}"${desc ? ' (' + desc + ')' : ''} looks to someone who has never seen one and doesn't know its name: shapes, colours, materials, size. Do not name it. Reply {"look": "10-35 words"}`, maxTokens: 300, purpose: 'world' });
   return str(r && r.look, 240);
 }
+// What a shop has for sale: small things a penguin living alone might want or enjoy. Asked once per shop.
+export async function shopStock(place) {
+  const T = W.TYPES[place.type];
+  const prompt = `A ${T.label} called "${place.name}" in Mossbrook, a small village. Nobody serves, but the shop is stocked and anyone may buy by leaving the coins. A penguin lives in the village alone. He is curious, playful, likes making things and finding out how things work, and has very few coins (a loaf of bread costs 2).
+List 3 or 4 things this particular shop would sell that he might want, or that might make him happy: small pleasures, treats, things to play with, make with, wear, read, grow, look through, keep. Fit the shop and its name. At least one should be odd or puzzling: a curio, a kit, a gadget or oddment whose purpose isn't obvious at first, or something that does something surprising when tried, the kind of thing that sets a curious mind going (still real and ordinary, nothing magical). Some cheap (1 or 2 coins), one or two dearer (up to 9). Ordinary real things, nothing magical, no brand names.
+For each: "name" (what it actually is), "look" (how it looks to someone who doesn't know it: shape, colour, material, size; do not name it), "price" (coins), "use" (what happens, plainly, when he uses, tries or enjoys it, including anything surprising it does: 15 to 45 words), "food" (if it is a treat eaten there and then, how filling from 5 to 30; otherwise 0), "uses" (how many times before it is used up; 0 if it lasts), "restock" (true if the shop would have more of them).
+Reply with only JSON: {"items": [{"name": "", "look": "", "price": 1, "use": "", "food": 0, "uses": 0, "restock": true}]}`;
+  const r = await ask({ model: modelFor('world'), system: 'You describe things in a simulated world, factually. Reply with JSON only.', prompt, maxTokens: 1500, purpose: 'world' });
+  if (!r || !Array.isArray(r.items) || !r.items.length) throw new Error('no stock');
+  return r.items.slice(0, 4).map(i => ({ name: str(i && i.name, 60), look: str(i && i.look, 240), price: Math.max(1, Math.min(9, Math.round(Number(i && i.price) || 2))), use: str(i && i.use, 400), food: Math.max(0, Math.min(30, Math.round(Number(i && i.food) || 0))), uses: Math.max(0, Math.min(20, Math.round(Number(i && i.uses) || 0))), restock: !!(i && i.restock) })).filter(i => i.name && i.look);
+}
+// What happens when he tries out something he owns that came with no instructions. Asked once per thing.
+export async function tryOut(item, how) {
+  const prompt = `Someone in a small village tries out a thing they own: ${item.name} (it looks like: ${item.look || 'an object'}${item.desc ? '; ' + item.desc : ''}). ${how ? 'What they do: ' + how + '. ' : ''}Say plainly what happens when it is used, tried or played with, in 15 to 45 words: what it does, how it feels, anything surprising. Real and ordinary, nothing magical.\nReply {"use": ""}`;
+  const r = await ask({ model: modelFor('world'), system: 'You describe things in a simulated world, factually. Reply with JSON only.', prompt, maxTokens: 300, purpose: 'world' });
+  return str(r && r.use, 400);
+}
 // What a closer look at one thing turns up: inside it if it opens, marks, how it works. Asked once per thing, then remembered by the world.
 export async function closerLook(place, item) {
   const prompt = `In ${place.name}, a building in a small, empty village called Mossbrook, there is: ${item.name || 'an object'} (it looks like: ${item.look}${item.text ? '; writing on it: "' + item.text + '"' : ''}).\nSomeone picks it up or leans in and examines it properly: opening it if it opens, looking inside, underneath and behind, trying any moving parts. Say plainly what they find, in 20 to 60 words: contents, small marks, wear, how it works when tried. Ordinary and specific, sometimes a little surprising, never magical or mysterious. Any writing is short and legible; if it mentions the village, it is Mossbrook; no other place names and no people's life stories.\nReply {"detail": ""}`;
