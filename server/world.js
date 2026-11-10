@@ -65,8 +65,13 @@ export function newWorld() {
 // the green carries the village's name, so anyone walking past can learn where they are
 function nameTheVillage(town) { const g = town && town.places.find(p => p.type === 'green'); if (g && !g.signText) g.signText = 'Welcome to Mossbrook'; }
 // town minutes per real minute: the keeper's setting on the page, or TIME_SCALE
+// when his thinking budget has run out, the village can wait for him instead of carrying on without him
+let outOfThought = () => false, forceRun = false;
+export function setOutOfThought(fn) { outOfThought = fn; }
+export const villageWaiting = () => !forceRun && S && S.settings && S.settings.pauseWhenOut !== false && outOfThought();
 export function timeScale() {
   const v = S && S.settings && S.settings.timeScale, base = Number.isFinite(v) && v > 0 ? v : config.timeScale;
+  if (villageWaiting()) return 0;
   // asleep, nothing is decided (so nothing is spent): the keeper can let the night pass quickly
   const asleep = S && S.act && S.act.phase === 'do' && (S.act.type === 'sleep' || S.act.type === 'nap');
   return asleep && (S.act.fast || S.settings.fastSleep === true) ? Math.max(base, 60) : base;
@@ -280,7 +285,7 @@ function doorsNearby() { const out = {}; for (const p of S.town.places) if (TYPE
 // so his body, the weather and the town all advance exactly as they would have (he decides nothing while asleep)
 export function skipSleep() {
   const a = S.act; if (!(a && a.phase === 'do' && (a.type === 'sleep' || a.type === 'nap'))) return false;
-  for (let i = 0; i < 200 && S.act === a; i++) tick(600 / timeScale(), () => {});
+  forceRun = true; try { for (let i = 0; i < 200 && S.act === a; i++) tick(600 / timeScale(), () => {}); } finally { forceRun = false; }
   return true;
 }
 export function tick(dt, onIdle) {

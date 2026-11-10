@@ -181,7 +181,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { save(); B.stop(
 function publicState() {
   const m = S.mind, day = W.dayOf(S.t);
   return {
-    t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: W.timeScale(), rev: S.rev,
+    t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: W.timeScale(), waiting: W.villageWaiting(), rev: S.rev,
     pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, caption: S.act.caption, place: S.act.place, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
     doing: doingText(), thought: S.thought, feeling: S.feeling, feelings: (S.feelings || []).slice(-80), body: S.body, coins: S.coins, pantry: S.pantry,
     town: W.publicTown(), things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, size: t.size, model: t.model, status: t.status, day: t.day, known: !!m.knownThings[t.id], hisName: (m.knownThings[t.id] || {}).name || '' })),
@@ -227,6 +227,7 @@ async function stockNext(all = false) {
   finally { stocking = false; }
   if (all) setTimeout(() => stockNext(true), 2000); // keep going until every shop is done
 }
+W.setOutOfThought(() => !!config.apiKey && !canCall());
 setTimeout(stockNext, Number(process.env.STOCK_DELAY) || 20000); setInterval(stockNext, 3 * 60 * 1000);
 setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
@@ -331,6 +332,7 @@ async function keeper(req, res, what) {
       if ('paused' in b) s.paused = !!b.paused;
       if ('fastSleep' in b) s.fastSleep = !!b.fastSleep;
       if ('coinsPerDay' in b) s.coinsPerDay = n(b.coinsPerDay, 0, 20);
+      if ('pauseWhenOut' in b) s.pauseWhenOut = !!b.pauseWhenOut;
       if ('timeScale' in b) s.timeScale = n(b.timeScale, 0.25, 60);
       if ('betterPerDay' in b) s.betterPerDay = n(b.betterPerDay, 0, 200);
       if ('sessionSteps' in b) s.sessionSteps = n(b.sessionSteps, 2, 20);
