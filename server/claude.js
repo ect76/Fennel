@@ -6,7 +6,7 @@ import { config, PRICES, SEARCH_PRICE } from './config.js';
 export const usage = { day: '', calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, errors: 0, lastError: '', byPurpose: {}, costBy: {} };
 function rollDay() {
   const d = new Date().toISOString().slice(0, 10);
-  if (usage.day !== d) Object.assign(usage, { day: d, calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, byPurpose: {}, costBy: {} });
+  if (usage.day !== d) Object.assign(usage, { day: d, calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, byPurpose: {}, costBy: {}, errorLog: [] });
 }
 
 // Live limits from the Keeper → Budget panel (saved with the world). index.js hands us a getter.
@@ -113,21 +113,31 @@ export async function chat({ model, system, messages, tools = [], toolChoice = n
     usage.calls++;
     const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);
     let res, data;
-    try {
-      const headers = { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': config.apiVersion };
-      if (fetchBeta) headers['anthropic-beta'] = 'web-fetch-2025-09-10';
-      res = await fetch(config.apiBase + '/v1/messages', { method: 'POST', signal: ctl.signal, headers,
-        body: JSON.stringify({ model, max_tokens: maxTokens, system: sys, messages: msgs, ...(tl.length ? { tools: tl } : {}), ...(choice ? { tool_choice: choice } : {}) }) });
-      data = await res.json().catch(() => null);
-    } catch (e) {
-      usage.errors++; usage.lastError = e.name === 'AbortError' ? 'timed out' : String(e.message || e);
-      throw new Error(usage.lastError);
-    } finally { clearTimeout(timer); }
+    const headers = { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': config.apiVersion };
+    if (fetchBeta) headers['anthropic-beta'] = 'web-fetch-2025-09-10';
+    const body = JSON.stringify({ model, max_tokens: maxTokens, system: sys, messages: msgs, ...(tl.length ? { tools: tl } : {}), ...(choice ? { tool_choice: choice } : {}) });
+    // a dropped connection or a busy server is usually gone a few seconds later, so try again twice before giving up
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetch(config.apiBase + '/v1/messages', { method: 'POST', signal: ctl.signal, headers, body });
+        data = await res.json().catch(() => null);
+        if ([429, 500, 502, 503, 504, 529].includes(res.status) && attempt < 2) { await new Promise(r => setTimeout(r, 3000 * (attempt + 1) * (attempt + 1))); continue; }
+        break;
+      } catch (e) {
+        if (e.name !== 'AbortError' && attempt < 2) { await new Promise(r => setTimeout(r, 3000 * (attempt + 1) * (attempt + 1))); continue; }
+        clearTimeout(timer); usage.calls--; // nothing reached Claude, so it isn't a call
+        const why = e.cause && (e.cause.code || e.cause.message);
+        usage.errors++; usage.lastError = e.name === 'AbortError' ? 'timed out' : 'could not reach Claude' + (why ? ' (' + why + ')' : ': ' + String(e.message || e));
+        usage.errorLog = (usage.errorLog || []).concat({ t: Date.now(), e: usage.lastError }).slice(-20);
+        throw new Error(usage.lastError);
+      }
+    }
+    clearTimeout(timer);
     if (!res.ok) {
       const msg = (data && data.error && data.error.message) || ('HTTP ' + res.status);
       if (choice && choice.type !== 'auto' && /tool_choice/i.test(msg)) { noForce.add(model); choice = { type: 'auto' }; round--; usage.calls--; continue; }
       if (!fetchBeta && /web_fetch|web-fetch|beta/i.test(msg) && tl.some(t => t.name === 'web_fetch')) { fetchBeta = true; round--; usage.calls--; continue; }
-      usage.errors++; usage.lastError = msg; throw new Error(msg);
+      usage.errors++; usage.lastError = msg; usage.errorLog = (usage.errorLog || []).concat({ t: Date.now(), e: msg }).slice(-20); throw new Error(msg);
     }
     cost += account(model, purpose, data.usage); u0 = data.usage || {};
     all.push(...(data.content || [])); stop = data.stop_reason;
@@ -165,5 +175,5 @@ export function status() {
   rollDay(); const b = budget();
   return { mode: !config.apiKey ? 'rules' : b.paused ? 'paused' : canCall() ? 'claude' : 'resting', calls: usage.calls, maxCalls: b.callsPerDay,
     searches: usage.searches, maxSearches: b.searchesPerDay, fetches: usage.fetches, cost: Math.round(usage.cost * 1000) / 1000, maxSpend: b.spendPerDay,
-    quality: b.quality, errors: usage.errors, lastError: usage.lastError, pace: pace(), byPurpose: usage.byPurpose, costBy: usage.costBy || {} };
+    quality: b.quality, errors: usage.errors, lastError: usage.lastError, errorLog: usage.errorLog || [], pace: pace(), byPurpose: usage.byPurpose, costBy: usage.costBy || {} };
 }
