@@ -77,8 +77,10 @@ export function migrate(saved) {
   for (const k in fresh.mind) if (!(k in saved.mind)) saved.mind[k] = fresh.mind[k];
   for (const k in fresh.earned) if (!(k in saved.earned)) saved.earned[k] = fresh.earned[k];
   nameTheVillage(saved.town);
-  // the keeper asked for someone behind the bakery counter on day 45, gone again on day 46
-  if (!saved.visitorSeed45) { const b = saved.town.places.find(p => p.type === 'bakery'); if (b && dayOf(saved.t) <= 45) saved.visitors.push({ id: uid(), day: 45, place: b.id, who: 'a stout, cheerful woman with flour on her apron and her sleeves rolled up to the elbow', name: '', talks: [] }); saved.visitorSeed45 = true; }
+  // the keeper asked for someone behind the bakery counter on day 44, gone again on day 45
+  if (!saved.visitorSeed45) { const b = saved.town.places.find(p => p.type === 'bakery'); if (b && dayOf(saved.t) <= 44) saved.visitors.push({ id: uid(), day: 44, place: b.id, who: 'a stout, cheerful woman with flour on her apron and her sleeves rolled up to the elbow', name: '', talks: [] }); saved.visitorSeed45 = true; saved.visitorDay44 = true; }
+  // the keeper moved her a day earlier: day 44, gone on day 45
+  if (!saved.visitorDay44) { const v = saved.visitors.find(v => v.day === 45 && !v.talks.length && /flour on her apron/.test(v.who)); if (v && dayOf(saved.t) <= 44) v.day = 44; saved.visitorDay44 = true; }
   return saved;
 }
 // someone in a building today, while it is open (a keeper's visitor)
