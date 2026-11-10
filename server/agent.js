@@ -317,8 +317,9 @@ function chooseModel() {
   else if ((S.body.fullness < 10 || S.body.energy < 10) && gap('body', 180)) why = 'body in trouble';
   else {
     const recent = S.journal.slice(-6).filter(j => j.choice && j.src !== 'body');
-    const kind = t => ['wait', 'rest', 'think', 'nap'].includes(t) ? 'idle' : t;
-    const stuck = (recent.length >= 5 && recent.every(j => kind(j.choice.type) === kind(recent[0].choice.type))) || recent.slice(-4).filter(j => j.outcome && j.outcome.ok === false).length >= 3;
+    // the same idle choice, or the very same action on the very same thing (looking at five different things is curiosity, not being stuck)
+    const kind = c => ['wait', 'rest', 'think', 'nap'].includes(c.type) ? 'idle' : c.type + ' ' + JSON.stringify(c.args || {});
+    const stuck = (recent.length >= 5 && recent.every(j => kind(j.choice) === kind(recent[0].choice))) || recent.slice(-4).filter(j => j.outcome && j.outcome.ok === false).length >= 3;
     if (stuck && gap('stuck', 120)) why = 'stuck';
   }
   if (!why) return { model: modelFor('decide') };
