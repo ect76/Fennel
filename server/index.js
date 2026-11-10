@@ -151,6 +151,7 @@ Agent.init(S, {
   code: o => Code.code({ ...o, how: searchVia(), permissions: permissions(), publishProject, shopChanged, siteInfo }),
   writePage: o => Sessions.writePage({ ...o, publishPage }),
   readText: o => Sessions.readText(o),
+  closerLook: (p, it) => C.closerLook(p, it),
 });
 W.setHooks({ onComplete: Agent.onComplete, onArrive: Agent.onArrive });
 B.setOwnPort(config.port);

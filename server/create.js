@@ -60,6 +60,12 @@ export async function appearance(name, desc) {
   const r = await ask({ model: modelFor('world'), system: 'Reply with JSON only.', prompt: `Describe how "${name}"${desc ? ' (' + desc + ')' : ''} looks to someone who has never seen one and doesn't know its name: shapes, colours, materials, size. Do not name it. Reply {"look": "10-35 words"}`, maxTokens: 300, purpose: 'world' });
   return str(r && r.look, 240);
 }
+// What a closer look at one thing turns up: inside it if it opens, marks, how it works. Asked once per thing, then remembered by the world.
+export async function closerLook(place, item) {
+  const prompt = `In ${place.name}, a building in a small, empty village called Mossbrook, there is: ${item.name || 'an object'} (it looks like: ${item.look}${item.text ? '; writing on it: "' + item.text + '"' : ''}).\nSomeone picks it up or leans in and examines it properly: opening it if it opens, looking inside, underneath and behind, trying any moving parts. Say plainly what they find, in 20 to 60 words: contents, small marks, wear, how it works when tried. Ordinary and specific, sometimes a little surprising, never magical or mysterious. Any writing is short and legible; if it mentions the village, it is Mossbrook; no other place names and no people's life stories.\nReply {"detail": ""}`;
+  const r = await ask({ model: modelFor('world'), system: 'You describe things in a simulated world, factually. Reply with JSON only.', prompt, maxTokens: 400, purpose: 'world' });
+  return str(r && r.detail, 400);
+}
 // What is inside a building (nobody else is about). World content, not Percy's feelings.
 export async function furnish(p) {
   const T = W.TYPES[p.type];
