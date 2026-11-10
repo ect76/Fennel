@@ -89,7 +89,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
         const fresh = noteSeen(th, 'knownThings', th.id, { stage: 'noticed' }); if (fresh) out.newly.push('thing:' + th.id);
         out.things.push({ id: th.id, what: thingWords(th), where: bearing(pos, th), firstTime: fresh, label: th.label && d < 6 ? th.label : '' });
       }
-      out.graffiti = S.graffiti.filter(g => Math.hypot(g.x - pos.x, g.z - pos.z) < 12).map(g => ({ id: g.id, where: g.where, by: g.by === 'percy' ? 'his own' : 'not his', what: g.look || (g.by === 'percy' ? g.subject : 'paint on the wall: shapes and colours') }));
+      out.graffiti = S.graffiti.filter(g => Math.hypot(g.x - pos.x, g.z - pos.z) < 12).map(g => ({ id: g.id, where: g.where, by: g.by === 'percy' ? 'he painted this himself' + (g.day ? ' on day ' + g.day : '') : 'someone else painted this, not him', what: g.look || (g.by === 'percy' ? g.subject : 'paint on the wall: shapes and colours') }));
       // roads by their signs, and where they run into the fog
       const roads = new Set();
       for (const e of S.town.edges) { if (e.path) continue; const A = S.town.nodes[e.a], B = S.town.nodes[e.b]; const s = Town.segInfo(pos.x, pos.z, A.x, A.z, B.x, B.z); if (s.d < 20) roads.add(e.name); }
