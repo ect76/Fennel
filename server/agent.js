@@ -625,12 +625,12 @@ function interpret(a, outcome, facts) {
     case 'look': {
       const at = String(a.args.at || 'around'); const th = W.thingById(at);
       if (th) { const k = S.mind.knownThings[th.id] || (S.mind.knownThings[th.id] = { firstSeen: S.t }); k.stage = 'examined'; k.examinedDay = W.dayOf(S.t); k.looks = (k.looks || 0) + 1;
-        facts.push('up close: ' + (th.look || 'an object') + (th.label ? '; lettering on it reads "' + th.label + '"' : ''));
+        facts.push('up close: ' + (th.look || 'an object') + (th.label ? '; lettering on it reads "' + th.label + '"' : '') + (k.looks > 1 ? ' (looked at closely ' + k.looks + ' times now; looking again shows nothing he had not already seen, so what it is or how it works would have to be found out some other way)' : ''));
         const c = Mem.claim({ text: 'Thing ' + th.id + ' near ' + W.whereWords() + ' looks like: ' + (th.look || 'an object') + (th.label ? '; it has the words "' + th.label + '" on it' : ''), about: th.id, provenance: 'perceived', confidence: 0.95 }); x.learning.push(c.id); x.refs.thing = [th.id]; x.importance = k.looks === 1 ? 3 : 2; break; }
       const inside = S.inside && W.placeById(S.inside);
       if (inside && inside.inside) {
         const it = inside.inside.items.find(i => i.id === at);
-        if (it) { it.examined = true; facts.push('examined it: ' + it.look + (it.text ? '; it has writing: "' + it.text + '"' : '')); const c = Mem.claim({ text: 'In ' + inside.name + ': ' + it.look + (it.text ? ' (with the words "' + it.text.slice(0, 200) + '")' : ''), about: inside.id, provenance: 'perceived', confidence: 0.95 }); x.learning.push(c.id); x.importance = 3; }
+        if (it) { it.examined = true; it.looks = (it.looks || 0) + 1; facts.push('examined it: ' + it.look + (it.text ? '; it has writing: "' + it.text + '"' : '') + (it.looks > 1 ? ' (examined ' + it.looks + ' times now; looking again shows nothing he had not already seen, so what it is or how it works would have to be found out some other way)' : '')); const c = Mem.claim({ text: 'In ' + inside.name + ': ' + it.look + (it.text ? ' (with the words "' + it.text.slice(0, 200) + '")' : ''), about: inside.id, provenance: 'perceived', confidence: 0.95 }); x.learning.push(c.id); x.importance = 3; }
         else if (r && r.furnished) { facts.push('looked around inside ' + inside.name + ': ' + inside.inside.feel + ' There are: ' + inside.inside.items.map(i => i.look).join('; ')); x.importance = 3; }
         else facts.push('looked around inside ' + inside.name + ': ' + (inside.inside.feel || '') + ' There are: ' + inside.inside.items.filter(i => !i.taken).map(i => i.look).join('; '));
         x.refs.place = [inside.id];
