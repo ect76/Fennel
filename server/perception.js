@@ -66,6 +66,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
     } else out.room = ['he has not looked around in here yet'];
     const items = S.items.filter(it => it.shop === inside.id && !it.sold && it.status !== 'building');
     if (items.length) { out.forSale = items.map(it => ({ id: it.id, what: it.name, look: it.look || '', price: it.price })); for (const it of items) it.seen = true; }
+    { const v = W.visitorAt(inside.id); if (v) out.person = (v.name && v.talks.length ? v.name + ', ' : 'someone: ') + v.who + ', standing behind the counter' + (v.talks.length ? ' (he has talked with them today)' : ' (another living person, the first he has ever met in Mossbrook)'); }
     if (inside.type === 'post') out.post = W.postWaiting() ? 'there is post waiting at the counter for him' : 'nothing waiting at the counter';
   }
   // the street: buildings, things, roads, fog, within sight
@@ -79,7 +80,8 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       if (fresh) out.newly.push('place:' + p.id);
       const o = W.TYPES[p.type].open, near = Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 12;
       const lit = o ? (W.isOpen(p, h) ? 'lights on, door open' : 'dark, door locked') + (near ? '; a sign on the door: open ' + o[0] + ':00 to ' + o[1] + ':00' : '') : '';
-      out.places.push({ looks: ((k => k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
+      const vis = W.visitorAt(p.id) && Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 26 ? 'someone is moving about inside' : '';
+      out.places.push({ vis, looks: ((k => k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
     }
     if (!inside) {
       out.things = [];
@@ -124,9 +126,10 @@ export function describe(p) {
   { const here = (p.places || []).find(x => /right here/.test(x.where) && x.lit && !W.S.inside); if (here) L.push('The door right in front of him: ' + (here.sign || 'this building') + ' is ' + (/door open/.test(here.lit) ? 'OPEN now; he could walk straight in' : 'locked now') + '.'); }
   L.push('Body: stomach ' + p.body.stomach + '; energy ' + p.body.energy + '. Coins in pocket: ' + p.coins + '.');
   if (p.room) L.push('In the room: ' + p.room.filter(Boolean).join('; ') + '.');
+  if (p.person) L.push('A person here: ' + p.person + '.');
   if (p.forSale) L.push('For sale here: ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');
   if (p.post) L.push(p.post + '.');
-  if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times today already]' : '')).join('; ') + '.');
+  if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.vis ? ' [' + x.vis + ']' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times today already]' : '')).join('; ') + '.');
   if (p.things && p.things.length) L.push('Objects in view: ' + p.things.map(x => 'thing ' + x.id + ': ' + x.what + ' (' + x.where + ')' + (x.label ? ' with lettering: "' + x.label + '"' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [looked at closely ' + x.looks + ' times already; looking again shows nothing new]' : '')).join('; ') + '.');
   if (p.graffiti && p.graffiti.length) L.push('Painted walls: ' + p.graffiti.map(g => g.where + ' (' + g.by + '): ' + g.what).join('; ') + '.');
   if (p.roads && p.roads.length) L.push('Street signs nearby: ' + p.roads.map(r => r.name + (r.walked ? '' : ' (not walked yet)')).join(', ') + '.');

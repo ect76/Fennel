@@ -51,7 +51,7 @@ export function newWorld() {
     mind: emptyMind(), journal: [], life: [],
     requests: [], projects: [], researchLog: [], ideas: [],
     drawings: [], pages: [], notes: [], percyNotes: [], things: [], graffiti: [], items, inventory: [],
-    commissions: [], shop: [], post: [], payments: [], letters: [], earned: { work: 0, real: 0, stall: 0, found: 0 }, looseCoins: [],
+    commissions: [], shop: [], post: [], payments: [], letters: [], earned: { work: 0, real: 0, stall: 0, found: 0 }, looseCoins: [], visitors: [],
     worldLog: { 1: [] }, events: [], vanished: [], weather: { kind: 'clear', until: 12 * 60 },
     settings: {}, permissions: {}, lastSeenReal: Date.now(),
     // explicit initial conditions, tagged as such in his memory (see agent.initialConditions)
@@ -77,7 +77,20 @@ export function migrate(saved) {
   for (const k in fresh.mind) if (!(k in saved.mind)) saved.mind[k] = fresh.mind[k];
   for (const k in fresh.earned) if (!(k in saved.earned)) saved.earned[k] = fresh.earned[k];
   nameTheVillage(saved.town);
+  // the keeper asked for someone behind the bakery counter on day 45, gone again on day 46
+  if (!saved.visitorSeed45) { const b = saved.town.places.find(p => p.type === 'bakery'); if (b && dayOf(saved.t) <= 45) saved.visitors.push({ id: uid(), day: 45, place: b.id, who: 'a stout, cheerful woman with flour on her apron and her sleeves rolled up to the elbow', name: '', talks: [] }); saved.visitorSeed45 = true; }
   return saved;
+}
+// someone in a building today, while it is open (a keeper's visitor)
+export function visitorAt(placeId, t = S.t) {
+  const p = placeById(placeId); if (!p) return null; const h = hourOf(t), o = TYPES[p.type].open || [8, 18];
+  return (S.visitors || []).find(v => v.place === placeId && v.day === dayOf(t) && h >= o[0] && h < o[1]) || null;
+}
+export function addVisitor({ day, place, who, name }) {
+  const p = placeById(place); if (!p) return { error: 'Pick a building.' };
+  const d = Math.round(Number(day)); if (!(d >= dayOf(S.t))) return { error: 'Pick today or a day still to come.' };
+  const v = { id: uid(), day: d, place: p.id, who: str(who, 200) || 'someone', name: str(name, 40), talks: [] };
+  S.visitors.push(v); wlog('the keeper arranged for someone to be at ' + p.name + ' on day ' + d); bump(); return { visitor: v };
 }
 
 /* ---------- time ---------- */

@@ -77,6 +77,19 @@ export async function tryOut(item, how) {
   const r = await ask({ model: modelFor('world'), system: 'You describe things in a simulated world, factually. Reply with JSON only.', prompt, maxTokens: 300, purpose: 'world' });
   return str(r && r.use, 400);
 }
+// Someone the keeper put in the village for a day, talking with Percy. They know the village as it really is.
+export async function personReply({ visitor, place, said, questions, facts }) {
+  const prompt = `You are ${visitor.name ? visitor.name + ', ' : ''}${visitor.who}, behind the counter of ${place.name} in Mossbrook, a small village. You are only here today; tomorrow you will be gone (say so if he asks, or as you say goodbye). Percy, a curious, playful penguin who lives alone in the village and has never met anyone here, is talking to you.
+What you know about Mossbrook, as it really is (use it; it is true):
+${facts}
+Questions that have been on Percy's mind (id: question):
+${questions.map(q => q.id + ': ' + q.text).join('\n') || '(none)'}
+${visitor.talks.length ? 'Your conversation so far today:\n' + visitor.talks.slice(-6).map(t => 'Percy: ' + t.said + '\nYou: ' + t.reply).join('\n') + '\n' : ''}Percy says: "${said}"
+Reply as yourself, warmly and naturally, in 40 to 130 words of speech. Answer what he says. Then, if you can, answer one or two of the questions on his mind as well (as if you guessed what he was wondering), from what you know above or plain common knowledge. If you don't know something, say so honestly. Don't invent other villagers, histories or secrets. Never mention keepers, games, simulations or AI. Don't mention any place outside Mossbrook.
+Reply with only JSON: {"reply": "", "answered": ["ids of questions your reply answers"]}`;
+  const r = await ask({ model: modelFor('person'), system: 'You play one person in a simulated village, speaking in their own voice. Reply with JSON only.', prompt, maxTokens: 700, purpose: 'world' });
+  return { reply: str(r && r.reply, 1200), answered: Array.isArray(r && r.answered) ? r.answered.map(String).slice(0, 4) : [] };
+}
 // What a closer look at one thing turns up: inside it if it opens, marks, how it works. Asked once per thing, then remembered by the world.
 export async function closerLook(place, item, building = false) {
   const prompt = building ? `In Mossbrook, a small, empty village, there is ${item.name} (it looks like: ${item.look}${item.text ? '; its sign reads "' + item.text + '"' : ''}).\nSomeone stands outside and takes a long, careful look at it from the street: walls, windows, doors, roof, signs, anything fixed to it, anything that moves or works. Say plainly what they notice that a passing glance would miss, in 20 to 60 words. Ordinary and specific, sometimes a little surprising, never magical. Any writing is short and legible; no other place names and no people's life stories.\nReply {"detail": ""}` : `In ${place.name}, a building in a small, empty village called Mossbrook, there is: ${item.name || 'an object'} (it looks like: ${item.look}${item.text ? '; writing on it: "' + item.text + '"' : ''}).\nSomeone picks it up or leans in and examines it properly: opening it if it opens, looking inside, underneath and behind, trying any moving parts. Say plainly what they find, in 20 to 60 words: contents, small marks, wear, how it works when tried. Ordinary and specific, sometimes a little surprising, never magical or mysterious. Any writing is short and legible; if it mentions the village, it is Mossbrook; no other place names and no people's life stories.\nReply {"detail": ""}`;

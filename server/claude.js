@@ -26,6 +26,7 @@ export function budget() {
 export function modelFor(kind) {
   const q = budget().quality;
   if (kind === 'world') return config.modelWorld;
+  if (kind === 'person') return config.modelBetter;
   if (q === 'better') return config.modelBetter;
   return kind === 'decide' ? config.modelDecide : config.modelWork;
 }

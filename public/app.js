@@ -323,7 +323,16 @@ $('#graffitiForm').addEventListener('submit', async e => {
 
 let PRIV = null;
 async function loadPrivate() { if (!KEY) return; try { PRIV = await kpost('private', {}); renderPrivate(); } catch {} }
+function renderVisitors() {
+  const ul = $('#visitorList'); if (!ul || !PRIV) return; ul.textContent = '';
+  for (const v of PRIV.visitors || []) { const li = el('li'); li.append(el('b', null, 'Day ' + v.day + ' · ' + v.placeName), document.createTextNode(' · ' + (v.name ? v.name + ', ' : '') + v.who + (v.talks.length ? ' · talked ' + v.talks.length + ' time' + (v.talks.length === 1 ? '' : 's') : '')));
+    for (const t of v.talks) li.append(el('div', 'hint', 'Percy: ' + t.said), el('div', 'hint', 'They: ' + t.reply));
+    const b = el('button', 'btn small', 'Remove'); b.type = 'button'; b.onclick = async () => { try { await kpost('visitor-remove', { id: v.id }); loadPrivate(); } catch {} }; li.append(document.createTextNode(' '), b); ul.append(li); }
+  if (!(PRIV.visitors || []).length) ul.append(el('li', 'hint', 'Nobody arranged.'));
+}
+$('#visitorForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#visStatus'); try { await kpost('visitor-add', { day: $('#visDay').value, place: $('#visPlace').value, who: $('#visWho').value.trim(), name: $('#visName').value.trim() }); $('#visWho').value = ''; $('#visName').value = ''; st.textContent = 'Arranged.'; loadPrivate(); } catch (err) { st.textContent = err.message; } });
 function renderPrivate() {
+  renderVisitors();
   if (window.__showCoins && PRIV) window.__showCoins(PRIV.coins);
   if (!PRIV) return;
   const b = PRIV.budget, u = PRIV.usage;
@@ -363,6 +372,7 @@ function renderKeeper() {
   if (!ST || $('#keeperTools').hidden) return;
   const shops = ST.town.places.filter(p => ['shop', 'bakery', 'cafe', 'market', 'post', 'workshop', 'museum'].includes(p.type));
   const sel = $('#stockShop'), cur = sel.value; sel.textContent = ''; for (const p of shops) { const o = el('option', null, p.name); o.value = p.id; sel.append(o); } if (cur) sel.value = cur;
+  { const vp = $('#visPlace'), vc = vp.value; vp.textContent = ''; for (const p of ST.town.places.filter(p => !['home', 'house', 'green', 'stone', 'garden', 'lookout'].includes(p.type))) { const o = el('option', null, p.name); o.value = p.id; vp.append(o); } if (vc) vp.value = vc; if (!$('#visDay').value && ST.day) $('#visDay').value = ST.day; }
   const mf = $('#makeFor'), mcur = mf.value || makeFor; mf.textContent = ''; mf.append(Object.assign(el('option', null, 'No, just put it there'), { value: '' }));
   for (const r of ST.requests.filter(r => ['open', 'approved', 'modified'].includes(r.status) && r.kind === 'object')) { const o = el('option', null, r.what.slice(0, 80)); o.value = r.id; mf.append(o); } if (mcur) mf.value = mcur;
   const rm = (what, id) => async () => { try { await kpost(what, { id }); refreshState(); } catch {} };

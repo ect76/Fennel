@@ -55,6 +55,7 @@ export function capabilities() {
   const paint = S.inventory.some(i => /paint/i.test(i.name));
   add('paint_wall', 'subject; tag (a few words, optional)', paint ? 'he has paint' : 'needs paint (he has none)');
   add('buy', 'item: an item id seen for sale', '');
+  if (S.inside && W.visitorAt(S.inside)) add('talk', 'say: what he says or asks them, in his own words', 'talk with the person here');
   if (S.inventory.some(i => !/paint/i.test(i.name))) add('use', 'thing: one of his belongings (id); how: what he does with it, in a few words (optional)', 'try out, play with, wear, read, grow or enjoy something he owns');
   if (known('post').length) add('check_post', '', 'collect any letters or parcels waiting for him at the post office (' + known('post').map(p => W.isOpen(p, h) ? 'open now' : 'shut now').join('') + ')');
   if (known('market').length) add('stall', '', 'the market stall: drawings he offered at the stall are left out, and the honesty tin is emptied');
@@ -86,6 +87,13 @@ const WHIMS = [
 // subjects the keeper has asked to stay away from: never offered as a whim or tangent
 const NOT_AGAIN = /hollow\s*field|inkberrow|bradbrook|hanbury|\bdyson\b/i;
 const pick = a => a[Math.floor(Math.random() * a.length)];
+// the village as it really is, for someone who lives there (a keeper's visitor) to draw on
+function villageFacts() {
+  const L = ['Mossbrook is a small village; fog lies around its edges. Hardly anyone is ever about; the shops are stocked and people pay by leaving coins.'];
+  for (const p of S.town.places) { const T = W.TYPES[p.type]; L.push('- ' + p.name + ' (' + T.label + (T.open ? ', open ' + T.open[0] + ':00 to ' + T.open[1] + ':00' : '') + ')' + (p.detail ? ': ' + p.detail : '') + (p.inside && p.inside.items ? '; inside: ' + p.inside.items.slice(0, 8).map(i => (i.name || i.look) + (i.detail ? ' (' + i.detail + ')' : '')).join('; ') : '') + (S.items.some(i => i.shop === p.id && !i.sold) ? '; for sale: ' + S.items.filter(i => i.shop === p.id && !i.sold).map(i => i.name + ' ' + i.price + ' coins').join(', ') : '')); }
+  for (const th of S.things || []) if (S.mind.knownThings[th.id]) L.push('- outdoors near ' + (W.roadAt(th.x, th.z) || 'the village') + ': ' + (th.name || 'a thing') + ' (' + (th.look || '') + ')' + (th.label ? ' lettered "' + th.label + '"' : '') + (th.detail ? '; ' + th.detail : ''));
+  return L.join('\n').replace(new RegExp(NOT_AGAIN.source, 'gi'), '').slice(0, 9000);
+}
 // what he can see right now that might set him wondering
 function pickWhim(percept) {
   const seen = [];
@@ -451,6 +459,13 @@ function plan(type, args, minutes) {
     case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
     case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
+    case 'talk': {
+      const v = S.inside && W.visitorAt(S.inside); if (!v) return fail(null, 'there is nobody here to talk to');
+      const said = String(args.say || args.text || args.message || 'Hello.').slice(0, 500);
+      if (!hooks.personReply || !canCall()) return fail(null, 'they smile but say nothing just now');
+      const qs = S.mind.questions.filter(q => q.status === 'open' && !NOT_AGAIN.test(q.text)).slice(-12);
+      return { minutes: 15, caption: 'talking with the person behind the counter', work: async () => { const r = await hooks.personReply({ visitor: v, place: W.placeById(v.place), said, questions: qs, facts: villageFacts() }); return { ...r, said, visitor: v.id }; } };
+    }
     case 'use': {
       const it = S.inventory.find(i => i.id === args.thing); if (!it) return fail(null, 'he does not own anything like that');
       if (/paint/i.test(it.name)) return fail(null, 'paint is for painting a wall (paint_wall)');
@@ -668,6 +683,14 @@ function interpret(a, outcome, facts) {
       break;
     }
     case 'take': { x.importance = 3; break; }
+    case 'talk': {
+      const v = r && (S.visitors || []).find(z => z.id === r.visitor); if (!v || !r.reply) { facts.push('they did not answer'); break; }
+      v.talks.push({ said: r.said, reply: r.reply, t: S.t }); const pl = W.placeById(v.place);
+      facts.push('he said: "' + r.said + '"; the person behind the counter answered: "' + r.reply + '"');
+      const c = Mem.claim({ text: 'The person behind the counter at ' + (pl ? pl.name : 'a shop') + ' on day ' + W.dayOf(S.t) + ' told him: "' + r.reply + '"', provenance: 'told', confidence: 0.85 }); x.learning.push(c.id);
+      for (const id of r.answered || []) { const q = S.mind.questions.find(z => z.id === id && z.status === 'open'); if (q) { Mem.setQuestion(q.id, 'answered', 'answered by the person at ' + (pl ? pl.name : 'a shop')); facts.push('that answered something he had wondered: "' + q.text.slice(0, 140) + '"'); } }
+      x.importance = 5; break;
+    }
     case 'use': {
       const it = S.inventory.find(i => i.id === a.args.thing); if (!it) break;
       it.usedTimes = (it.usedTimes || 0) + 1; const how = String(a.args.how || '').slice(0, 60);
