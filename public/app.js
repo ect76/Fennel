@@ -285,6 +285,11 @@ $('#growBtn').onclick = async () => { try { const r = await kpost('grow', {}); $
   showG(g);
 }
 $('#jExport').onclick = async () => { const st = $('#jStatus'); st.textContent = 'Gathering…'; try { const r = await kpost('journal-export', { days: $('#jDays').value }); const url = URL.createObjectURL(new Blob([r.text], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = r.name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); st.textContent = r.count + ' decisions saved as ' + r.name; } catch (err) { st.textContent = err.message; } };
+{ const st = () => $('#scatterStatus'), show = c => { if (c) st().textContent = c.lying + ' coin spot' + (c.lying === 1 ? '' : 's') + ' lying about now · he has found ' + c.found + ' coin' + (c.found === 1 ? '' : 's') + ' so far'; };
+  $('#scatterForm').addEventListener('submit', async e => { e.preventDefault(); try { await kpost('scatter', { coins: $('#scatterN').value }); await loadPrivate(); show(PRIV && PRIV.coins); st().textContent = 'Scattered. ' + st().textContent; } catch (err) { st().textContent = err.message; } });
+  $('#coinsPerDaySave').onclick = async () => { try { await kpost('settings', { coinsPerDay: $('#coinsPerDay').value }); st().textContent = 'Saved: ' + $('#coinsPerDay').value + ' a morning.'; } catch (err) { st().textContent = err.message; } };
+  window.__showCoins = c => { if (!c) return; if (document.activeElement !== $('#coinsPerDay')) $('#coinsPerDay').value = c.perDay; show(c); };
+}
 $('#letterForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#letterStatus'); try { await kpost('letter', { text: $('#letterText').value, from: $('#letterFrom').value }); $('#letterText').value = ''; st.textContent = 'Posted. It\'s waiting for him at the post office.'; } catch (err) { st.textContent = err.message; } });
 $('#giveForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#giveStatus'); try { await kpost('give', { coins: $('#giveCoins').value, from: $('#giveFrom').value, message: $('#giveMsg').value }); $('#giveMsg').value = ''; st.textContent = 'An envelope is waiting at the post office.'; refreshState(); } catch (err) { st.textContent = err.message; } });
 $('#bookForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#bookStatus'); try { st.textContent = $('#bookUrl').value && !$('#bookText').value ? 'Fetching the page…' : ''; const r = await kpost('book', { topic: $('#bookTopic').value, url: $('#bookUrl').value, text: $('#bookText').value }); $('#bookTopic').value = ''; $('#bookText').value = ''; $('#bookUrl').value = ''; st.textContent = '"' + r.title + '" is on the shelf' + (r.parts > 1 ? ' (' + Math.round(r.chars / 1000) + 'k characters: about ' + r.parts + ' sittings to read).' : '.'); refreshState(); } catch (err) { st.textContent = err.message; } });
@@ -319,6 +324,7 @@ $('#graffitiForm').addEventListener('submit', async e => {
 let PRIV = null;
 async function loadPrivate() { if (!KEY) return; try { PRIV = await kpost('private', {}); renderPrivate(); } catch {} }
 function renderPrivate() {
+  if (window.__showCoins && PRIV) window.__showCoins(PRIV.coins);
   if (!PRIV) return;
   const b = PRIV.budget, u = PRIV.usage;
   { const NAMES = { decide: 'everyday decisions', research: 'research', code: 'website and coding work', write: 'writing', draw: 'drawing', read: 'reading', reflect: 'end-of-day thinking', world: 'describing the world', other: 'other' };

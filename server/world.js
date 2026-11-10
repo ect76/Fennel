@@ -51,7 +51,7 @@ export function newWorld() {
     mind: emptyMind(), journal: [], life: [],
     requests: [], projects: [], researchLog: [], ideas: [],
     drawings: [], pages: [], notes: [], percyNotes: [], things: [], graffiti: [], items, inventory: [],
-    commissions: [], shop: [], post: [], payments: [], letters: [], earned: { work: 0, real: 0, stall: 0 },
+    commissions: [], shop: [], post: [], payments: [], letters: [], earned: { work: 0, real: 0, stall: 0, found: 0 }, looseCoins: [],
     worldLog: { 1: [] }, events: [], vanished: [], weather: { kind: 'clear', until: 12 * 60 },
     settings: {}, permissions: {}, lastSeenReal: Date.now(),
     // explicit initial conditions, tagged as such in his memory (see agent.initialConditions)
@@ -324,6 +324,30 @@ function newDay(d) {
   const keys = Object.keys(S.worldLog).map(Number).sort((a, b) => a - b);
   while (keys.length > 10) delete S.worldLog[keys.shift()];
   if (d > 1 && (d - 1) % 7 === 0) wlog('the season turned to ' + seasonOf(d));
+  S.looseCoins = (S.looseCoins || []).filter(c => d - c.day <= 10); // dropped coins don't lie about for ever
+  const each = Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3;
+  if (each > 0) scatterCoins(each);
+}
+// a few coins dropped by the roadside, mostly on roads he hasn't walked (so wandering pays)
+export function scatterCoins(n) {
+  const roads = S.town.edges.filter(e => !e.path && e.name && S.town.nodes[e.a] && S.town.nodes[e.b]); if (!roads.length) return 0;
+  const walked = new Set(S.mind.roadsWalked || []), fresh = roads.filter(e => !walked.has(e.name));
+  for (let i = 0; i < n; i++) {
+    const pool = fresh.length && Math.random() < 0.75 ? fresh : roads, e = pool[Math.floor(Math.random() * pool.length)], A = S.town.nodes[e.a], B = S.town.nodes[e.b];
+    const t = 0.15 + Math.random() * 0.7, dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz) || 1, side = (Math.random() < 0.5 ? -1 : 1) * 0.8;
+    S.looseCoins.push({ id: uid(), x: A.x + dx * t - dz / L * side, z: A.z + dz * t + dx / L * side, n: Math.random() < 0.25 ? 2 : 1, day: dayOf(S.t), road: e.name });
+  }
+  return n;
+}
+// coins he spots along a walk (harder to see at night or in fog)
+export function findCoins(path) {
+  if (!Array.isArray(path) || path.length < 2 || !(S.looseCoins || []).length) return [];
+  const h = hourOf(S.t), r = isDark(h) ? 0.9 : S.weather.kind === 'fog' ? 1.3 : 2.2, got = [];
+  const pts = []; for (let i = 1; i < path.length; i++) { const A = path[i - 1], B = path[i], k = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.z - A.z) / 1)); for (let j = 0; j <= k; j++) pts.push({ x: A.x + (B.x - A.x) * j / k, z: A.z + (B.z - A.z) * j / k }); }
+  S.looseCoins = S.looseCoins.filter(c => { if (pts.some(p => Math.hypot(p.x - c.x, p.z - c.z) <= r)) { got.push(c); return false; } return true; });
+  for (const c of got) { S.coins += c.n; S.earned.found = (S.earned.found || 0) + c.n; }
+  if (got.length) wlog('Percy found ' + got.reduce((a, c) => a + c.n, 0) + ' coin(s) by the roadside');
+  return got;
 }
 
 /* ---------- the keeper's tools (environmental, never behavioural) ---------- */

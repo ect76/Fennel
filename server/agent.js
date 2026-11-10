@@ -600,6 +600,7 @@ export function onComplete(a, outcome) {
   const extra = interpret(a, outcome, facts);
   if (outcome.error) facts.push('it did not work out: ' + outcome.error);
   noteWalk(a);
+  { const found = W.findCoins(a.path); if (found.length) { const k = found.reduce((t, c) => t + c.n, 0), roads = [...new Set(found.map(c => c.road || 'the road'))]; facts.push('on the way he spotted ' + (k === 1 ? 'a coin' : k + ' coins') + ' glinting at the side of ' + roads.join(' and ') + ', dropped by someone, and picked ' + (k === 1 ? 'it' : 'them') + ' up (he now has ' + S.coins + ' coins)'); } }
   { const passed = (a.passed || []).concat(P.seeAlong(a.path)); if (passed.length) facts.push('on the way he passed somewhere he had never seen: ' + passed.join('; ')); }
   const text = (a.caption || a.type) + ': ' + (facts.length ? facts.join('; ') : 'done') + '.';
   const imp = extra.importance || (outcome.ok === false ? 2 : ['research', 'code', 'write', 'draw', 'paint_wall', 'check_post', 'request', 'enter'].includes(a.type) ? 3 : 1);

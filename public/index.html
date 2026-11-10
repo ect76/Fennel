@@ -169,6 +169,13 @@
           <div class="row"><label class="fld" style="flex:1;min-width:150px">Signed (optional)<input type="text" id="letterFrom" maxlength="40"></label></div>
           <div class="row"><button type="submit" class="btn">Post the letter</button><span class="hint" id="letterStatus" role="status"></span></div>
         </form>
+        <form class="card" data-g="make" id="scatterForm">
+          <h2 style="margin:0">Coins to find</h2>
+          <p class="hint">Coins dropped at the side of the roads, mostly ones he hasn't walked yet. He picks them up if he walks close enough (harder at night or in fog). Unfound coins are gone after ten days.</p>
+          <div class="row"><label class="fld" style="flex:1;min-width:140px">Dropped each morning<input type="number" id="coinsPerDay" min="0" max="20" value="3"></label><button type="button" class="btn small" id="coinsPerDaySave">Save</button></div>
+          <div class="row"><label class="fld" style="flex:1;min-width:140px">Drop some now<input type="number" id="scatterN" min="1" max="50" value="5"></label><button type="submit" class="btn small">Scatter them</button></div>
+          <p class="hint" id="scatterStatus" role="status"></p>
+        </form>
         <form class="card" data-g="him" id="giveForm">
           <h2 style="margin:0">Give Percy coins</h2>
           <p class="hint">An envelope waits for him at the post office, with your message if you write one. Use this to record real money from somewhere other than Ko-fi too.</p>

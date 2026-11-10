@@ -308,7 +308,7 @@ async function keeper(req, res, what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
       return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), betterUsed: S.betterUse && S.betterUse.day === new Date().toISOString().slice(0, 10) ? S.betterUse.n : 0, build: (process.env.BUILD_REF || 'dev').slice(0, 7), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
-        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
+        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), coins: { lying: (S.looseCoins || []).length, found: S.earned.found || 0, perDay: Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3 }, defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
       if ('callsPerDay' in b) s.callsPerDay = n(b.callsPerDay, 0, 5000);
@@ -316,6 +316,7 @@ async function keeper(req, res, what) {
       if ('spendPerDay' in b) s.spendPerDay = n(b.spendPerDay, 0, 200);
       if ('paused' in b) s.paused = !!b.paused;
       if ('fastSleep' in b) s.fastSleep = !!b.fastSleep;
+      if ('coinsPerDay' in b) s.coinsPerDay = n(b.coinsPerDay, 0, 20);
       if ('timeScale' in b) s.timeScale = n(b.timeScale, 0.25, 60);
       if ('betterPerDay' in b) s.betterPerDay = n(b.betterPerDay, 0, 200);
       if ('sessionSteps' in b) s.sessionSteps = n(b.sessionSteps, 2, 20);
@@ -407,6 +408,7 @@ async function keeper(req, res, what) {
     case 'remove-building': { const r = W.removeBuilding(String(b.id || '')); if (r.error) return send(res, 400, { error: r.error }); return ok(); }
     case 'letter': { const text = str(b.text, 1500); if (!text) return send(res, 400, { error: 'Write something first.' }); const from = str(b.from, 40); W.keeperLetter(text + (from ? ' — ' + from : ''), 'letter'); save(); return ok(); }
     case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
+    case 'scatter': { const k = Math.round(Number(b.coins) || 0); if (k < 1 || k > 50) return send(res, 400, { error: 'Between 1 and 50.' }); W.scatterCoins(k); return ok({ lying: S.looseCoins.length }); }
     case 'record-sale': { const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' }); payIn({ coins: l.price, from: str(b.from, 40), code: l.code, source: 'keeper' }); return send(res, 200, { ok: true }); }
     case 'remove-commission': S.commissions = S.commissions.filter(c => c.id !== b.id); return ok();
     case 'remove-note': S.notes = S.notes.filter(n => n.id !== b.id); return ok();
