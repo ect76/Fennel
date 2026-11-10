@@ -151,7 +151,7 @@ Agent.init(S, {
   code: o => Code.code({ ...o, how: searchVia(), permissions: permissions(), publishProject, shopChanged, siteInfo }),
   writePage: o => Sessions.writePage({ ...o, publishPage }),
   readText: o => Sessions.readText(o),
-  closerLook: (p, it) => C.closerLook(p, it),
+  closerLook: (p, it, building) => C.closerLook(p, it, building),
   tryOut: (it, how) => C.tryOut(it, how),
 });
 W.setHooks({ onComplete: Agent.onComplete, onArrive: Agent.onArrive });

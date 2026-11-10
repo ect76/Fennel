@@ -89,9 +89,9 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 // what he can see right now that might set him wondering
 function pickWhim(percept) {
   const seen = [];
-  for (const t of percept.things || []) seen.push({ w: 3, d: t.what });
-  for (const r of percept.room || []) { const m = String(r).match(/^item \w+: (.*)$/); if (m) seen.push({ w: 2, d: m[1].replace(/\s*\[.*$/, '') }); }
-  for (const p of percept.places || []) if (p.look && !/^a house$/.test(p.look)) seen.push({ w: 1, d: p.look + (p.sign ? ' (the sign says "' + p.sign + '")' : '') });
+  for (const t of percept.things || []) if ((t.looks || 0) < 2) seen.push({ w: 3, d: t.what });
+  for (const r of percept.room || []) { if (/looked at closely \d+ times/.test(r)) continue; const m = String(r).match(/^item \w+: (.*)$/); if (m) seen.push({ w: 2, d: m[1].replace(/\s*\[.*$/, '') }); }
+  for (const p of percept.places || []) if (p.look && !/^a house$/.test(p.look) && (p.looks || 0) < 2) seen.push({ w: 1, d: p.look + (p.sign ? ' (the sign says "' + p.sign + '")' : '') });
   const ok = seen.filter(s => s.d && !NOT_AGAIN.test(s.d));
   if (ok.length && Math.random() < 0.5) {
     const bag = ok.flatMap(s => Array(s.w).fill(s.d)), d = String(pick(bag)).slice(0, 220);
@@ -504,12 +504,14 @@ function plan(type, args, minutes) {
 function planLook(args) {
   const at = String(args.at || 'around'); const minutes = clamp(Number(args.minutes) || 12, 3, 120);
   const th = W.thingById(at);
-  if (th) { if (!S.mind.knownThings[th.id]) return fail(null, 'he has not seen that'); return { dest: nearSpot(th), minutes, caption: 'looking closely at something', target: th.id }; }
+  const again = n => n >= 3 ? fail(null, 'he has already looked at it closely ' + n + ' times; looking yet again would show nothing new') : null;
+  const closer = (o, where, building = false) => o.detail || !hooks.closerLook || !canCall() ? null : async () => { try { o.detail = await hooks.closerLook(where, { name: o.name, look: o.look || (W.TYPES[o.type] && W.TYPES[o.type].label) || '', text: o.label || o.signText || '' }, building); } catch {} return {}; };
+  if (th) { const k = S.mind.knownThings[th.id]; if (!k) return fail(null, 'he has not seen that'); return again(k.looks || 0) || { dest: nearSpot(th), minutes, caption: 'looking closely at something', target: th.id, work: closer(th, { name: W.whereWords() }) }; }
   const p = W.placeById(at);
-  if (p) { if (!S.mind.knownPlaces[p.id]) return fail(null, 'he has not seen that place'); return { place: p.id, minutes }; }
+  if (p) { const k = S.mind.knownPlaces[p.id]; if (!k) return fail(null, 'he has not seen that place'); return again(k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0) || { place: p.id, minutes, work: closer(p, { name: 'Mossbrook' }, true) }; }
   const inside = S.inside && W.placeById(S.inside);
   const item = inside && inside.inside && inside.inside.items.find(i => i.id === at);
-  if (item) return { minutes, work: item.detail || !hooks.closerLook || !canCall() ? null : async () => { try { item.detail = await hooks.closerLook(inside, item); } catch {} return {}; } };
+  if (item) return again(item.looks || 0) || { minutes, work: item.detail || !hooks.closerLook || !canCall() ? null : async () => { try { item.detail = await hooks.closerLook(inside, item); } catch {} return {}; } };
   if (/^around$/i.test(at) && inside && inside.type !== 'home') return { minutes, work: lookInsideWork(inside.id) };
   return { minutes };
 }
@@ -638,7 +640,7 @@ function interpret(a, outcome, facts) {
     case 'look': {
       const at = String(a.args.at || 'around'); const th = W.thingById(at);
       if (th) { const k = S.mind.knownThings[th.id] || (S.mind.knownThings[th.id] = { firstSeen: S.t }); k.stage = 'examined'; k.examinedDay = W.dayOf(S.t); k.looks = (k.looks || 0) + 1;
-        facts.push('up close: ' + (th.look || 'an object') + (th.label ? '; lettering on it reads "' + th.label + '"' : '') + (k.looks > 1 ? ' (looked at closely ' + k.looks + ' times now; looking again shows nothing he had not already seen, so what it is or how it works would have to be found out some other way)' : ''));
+        facts.push('up close: ' + (th.look || 'an object') + (th.label ? '; lettering on it reads "' + th.label + '"' : '') + (th.detail ? '; looking properly (all round it, underneath, any moving parts): ' + th.detail : '') + (k.looks > 1 ? ' (looked at closely ' + k.looks + ' times now; looking again shows nothing he had not already seen, so what it is or how it works would have to be found out some other way)' : ''));
         const c = Mem.claim({ text: 'Thing ' + th.id + ' near ' + W.whereWords() + ' looks like: ' + (th.look || 'an object') + (th.label ? '; it has the words "' + th.label + '" on it' : ''), about: th.id, provenance: 'perceived', confidence: 0.95 }); x.learning.push(c.id); x.refs.thing = [th.id]; x.importance = k.looks === 1 ? 3 : 2; break; }
       const inside = S.inside && W.placeById(S.inside);
       if (inside && inside.inside) {
@@ -650,7 +652,9 @@ function interpret(a, outcome, facts) {
       } else if (r && r.unfurnished) facts.push('it was too dim to make much out');
       else if (/^sky$/i.test(at)) facts.push('the sky: ' + S.weather.kind + (W.isDark(W.hourOf(S.t)) ? ', dark' : ''));
       else if (/^fog$/i.test(at)) facts.push('the fog is thick and grey and seems to swallow the road a few steps in; nothing can be seen beyond it');
-      else facts.push('took a long look around ' + W.whereWords());
+      else { const pl = W.placeById(at);
+        if (pl && S.mind.knownPlaces[pl.id]) { const k = S.mind.knownPlaces[pl.id], today = W.dayOf(S.t); if (k.looksDay !== today) { k.looks = 0; k.looksDay = today; } k.looks = (k.looks || 0) + 1; facts.push('took a long look at ' + pl.name + (pl.detail ? ': ' + pl.detail : '') + (k.looks > 1 ? ' (looked ' + k.looks + ' times now; looking again shows nothing he had not already seen)' : '')); x.refs.place = [pl.id]; }
+        else facts.push('took a long look around ' + W.whereWords()); }
       break;
     }
     case 'enter': { const p = W.placeById(a.place); if (p && S.inside === p.id) { facts.push('went inside ' + p.name + (p.inside ? ': ' + (p.inside.feel || '') : '')); x.refs.place = [p.id]; x.importance = (S.mind.knownPlaces[p.id] || {}).entered > 1 ? 1 : 3; } break; }
