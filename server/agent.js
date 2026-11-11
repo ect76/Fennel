@@ -6,6 +6,7 @@ import { config } from './config.js';
 import * as W from './world.js';
 import * as P from './perception.js';
 import * as Mem from './memory.js';
+import * as Town from './town.js';
 import * as C from './create.js';
 import { chat, canCall, canSearch, modelFor, pace, callsLeft, budget } from './claude.js';
 import { uid, str, clamp, plain } from './util.js';
@@ -143,7 +144,7 @@ const DECIDE_TOOL = {
   }, required: ['action'] },
 };
 
-let lastPerceiveT = 0, lastTrigger = 'waking', lastOutcome = null, retryAfter = 0, badStreak = 0;
+let lastPerceiveT = 0, lastTrigger = 'waking', lastOutcome = null, retryAfter = 0, badStreak = 0, loopNote = '';
 export const setTrigger = t => { lastTrigger = t; };
 export async function decide() {
   // the body has the last word: at the point of collapse he falls asleep wherever he is
@@ -162,6 +163,12 @@ export async function decide() {
   const mem = Mem.recall(query, ids);
   const journal = { id: 'j' + uid(), t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), trigger: lastTrigger, perceived: pdesc.slice(0, 6000), newly: percept.newly,
     memories: [...mem.recent, ...mem.episodes, ...mem.semantic, ...mem.personal, ...mem.procedural].map(x => x.id), intentions: active.map(i => i.id) };
+  // the same choice made three times running, each over almost as soon as it began: stop paying to make it a fourth time
+  const last3 = S.journal.slice(-3);
+  if (last3.length === 3 && last3.every(j => j.src === 'claude' && j.choice && JSON.stringify(j.choice) === JSON.stringify(last3[0].choice)) && S.t - last3[0].t < 5) {
+    loopNote = 'He chose to ' + (last3[0].caption || last3[0].choice.type) + ' three times in a row, and each time it was over almost before it began; doing it again would go the same way.';
+    return continuity(journal, 'the same choice kept ending the moment it started');
+  }
   const p = pace();
   if (Date.now() < retryAfter || p === 'none' || (p === 'scarce' && Math.random() < 0.5)) return continuity(journal, p === 'none' ? (canCall() ? 'budget' : 'no thinking budget left today, or paused') : Date.now() < retryAfter ? 'waiting after an error' : 'saving thinking budget');
   const caps = capabilities();
@@ -193,6 +200,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p, percept = {} }) {
   const L = [];
   L.push('TRIGGER: ' + lastTrigger);
   if (lastOutcome) L.push('LAST ACTION: ' + lastOutcome.text);
+  if (loopNote) { L.push('NOTE: ' + loopNote); loopNote = ''; }
   L.push('\nPERCEPTION\n' + pdesc);
   L.push('\nMEMORY');
   if (mem.summaries.length) L.push('Earlier days, summarised: ' + mem.summaries.map(s => 'day ' + s.day + ': ' + s.text).join(' | '));
@@ -452,13 +460,19 @@ function plan(type, args, minutes) {
         for (const e of roads) { const A = S.town.nodes[e.a], B = S.town.nodes[e.b], dA = Math.hypot(A.x - S.pos.x, A.z - S.pos.z), dB = Math.hypot(B.x - S.pos.x, B.z - S.pos.z), near = Math.min(dA, dB); if (!best || near < best.near) best = { near, e, far: dA > dB ? A : B, other: dA > dB ? B : A }; }
         const all = S.town.edges.filter(e => e.name === best.e.name); let far = best.far, fd = Math.hypot(far.x - S.pos.x, far.z - S.pos.z);
         for (const e of all) for (const id of [e.a, e.b]) { const n = S.town.nodes[id], d = Math.hypot(n.x - S.pos.x, n.z - S.pos.z); if (d > fd) { far = n; fd = d; } }
+        if (fd < 3) { // he is already standing at its far end: count it as walked and look further afield
+          if (!S.mind.roadsWalked.includes(best.e.name)) S.mind.roadsWalked.push(best.e.name);
+          if ((args._tries || 0) < 4) return plan('explore', { ...args, road: '', _tries: (args._tries || 0) + 1 }, minutes);
+          return fail(null, 'he is already at the end of ' + best.e.name + '; past it the road runs into fog that cannot be walked into');
+        }
+        args._road = best.e.name; // once he has been there, it counts as walked even if its last stretch is short or shared
         return { dest: { x: far.x, z: far.z }, caption: 'exploring ' + best.e.name, minutes: 0 };
       }
       const nodes = Object.values(S.town.nodes); if (!nodes.length) return fail(null, 'there is nowhere further to go');
       const far = nodes.map(n => ({ n, d: Math.min(...S.town.places.filter(p => S.mind.knownPlaces[p.id]).map(p => Math.hypot(p.door.x - n.x, p.door.z - n.z)), 999) })).sort((a, b) => b.d - a.d)[0].n;
       return { dest: { x: far.x, z: far.z }, caption: 'wandering out past the places he knows', minutes: 0 };
     }
-    case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
+    case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (!g.place && g.dest && Math.hypot(g.dest.x - S.pos.x, g.dest.z - S.pos.z) < 2) return fail(null, 'he is already there' + (/fog/i.test(String(args.to)) || Town.endNodes(S.town).some(id => { const n = S.town.nodes[id]; return Math.hypot(n.x - S.pos.x, n.z - S.pos.z) < 3; }) ? '; past here the road runs into fog that cannot be walked into' : '')); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
     case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
     case 'talk': {
@@ -645,6 +659,7 @@ export function onComplete(a, outcome) {
 }
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 function noteWalk(a) {
+  if (a.type === 'explore' && a.args && a.args._road && !S.mind.roadsWalked.includes(a.args._road)) S.mind.roadsWalked.push(a.args._road);
   if (!Array.isArray(a.path) || a.path.length < 2) return;
   const got = new Set(S.mind.roadsWalked);
   for (let i = 1; i < a.path.length; i++) { const A = a.path[i - 1], B = a.path[i], n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.z - A.z) / 2)); for (let k = 0; k <= n; k++) { const r = W.roadAt(A.x + (B.x - A.x) * k / n, A.z + (B.z - A.z) * k / n); if (r) got.add(r); } }
