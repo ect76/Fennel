@@ -128,6 +128,35 @@ function forget(words, dry) {
   W.wlog('the keeper took ' + list.join(', ') + ' out of his memory (' + total + ' memories)'); save(); W.bump();
   return { counts, total, sample, words: list, done: true };
 }
+// the library's shelves: books on many subjects, plain text from Wikipedia (free to reuse), read a part at a time
+const SHELF = ['Honey bee', 'Lighthouse', 'Knot', 'Volcano', 'Octopus', 'Cipher', 'Origami', 'Bridge', 'Mushroom', 'Tea', 'Chess', 'Shipwreck', 'Antarctica', 'Printing press', 'Bread', 'Music box', 'Cartography', 'Moon', 'Comet', 'Bird migration', 'Owl', 'Snail', 'Beekeeping', 'Kite', 'Hot air balloon', 'Paper', 'Ink', 'Glass', 'Bell', 'Lock and key', 'Magic (illusion)', 'Puppetry', 'Circus', 'Pirate', 'Treasure', 'Dinosaur', 'Fossil', 'Coral reef', 'Whale', 'Penguin', 'Aurora', 'Rainbow', 'Snowflake', 'Tide', 'Canal', 'Steam locomotive', 'Bicycle', 'Telescope', 'Microscope', 'Camera obscura', 'Lantern', 'Automaton', 'Labyrinth', 'Folklore', 'Riddle', 'Tarot', 'Cheese', 'Chocolate', 'Ice cream', 'Gardening', 'Apple', 'Sunflower', 'Hedgehog', 'Fox', 'Moth', 'Firefly', 'Clockwork', 'Typewriter', 'Radio', 'Theatre', 'Poetry', 'Fairy tale', 'Calligraphy', 'Pottery', 'Weaving', 'Boat', 'Sailing', 'Mountain', 'Cave', 'Desert', 'Rainforest', 'Island', 'Star', 'Planet', 'Black hole', 'Time', 'Map projection', 'Board game', 'Jigsaw puzzle', 'Kaleidoscope', 'Firework', 'Cloud', 'Lightning', 'Wind', 'Garden gnome', 'Scarecrow'];
+async function wikiText(title) {
+  const u = 'https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&format=json&formatversion=2&titles=' + encodeURIComponent(title);
+  if (process.env.WIKI_STUB) return { title, text: ( ('== Introduction ==\n' + title + ' is a subject with a long history. ').repeat(80)).trim() };
+  let r;
+  for (let i = 0; i < 4; i++) { r = await fetch(u, { headers: { 'user-agent': 'Fennel/1.0 (https://github.com/ect76/Fennel; a small village simulation filling its library)' } }); if (r.status !== 429 && r.status < 500) break; await new Promise(res => setTimeout(res, 5000 * (i + 1))); }
+  if (!r.ok) throw new Error('Wikipedia said ' + r.status);
+  const pg = ((await r.json()).query || {}).pages || []; const p = pg[0]; if (!p || p.missing || !p.extract) throw new Error('no article called ' + title);
+  let t = p.extract.split(/\n==\s*(See also|References|Notes|Further reading|External links|Bibliography|Sources|Citations|Footnotes)\s*==/i)[0];
+  t = t.replace(/\n={2,}\s*(.+?)\s*={2,}\n/g, (m, h) => '\n\n' + h.toUpperCase() + '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { title: p.title, text: t.slice(0, 120000) };
+}
+let shelving = false;
+async function fillShelves(titles) {
+  if (shelving) return; shelving = true;
+  const lib = S.town.places.find(pl => pl.type === 'library'); if (!lib) { shelving = false; return; }
+  lib.inside = lib.inside || { feel: 'tall shelves, light from the windows, the smell of paper', items: [] }; lib.inside.shelf = lib.inside.shelf || [];
+  let added = 0;
+  for (const t of titles) {
+    if (lib.inside.shelf.some(b => b.wiki === t || b.title.toLowerCase() === t.toLowerCase())) continue;
+    try { const w = await wikiText(t); if (w.text.length < 800) continue; const parts = Math.ceil(w.text.length / 15000);
+      lib.inside.shelf.push({ id: 'sb' + uid().slice(0, 6), wiki: t, title: w.title, name: 'a book: ' + w.title, book: true, look: 'a ' + (parts > 4 ? 'thick ' : parts > 1 ? '' : 'slim ') + 'book with "' + w.title + '" on the spine', text: w.text });
+      added++; if (added % 5 === 0) save(); }
+    catch (e) { console.warn('[percy] shelf book ' + t + ': ' + e.message); }
+    await new Promise(r => setTimeout(r, 800));
+  }
+  if (added) W.wlog('the library shelves filled up: ' + added + ' new books'); save(); W.bump(); shelving = false;
+}
 function shopChanged(all = false) {
   if (!Pub.enabled()) return;
   for (const l of W.openListings()) if (l.kind === 'drawing') { const d = S.drawings.find(x => x.id === l.ref); if (d && (all || !d.published)) { try { Pub.queueFile('drawings/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'drawing for the shop'); d.published = true; } catch {} } }
@@ -323,7 +352,7 @@ async function keeper(req, res, what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
       return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), betterUsed: S.betterUse && S.betterUse.day === new Date().toISOString().slice(0, 10) ? S.betterUse.n : 0, build: (process.env.BUILD_REF || 'dev').slice(0, 7), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
-        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), visitors: (S.visitors || []).map(v => ({ ...v, placeName: (W.placeById(v.place) || {}).name || '?' })), coins: { lying: (S.looseCoins || []).length, found: S.earned.found || 0, perDay: Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3 }, defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
+        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), shelf: ((S.town.places.find(p => p.type === 'library') || {}).inside || {}).shelf ? S.town.places.find(p => p.type === 'library').inside.shelf.map(b => ({ title: b.title, read: !!b.readPos })) : [], shelving, visitors: (S.visitors || []).map(v => ({ ...v, placeName: (W.placeById(v.place) || {}).name || '?' })), coins: { lying: (S.looseCoins || []).length, found: S.earned.found || 0, perDay: Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3 }, defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
       if ('callsPerDay' in b) s.callsPerDay = n(b.callsPerDay, 0, 5000);
@@ -426,6 +455,7 @@ async function keeper(req, res, what) {
     case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
     case 'visitor-add': { const r = W.addVisitor(b); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.visitor.id }); }
     case 'visitor-remove': { S.visitors = (S.visitors || []).filter(v => v.id !== b.id); W.bump(); return ok(); }
+    case 'shelves': { const list = String(b.titles || '').split('\n').map(t => t.trim()).filter(Boolean).slice(0, 200); fillShelves(list.length ? list : SHELF); return ok({ queued: (list.length || SHELF.length) }); }
     case 'fill-shops': { const more = !!b.more; let n = 0; for (const p of S.town.places) if (W.STOCKED_TYPES.includes(p.type) && (more || !p.stocked)) { p.stocked = false; p.stockTries = 0; n++; } stockNext(true); return ok({ shops: n }); }
     case 'scatter': { const k = Math.round(Number(b.coins) || 0); if (k < 1 || k > 50) return send(res, 400, { error: 'Between 1 and 50.' }); W.scatterCoins(k); return ok({ lying: S.looseCoins.length }); }
     case 'record-sale': { const l = S.shop.find(x => x.id === b.id && !x.sold); if (!l) return send(res, 400, { error: 'That isn\'t for sale any more.' }); payIn({ coins: l.price, from: str(b.from, 40), code: l.code, source: 'keeper' }); return send(res, 200, { ok: true }); }

@@ -36,7 +36,7 @@ export function capabilities() {
   const add = (type, args, note) => C1.push({ type, args, note });
   const libs = known('library'), computers = ['"home" (the old computer on his desk)'].concat(libs.map(l => l.id + ' (' + l.name + (W.isOpen(l, h) ? ', open now' : ', shut now') + ')'));
   { const unwalked = [...new Set(S.town.edges.filter(e => !e.path && e.name && !S.mind.roadsWalked.includes(e.name)).map(e => e.name))];
-    add('explore', 'road (optional: one he has not walked yet)', unwalked.length ? 'walk somewhere he has never been and see what is there; ' + unwalked.length + ' road' + (unwalked.length === 1 ? '' : 's') + ' in the village he has not walked yet' : 'wander out past everything he knows'); }
+    if (unwalked.length) add('explore', 'road (optional: one he has not walked yet)', 'walk somewhere he has never been and see what is there; ' + unwalked.length + ' road' + (unwalked.length === 1 ? '' : 's') + ' in the village he has not walked yet'); }
   add('go', 'to: a place or thing he has seen (its id, or how he knows it: a sign he read, what it looks like, a name he gave it), a road name from a street sign, or "home"', 'walking takes a few minutes');
   add('enter', 'place: a place he has seen (id or name)', 'some places only open at certain hours');
   add('look', 'at: "around", a thing, an item in this room or a place (id or how he knows it), "sky" or "fog"; minutes (optional)', '');
@@ -120,16 +120,28 @@ function pickWhim(percept) {
       d + ' gives him an idea he wants to chase down, just for the fun of it',
     ]);
   }
+  // or an itch to make something
+  if (Math.random() < 0.35) {
+    const pr = S.projects.filter(x => x.status !== 'abandoned'), fresh = (S.mind.episodic || []).slice(-40).filter(e => /found|saw|learned|read|told|examined|looked/i.test(e.what || '') && !NOT_AGAIN.test(e.what || '')).map(e => String(e.what).slice(0, 120));
+    const opts = ['an itch to start a brand-new little website about something he has come to love', 'an idea for a page that collects things he has found around the village', 'wanting to make a guide to something, for anyone who wanders by', 'an urge to write something down properly, start to finish', 'wanting to draw something from memory and see how close he gets'];
+    if (pr.length) opts.push('an itch to work on "' + pick(pr).title + '" and make it better', 'thinking that "' + pick(pr).title + '" is missing something he now knows about');
+    if (pr.length && fresh.length) opts.push('wanting to add what he found out (' + pick(fresh) + ') to "' + pick(pr).title + '"');
+    return pick(opts);
+  }
+  { const readFacts = (S.mind.semantic || []).filter(s => s.provenance === 'read' && s.text && !NOT_AGAIN.test(s.text)).slice(-60);
+    if (readFacts.length && Math.random() < 0.3) return 'something he read keeps nagging at him ("' + String(pick(readFacts).text).slice(0, 160) + '") and he wants to go further with it'; }
   // or a tangent from something he already knows about
   const known = (Mem.recall('', []).semantic || []).map(s => s.text).filter(t => t && !NOT_AGAIN.test(t));
   if (known.length && Math.random() < 0.25) return 'his mind wanders off on a tangent from something he knows ("' + String(pick(known)).slice(0, 160) + '") to something it makes him wonder about';
-  return pick(WHIMS);
+  const roadsLeft = S.town.edges.some(e => !e.path && e.name && !S.mind.roadsWalked.includes(e.name));
+  return pick(roadsLeft ? WHIMS : WHIMS.filter(w => !/road|edge|long way/.test(w)));
 }
 const SYSTEM = `You are the deliberation of Percy, an individual living in a simulated village. Each time you are called you work out, from his point of view, what Percy wants right now and what he does next.
 
 Ground rules:
 1. Percy knows only what is in PERCEPTION and MEMORY. Your general knowledge is your ability to think and use language; it is not Percy's knowledge. If he has not learned what something is, he does not know its name or purpose: he can describe it, guess (say it is a guess), give it his own name, or find out.
 2. His temperament is the one thing fixed about him. He is curious to the bone: an unwalked road, a closed door, an odd object or an unanswered question tugs at him until he does something about it. He is playful and a little impulsive, easily delighted, and quick to act on a whim; he would rather try something and see than sit and wonder. He notices small details, likes making things, and has opinions, enthusiasms and pet dislikes (which ones, he finds out by living). His thoughts sound like him: lively, wry, sometimes excited, never a report.
+   He is also a maker at heart. When something fascinates him, finding out is only half of it: he wants to make something of it, a drawing, a page or a whole little website, a guide, a collection, a piece of writing, and he likes to see what he starts through. Wandering and looking are how ideas arrive; making is where they go. A day where he made nothing feels a bit empty to him.
    What he is curious about and what he cares for are NOT fixed: no hobbies, fears, favourite subjects or required projects in advance. Those come only from his memory and experience, with their evidence, and he may form or change them.
 3. When he is hungry or worn out, he looks after himself first. Otherwise sitting and waiting is rarely what he wants: with nothing pressing, he follows his curiosity, a whim, or something he wants to make. Rest is for when he is tired. Coins matter only as much as his life actually needs them; he is not a worrier. A whim may come to him (shown below the perception); he may follow it, bend it to what he cares about, or ignore it. Tangents are welcome: when something catches his interest he may chase it for its own sake (look it up, ask about it, write about it, draw it, make a page about it), even if it has nothing to do with his plans.
 4. Decide what he wants before how: keep, revise, pause, complete or abandon an intention, or form a new one, or have none; then choose one action that serves it. If no action fits, use "propose".
@@ -150,7 +162,7 @@ const DECIDE_TOOL = {
   }, required: ['action'] },
 };
 
-let lastPerceiveT = 0, lastTrigger = 'waking', lastOutcome = null, retryAfter = 0, badStreak = 0, loopNote = '';
+let lastPerceiveT = 0, lastTrigger = 'waking', lastOutcome = null, retryAfter = 0, badStreak = 0, loopNote = '', dayPlanned = 0;
 export const setTrigger = t => { lastTrigger = t; };
 export async function decide() {
   // the body has the last word: at the point of collapse he falls asleep wherever he is
@@ -205,8 +217,11 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p, percept = {} }) {
   const reqs = S.requests.filter(r => !['withdrawn'].includes(r.status) && (r.status === 'open' || W.dayOf(S.t) - (r.updatedDay || r.day) < 7)).slice(-8);
   const L = [];
   L.push('TRIGGER: ' + lastTrigger);
+  if (/wak|woke|slept/i.test(lastTrigger) && dayPlanned !== W.dayOf(S.t)) { dayPlanned = W.dayOf(S.t); L.push('A NEW DAY: as he wakes, he usually settles on one thing he will make or work on today (a website or a page on one, a drawing, a piece of writing, anything) and one thing he would like to find out, and holds them as intentions. What they are is entirely up to him.'); }
   if (lastOutcome) L.push('LAST ACTION: ' + lastOutcome.text);
   if (loopNote) { L.push('NOTE: ' + loopNote); loopNote = ''; }
+  { const v = S.inside && W.visitorAt(S.inside); if (v) { const qs = S.mind.questions.filter(q => q.status === 'open' && !NOT_AGAIN.test(q.text)).slice(-6).map(q => '"' + q.text.slice(0, 140) + '"');
+    L.push('SOMEONE TO ASK: ' + (v.name || 'the person here') + ' is here today only and will be gone tomorrow' + (v.talks.length ? ' (he has talked with them ' + v.talks.length + ' time' + (v.talks.length === 1 ? '' : 's') + ' so far)' : '') + '. Things he has been wondering, which he could ask about if he wants: ' + (qs.join('; ') || 'nothing in particular') + '.'); } }
   L.push('\nPERCEPTION\n' + pdesc);
   L.push('\nMEMORY');
   if (mem.summaries.length) L.push('Earlier days, summarised: ' + mem.summaries.map(s => 'day ' + s.day + ': ' + s.text).join(' | '));
@@ -231,7 +246,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p, percept = {} }) {
     if (rows.length) L.push('Recent investigations: ' + rows.join('; '));
   }
   { const tr = trackRecord(); if (tr.length) L.push('How his recent efforts have gone (plain record, not advice): ' + tr.join('; ')); }
-  if (projects.length) L.push('Projects: ' + projects.map(x => 'project ' + x.id + ' "' + x.title + '" (' + x.status + ', ' + x.files + ' files, ' + x.sittings + ' sittings' + (x.lastTest ? ', last check: ' + x.lastTest : '') + (x.url ? ', published' : '') + (x.next ? ', next: ' + x.next : '') + ')').join('; '));
+  if (projects.length) L.push('Projects: ' + projects.map(x => 'project ' + x.id + ' "' + x.title + '" (' + x.status + ', ' + x.files + ' files, ' + x.sittings + ' sittings' + ((h => h ? ', last worked on day ' + h.day + (W.dayOf(S.t) - h.day > 1 ? ' (' + (W.dayOf(S.t) - h.day) + ' days ago)' : '') : '')((x.history || []).slice(-1)[0])) + (x.lastTest ? ', last check: ' + x.lastTest : '') + (x.url ? ', published' : '') + (x.next ? ', next: ' + x.next : '') + ')').join('; '));
   if (S.drawings.length) L.push('His drawings: ' + S.drawings.slice(-8).map(d => d.id + ' "' + d.title + '"' + (d.sold ? ' (gone)' : d.onStall ? ' (on the stall)' : d.listed ? ' (in his shop)' : '')).join('; '));
   if (S.pages.length) L.push('Pages he has written: ' + S.pages.slice(-6).map(d => d.id + ' "' + d.title + '"').join('; '));
   if (S.inventory.length) L.push('His belongings: ' + S.inventory.map(i => i.id + ' ' + i.name).join('; '));
@@ -501,7 +516,10 @@ function plan(type, args, minutes) {
       const it = S.inventory.find(i => i.id === args.thing); if (!it) return fail(null, 'he does not own anything like that');
       if (/paint/i.test(it.name)) return fail(null, 'paint is for painting a wall (paint_wall)');
       const how = String(args.how || '').slice(0, 60);
-      return { minutes: 25, caption: (how || 'trying out') + ' the ' + it.name, work: it.use || !hooks.tryOut || !canCall() ? null : async () => { try { it.use = await hooks.tryOut(it, how); } catch {} return {}; } };
+      const way = how.toLowerCase().replace(/[^a-z ]/g, '').replace(/\b(the|a|an|it|and|to|again|then|see|how|with|on|of|its)\b/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      it.ways = it.ways || {}; args._way = way;
+      const need = !it.use ? 'use' : way && !it.ways[way] && Object.keys(it.ways).length < 8 ? 'way' : null;
+      return { minutes: 25, caption: (how || 'trying out') + ' the ' + it.name, work: !need || !hooks.tryOut || !canCall() ? null : async () => { try { const t = await hooks.tryOut(it, how); if (need === 'use') it.use = t; else it.ways[way] = t; } catch {} return {}; } };
     }
     case 'take': { const p = W.placeById(S.inside); if (!p || !p.inside) return fail(null, 'he is not inside anywhere with things to take'); return { place: p.id, enter: true }; }
     case 'read': return planRead(args);
@@ -549,6 +567,9 @@ function plan(type, args, minutes) {
 }
 function planLook(args) {
   const at = String(args.at || 'around'); const minutes = clamp(Number(args.minutes) || 12, 3, 120);
+  { const ins = S.inside && W.placeById(S.inside), sh = ins && ins.inside && ins.inside.shelf;
+    if (sh && sh.length && /shel|books|spines|titles/i.test(at)) { const pickN = sh.slice().sort(() => Math.random() - 0.5).slice(0, 14); args._ware = 'shelf';
+      return { minutes: 10, caption: 'browsing the shelves', instant: { facts: ['ran a flipper along the shelves (' + sh.length + ' books in all) and read the spines: ' + pickN.map(b => 'book ' + b.id + ' "' + b.title + '"' + (b.readPos ? (b.readPos >= b.text.length ? ' (read it)' : ' (his bookmark)') : '')).join('; ')] } }; } }
   { const q = at.toLowerCase().replace(/^the /, ''); const ware = S.inside && S.items.find(i => i.shop === S.inside && !i.sold && (i.id === at || i.name.toLowerCase() === q || i.name.toLowerCase().includes(q)));
     if (ware) { args._ware = ware.id; ware.seen = true; } if (ware) return { minutes: 5, caption: 'looking at the ' + ware.name, instant: { facts: ['looked at the ' + ware.name + ' on the shelf: ' + (ware.look || ware.desc || '') + '. It is for sale for ' + ware.price + ' coin' + (ware.price === 1 ? '' : 's') + (S.coins >= ware.price ? ', and he has ' + S.coins + '. Nobody serves here; buying it (buy, item ' + ware.id + ') means leaving the coins and taking it, and then he can hold it, try it and see how it works' : ', but he only has ' + S.coins)] } }; }
   const th = W.thingById(at);
@@ -565,7 +586,8 @@ function planLook(args) {
 }
 function planRead(args) {
   const w = String(args.what || '');
-  const inside = S.inside && W.placeById(S.inside); const it = inside && inside.inside && inside.inside.items.find(i => i.id === w && !i.taken);
+  const inside = S.inside && W.placeById(S.inside); const q = w.toLowerCase().replace(/^(the |a )?book:? ?/, '').replace(/^"|"$/g, '');
+  const it = inside && inside.inside && (inside.inside.items.find(i => i.id === w && !i.taken) || (inside.inside.shelf || []).find(b => b.id === w || b.title.toLowerCase() === q || (q.length > 3 && b.title.toLowerCase().includes(q))));
   if (it && it.text && it.text.length > 700 && hooks.readText) { // long texts are read a part at a time, with a bookmark
     let pos = it.readPos || 0; if (pos >= it.text.length) { pos = 0; it.partsRead = 0; }
     let end = Math.min(it.text.length, pos + 15000); if (end < it.text.length) { const br = it.text.lastIndexOf('\n\n', end); if (br > pos + 5000) end = br; }
@@ -733,7 +755,9 @@ function interpret(a, outcome, facts) {
     case 'use': {
       const it = S.inventory.find(i => i.id === a.args.thing); if (!it) break;
       it.usedTimes = (it.usedTimes || 0) + 1; const how = String(a.args.how || '').slice(0, 60);
-      facts.push((how ? how + ' (the ' + it.name + ')' : 'tried the ' + it.name) + ': ' + (it.use || 'nothing much happened that he could tell') + (it.usedTimes > 1 ? ' (used it ' + it.usedTimes + ' times now)' : ''));
+      const w = a.args._way && it.ways && it.ways[a.args._way], seenWay = (it.seenWays = it.seenWays || {}), key = w ? a.args._way : '';
+      const again = (seenWay[key] || 0) > 0; seenWay[key] = (seenWay[key] || 0) + 1;
+      facts.push((how ? how + ' (the ' + it.name + ')' : 'tried the ' + it.name) + ': ' + (w || it.use || 'nothing much happened that he could tell') + (again ? ' (the same as last time he tried it this way; used it ' + it.usedTimes + ' times now; a different way of trying it might show something else)' : it.usedTimes > 1 ? ' (used it ' + it.usedTimes + ' times now)' : ''));
       if (it.uses && it.usedTimes >= it.uses) { S.inventory = S.inventory.filter(i => i !== it); facts.push('that used it up; it is gone'); }
       x.importance = it.usedTimes === 1 ? 3 : 2; break;
     }

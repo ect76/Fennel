@@ -332,9 +332,11 @@ function renderVisitors() {
 }
 { const go = more => async () => { const st = $('#fillStatus'); try { const r = await kpost('fill-shops', { more }); st.textContent = r.shops ? 'Stocking ' + r.shops + ' shop' + (r.shops === 1 ? '' : 's') + ', one after another; watch the world log.' : 'Every shop already has stock.'; } catch (err) { st.textContent = err.message; } };
   $('#fillShops').onclick = go(false); $('#moreStock').onclick = go(true); }
+$('#shelfForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#shelfStatus'); try { const r = await kpost('shelves', { titles: $('#shelfTitles').value }); st.textContent = 'Fetching up to ' + r.queued + ' books, one every second or so. Leave it a couple of minutes.'; $('#shelfTitles').value = ''; } catch (err) { st.textContent = err.message; } });
 $('#visitorForm').addEventListener('submit', async e => { e.preventDefault(); const st = $('#visStatus'); try { await kpost('visitor-add', { day: $('#visDay').value, place: $('#visPlace').value, who: $('#visWho').value.trim(), name: $('#visName').value.trim() }); $('#visWho').value = ''; $('#visName').value = ''; st.textContent = 'Arranged.'; loadPrivate(); } catch (err) { st.textContent = err.message; } });
 function renderPrivate() {
   renderVisitors();
+  if ($('#shelfCount') && PRIV) { const sh = PRIV.shelf || []; $('#shelfCount').textContent = sh.length ? sh.length + ' books on the shelves · ' + sh.filter(b => b.read).length + ' he has started' + (PRIV.shelving ? ' · fetching more…' : '') : (PRIV.shelving ? 'Fetching books…' : 'The shelves are empty.'); }
   if (window.__showCoins && PRIV) window.__showCoins(PRIV.coins);
   if (!PRIV) return;
   const b = PRIV.budget, u = PRIV.usage;

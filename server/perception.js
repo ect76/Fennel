@@ -67,6 +67,9 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
     const items = S.items.filter(it => it.shop === inside.id && !it.sold && it.status !== 'building');
     if (items.length) { out.forSale = items.map(it => ({ id: it.id, what: it.name, look: it.look || '', price: it.price })); for (const it of items) it.seen = true; }
     { const v = W.visitorAt(inside.id); if (v) out.person = (v.name && v.talks.length ? v.name + ', ' : 'someone: ') + v.who + ', standing behind the counter' + (v.talks.length ? ' (he has talked with them today)' : ' (another living person, the first he has ever met in Mossbrook)'); }
+    if (inside.inside && inside.inside.shelf && inside.inside.shelf.length) { const sh = inside.inside.shelf, hr = W.dayOf(S.t) * 24 + Math.floor(W.hourOf(S.t)), seed = id => { let h = hr; for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 9973; return h; };
+      const marked = sh.filter(b => b.readPos && b.readPos < b.text.length).slice(0, 2), rest = sh.filter(b => !marked.includes(b)).sort((a, b) => seed(a.id) - seed(b.id)).slice(0, 7 - marked.length);
+      out.shelf = 'shelves of ' + sh.length + ' books; the spines in front of him: ' + marked.concat(rest).map(b => 'book ' + b.id + ' "' + b.title + '"' + (b.readPos ? (b.readPos >= b.text.length ? ' (read it)' : ' (his bookmark is in it)') : '')).join('; ') + ' (looking along the shelves would show others)'; }
     if (inside.type === 'post') out.post = W.postWaiting() ? 'there is post waiting at the counter for him' : 'nothing waiting at the counter';
   }
   // the street: buildings, things, roads, fog, within sight
@@ -135,6 +138,7 @@ export function describe(p) {
   { const here = (p.places || []).find(x => /right here/.test(x.where) && x.lit && !W.S.inside); if (here) L.push('The door right in front of him: ' + (here.sign || 'this building') + ' is ' + (/door open/.test(here.lit) ? 'OPEN now; he could walk straight in' : 'locked now') + '.'); }
   L.push('Body: stomach ' + p.body.stomach + '; energy ' + p.body.energy + '. Coins in pocket: ' + p.coins + '.');
   if (p.room) L.push('In the room: ' + p.room.filter(Boolean).join('; ') + '.');
+  if (p.shelf) L.push('Bookshelves: ' + p.shelf + '.');
   if (p.person) L.push('A person here: ' + p.person + '.');
   if (p.forSale) L.push('For sale here (nobody serves; anyone may buy by leaving the coins and taking it): ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');
   if (p.post) L.push(p.post + '.');
