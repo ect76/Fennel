@@ -133,7 +133,7 @@ export function describe(p) {
   L.push('Body: stomach ' + p.body.stomach + '; energy ' + p.body.energy + '. Coins in pocket: ' + p.coins + '.');
   if (p.room) L.push('In the room: ' + p.room.filter(Boolean).join('; ') + '.');
   if (p.person) L.push('A person here: ' + p.person + '.');
-  if (p.forSale) L.push('For sale here: ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');
+  if (p.forSale) L.push('For sale here (nobody serves; anyone may buy by leaving the coins and taking it): ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');
   if (p.post) L.push(p.post + '.');
   if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.window ? ' [in the window: ' + x.window + ']' : '') + (x.vis ? ' [' + x.vis + ']' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times today already]' : '')).join('; ') + '.');
   if (p.things && p.things.length) L.push('Objects in view: ' + p.things.map(x => 'thing ' + x.id + ': ' + x.what + ' (' + x.where + ')' + (x.label ? ' with lettering: "' + x.label + '"' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [looked at closely ' + x.looks + ' times already; looking again shows nothing new]' : '')).join('; ') + '.');

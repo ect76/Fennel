@@ -88,6 +88,7 @@ const WHIMS = [
 // subjects the keeper has asked to stay away from: never offered as a whim or tangent
 const NOT_AGAIN = /hollow\s*field|inkberrow|bradbrook|hanbury|\bdyson\b/i;
 const pick = a => a[Math.floor(Math.random() * a.length)];
+const sameChoice = (a, b) => { const k = c => JSON.stringify({ t: c.type, a: Object.fromEntries(Object.entries(c.args || {}).filter(([x]) => !x.startsWith('_'))) }); return k(a) === k(b); };
 // the village as it really is, for someone who lives there (a keeper's visitor) to draw on
 function villageFacts() {
   const L = ['Mossbrook is a small village; fog lies around its edges. Hardly anyone is ever about; the shops are stocked and people pay by leaving coins.'];
@@ -165,7 +166,7 @@ export async function decide() {
     memories: [...mem.recent, ...mem.episodes, ...mem.semantic, ...mem.personal, ...mem.procedural].map(x => x.id), intentions: active.map(i => i.id) };
   // the same choice made three times running, each over almost as soon as it began: stop paying to make it a fourth time
   const last3 = S.journal.slice(-3);
-  if (last3.length === 3 && last3.every(j => j.src === 'claude' && j.choice && JSON.stringify(j.choice) === JSON.stringify(last3[0].choice)) && S.t - last3[0].t < 5) {
+  if (last3.length === 3 && last3.every(j => j.src === 'claude' && j.choice && sameChoice(j.choice, last3[0].choice)) && S.t - last3[0].t < 5) {
     loopNote = 'He chose to ' + (last3[0].caption || last3[0].choice.type) + ' three times in a row, and each time it was over almost before it began; doing it again would go the same way.';
     return continuity(journal, 'the same choice kept ending the moment it started');
   }
@@ -469,7 +470,9 @@ function plan(type, args, minutes) {
         return { dest: { x: far.x, z: far.z }, caption: 'exploring ' + best.e.name, minutes: 0 };
       }
       const nodes = Object.values(S.town.nodes); if (!nodes.length) return fail(null, 'there is nowhere further to go');
-      const far = nodes.map(n => ({ n, d: Math.min(...S.town.places.filter(p => S.mind.knownPlaces[p.id]).map(p => Math.hypot(p.door.x - n.x, p.door.z - n.z)), 999) })).sort((a, b) => b.d - a.d)[0].n;
+      const cands = nodes.filter(n => Math.hypot(n.x - S.pos.x, n.z - S.pos.z) > 8).map(n => ({ n, d: Math.min(...S.town.places.filter(p => S.mind.knownPlaces[p.id]).map(p => Math.hypot(p.door.x - n.x, p.door.z - n.z)), 999) })).sort((a, b) => b.d - a.d);
+      if (!cands.length || cands[0].d < 6) return fail(null, 'he has walked every road in Mossbrook; each one ends in fog that cannot be walked into, so there is nowhere new to explore until more of the village appears');
+      const far = cands[Math.floor(Math.random() * Math.min(3, cands.length))].n;
       return { dest: { x: far.x, z: far.z }, caption: 'wandering out past the places he knows', minutes: 0 };
     }
     case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (!g.place && g.dest && Math.hypot(g.dest.x - S.pos.x, g.dest.z - S.pos.z) < 2) return fail(null, 'he is already there' + (/fog/i.test(String(args.to)) || Town.endNodes(S.town).some(id => { const n = S.town.nodes[id]; return Math.hypot(n.x - S.pos.x, n.z - S.pos.z) < 3; }) ? '; past here the road runs into fog that cannot be walked into' : '')); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
@@ -534,6 +537,8 @@ function plan(type, args, minutes) {
 }
 function planLook(args) {
   const at = String(args.at || 'around'); const minutes = clamp(Number(args.minutes) || 12, 3, 120);
+  { const q = at.toLowerCase().replace(/^the /, ''); const ware = S.inside && S.items.find(i => i.shop === S.inside && !i.sold && (i.id === at || i.name.toLowerCase() === q || i.name.toLowerCase().includes(q)));
+    if (ware) { args._ware = ware.id; ware.seen = true; } if (ware) return { minutes: 5, caption: 'looking at the ' + ware.name, instant: { facts: ['looked at the ' + ware.name + ' on the shelf: ' + (ware.look || ware.desc || '') + '. It is for sale for ' + ware.price + ' coin' + (ware.price === 1 ? '' : 's') + (S.coins >= ware.price ? ', and he has ' + S.coins + '. Nobody serves here; buying it (buy, item ' + ware.id + ') means leaving the coins and taking it, and then he can hold it, try it and see how it works' : ', but he only has ' + S.coins)] } }; }
   const th = W.thingById(at);
   const again = n => n >= 3 ? fail(null, 'he has already looked at it closely ' + n + ' times; looking yet again would show nothing new') : null;
   const closer = (o, where, building = false) => o.detail || !hooks.closerLook || !canCall() ? null : async () => { try { o.detail = await hooks.closerLook(where, { name: o.name, look: o.look || (W.TYPES[o.type] && W.TYPES[o.type].label) || '', text: o.label || o.signText || '' }, building); } catch {} return {}; };
@@ -565,6 +570,9 @@ function planRead(args) {
 }
 function planRequest(args) {
   const what = str(args.what, 300); if (!what) return fail(null, 'a request needs to say what');
+  const norm = t => String(t).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  const dup = S.requests.find(r => r.status === 'open' && norm(r.what) === norm(what));
+  if (dup) return fail(null, 'he already asked for that on day ' + dup.day + ' and it is still waiting for an answer; asking again will not hurry it');
   const q = { id: 'r' + uid(), day: W.dayOf(S.t), time: W.hhmm(S.t), kind: ['object', 'tool', 'permission', 'space', 'capability', 'other'].includes(args.kind) ? args.kind : 'other', what, why: str(args.why, 500), missing: str(args.missing, 300), alternatives: str(args.alternatives, 300), dependencies: str(args.dependencies, 300), interest: ['low', 'medium', 'high'].includes(args.interest) ? args.interest : 'medium', status: 'open', response: '', notes: [] };
   S.requests.push(q); if (S.requests.length > 200) S.requests.shift();
   return { minutes: 15, instant: { facts: ['wrote a request to whoever keeps the village: ' + what + '. It has gone off; any answer will come as a letter to the post office, perhaps hours or days from now, so there is no need to wait in for it'] } };
@@ -670,6 +678,7 @@ function interpret(a, outcome, facts) {
   const r = outcome.result, x = { refs: {}, learning: [] };
   switch (a.type) {
     case 'look': {
+      if (a.args._ware) { x.importance = 2; break; }
       const at = String(a.args.at || 'around'); const th = W.thingById(at);
       if (th) { const k = S.mind.knownThings[th.id] || (S.mind.knownThings[th.id] = { firstSeen: S.t }); k.stage = 'examined'; k.examinedDay = W.dayOf(S.t); k.looks = (k.looks || 0) + 1;
         facts.push('up close: ' + (th.look || 'an object') + (th.label ? '; lettering on it reads "' + th.label + '"' : '') + (th.detail ? '; looking properly (all round it, underneath, any moving parts): ' + th.detail : '') + (k.looks > 1 ? ' (looked at closely ' + k.looks + ' times now; looking again shows nothing he had not already seen, so what it is or how it works would have to be found out some other way)' : ''));

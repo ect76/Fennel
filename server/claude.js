@@ -6,7 +6,7 @@ import { config, PRICES, SEARCH_PRICE } from './config.js';
 export const usage = { day: '', calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, errors: 0, lastError: '', byPurpose: {}, costBy: {} };
 function rollDay() {
   const d = new Date().toISOString().slice(0, 10);
-  if (usage.day !== d) Object.assign(usage, { day: d, calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, byPurpose: {}, costBy: {}, errorLog: [] });
+  if (usage.day !== d) Object.assign(usage, { day: d, calls: 0, searches: 0, fetches: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, cost: 0, byPurpose: {}, costBy: {}, errorLog: [], errors: 0, lastError: '' });
 }
 
 // Live limits from the Keeper → Budget panel (saved with the world). index.js hands us a getter.
