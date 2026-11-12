@@ -102,6 +102,7 @@ function villageFacts() {
 }
 // what he can see right now that might set him wondering
 function pickWhim(percept) {
+  if ((S.visitors || []).filter(v => W.visitorAt(v.place)).length >= 4 && Math.random() < 0.75) return pick(['wanting to meet as many people as he can today and find out what each of them knows', 'wondering what the person in the next building knows about that nobody else does', 'an urge to learn something from everyone he can before they are gone again', 'wanting to write down everything people have told him today before he forgets it']);
   if (percept.stoneCall && Math.random() < 0.6) return 'he keeps listening to the changed hum of the standing stone and wondering what has been left there';
   if (percept.news && Math.random() < 0.7) return 'he can\'t stop thinking about ' + (/baking/.test(percept.news) ? 'that smell of fresh baking and who might be making it' : 'the lights and movement, and who might be there');
   const seen = [];
@@ -221,7 +222,8 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p, percept = {} }) {
   if (lastOutcome) L.push('LAST ACTION: ' + lastOutcome.text);
   if (loopNote) { L.push('NOTE: ' + loopNote); loopNote = ''; }
   { const v = S.inside && W.visitorAt(S.inside); if (v) { const qs = S.mind.questions.filter(q => q.status === 'open' && !NOT_AGAIN.test(q.text)).slice(-6).map(q => '"' + q.text.slice(0, 140) + '"');
-    L.push('SOMEONE TO ASK: ' + (v.name || 'the person here') + ' is here today only and will be gone tomorrow' + (v.talks.length ? ' (he has talked with them ' + v.talks.length + ' time' + (v.talks.length === 1 ? '' : 's') + ' so far)' : '') + '. Things he has been wondering, which he could ask about if he wants: ' + (qs.join('; ') || 'nothing in particular') + '.'); } }
+    const crowd = (S.visitors || []).filter(z => z.day === W.dayOf(S.t)).length;
+    L.push('SOMEONE TO ASK: ' + (v.name || 'the person here') + ' is here today only and will be gone tomorrow' + (v.knows ? ', and knows a great deal about ' + v.knows : '') + (crowd >= 4 ? '; ' + (crowd - 1) + ' other people are about in the village today, each in their own building, each knowing about something different' : '') + (v.talks.length ? ' (he has talked with them ' + v.talks.length + ' time' + (v.talks.length === 1 ? '' : 's') + ' so far)' : '') + '. Things he has been wondering, which he could ask about if he wants: ' + (qs.join('; ') || 'nothing in particular') + '.'); } }
   L.push('\nPERCEPTION\n' + pdesc);
   L.push('\nMEMORY');
   if (mem.summaries.length) L.push('Earlier days, summarised: ' + mem.summaries.map(s => 'day ' + s.day + ': ' + s.text).join(' | '));

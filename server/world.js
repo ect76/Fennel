@@ -93,11 +93,11 @@ export function visitorAt(placeId, t = S.t) {
   const p = placeById(placeId); if (!p) return null; const h = hourOf(t), o = TYPES[p.type].open || [8, 18];
   return (S.visitors || []).find(v => v.place === placeId && v.day === dayOf(t) && h >= o[0] && h < o[1]) || null;
 }
-export function addVisitor({ day, place, who, name, role }) {
+export function addVisitor({ day, place, who, name, role, knows }) {
   const p = placeById(place); if (!p) return { error: 'Pick a building.' };
   const d = Math.round(Number(day)); if (!(d >= dayOf(S.t))) return { error: 'Pick today or a day still to come.' };
   if (S.visitors.some(v => v.day === d && v.place === p.id)) return { error: 'Someone is already there that day.' };
-  const v = { id: uid(), day: d, place: p.id, who: str(who, 220) || 'someone', name: str(name, 40), role: str(role, 80), talks: [] };
+  const v = { id: uid(), day: d, place: p.id, who: str(who, 220) || 'someone', name: str(name, 40), role: str(role, 80), knows: str(knows, 100), talks: [] };
   S.visitors.push(v); wlog('the keeper arranged for someone to be at ' + p.name + ' on day ' + d); bump(); return { visitor: v };
 }
 

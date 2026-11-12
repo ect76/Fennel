@@ -150,12 +150,12 @@ async function bringEveryoneBack(day) {
     const places = S.town.places.filter(p => PEOPLE_TYPES.includes(p.type) && p.type !== 'home' && p.door && !S.visitors.some(v => v.day === day && v.place === p.id));
     let n = 0;
     // anyone he has already met comes back to the same place
-    for (const p of places) { const old = S.visitors.filter(v => v.place === p.id && v.talks.length).slice(-1)[0]; if (old) { if (!W.addVisitor({ day, place: p.id, who: old.who, name: old.name, role: old.role }).error) n++; } }
+    for (const p of places) { const old = S.visitors.filter(v => v.place === p.id && v.talks.length).slice(-1)[0]; if (old) { if (!W.addVisitor({ day, place: p.id, who: old.who, name: old.name, role: old.role, knows: old.knows }).error) n++; } }
     const rest = places.filter(p => !S.visitors.some(v => v.day === day && v.place === p.id));
     for (let i = 0; i < rest.length; i += 20) {
       const batch = rest.slice(i, i + 20); let got = [];
       for (let k = 0; k < 2 && !got.length; k++) { try { got = await C.townsfolk(batch); } catch (e) { console.warn('[percy] townsfolk: ' + e.message); } }
-      for (const p of batch) { const x = got.find(g => g.id === p.id); if (!W.addVisitor({ day, place: p.id, who: x ? x.who : 'someone who belongs here', name: x ? x.name : '', role: x ? x.role : '' }).error) n++; }
+      for (const p of batch) { const x = got.find(g => g.id === p.id); if (!W.addVisitor({ day, place: p.id, who: x ? x.who : 'someone who belongs here', name: x ? x.name : '', role: x ? x.role : '', knows: x ? x.knows : '' }).error) n++; }
     }
     S.crowdDays = [...new Set([...(S.crowdDays || []), day])];
     W.wlog('the keeper brought everyone in Mossbrook back for day ' + day + ' (' + n + ' people)'); save(); W.bump();
