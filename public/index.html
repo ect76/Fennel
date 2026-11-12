@@ -185,6 +185,8 @@
           <label class="fld">Who they are (how they look)<input type="text" id="visWho" maxlength="200" placeholder="a tall old man in a green cardigan" required></label>
           <label class="fld">Name (optional; they'll give it if asked)<input type="text" id="visName" maxlength="40"></label>
           <div class="row"><button type="submit" class="btn small">Arrange it</button><span class="hint" id="visStatus" role="status"></span></div>
+          <div class="row" style="border-top:1px solid var(--line);padding-top:10px"><label class="fld" style="width:90px">Day<input type="number" id="crowdDay" min="1"></label><button type="button" class="btn small" id="crowdGo">Bring everyone in Mossbrook back for that day</button></div>
+          <p class="hint">One person in every shop, workshop, museum and house (anyone he has already met comes back to the same place). Each of them can talk with him, so a day like that can cost a few dollars if he talks a lot.</p>
         </form>
         <div class="card" data-g="make"><h2 style="margin:0">Shop windows</h2><p class="hint">Every shop, café, workshop and museum fills its shelves with a few things he might want, enjoy or puzzle over, chosen to suit the shop. He sees what's in the window when he's close by, and the full stock inside.</p>
           <div class="row"><button type="button" class="btn small" id="fillShops">Fill any empty shops now</button><button type="button" class="btn small" id="moreStock">Add new stock to every shop</button><span class="hint" id="fillStatus" role="status"></span></div></div>

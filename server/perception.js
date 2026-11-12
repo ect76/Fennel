@@ -66,7 +66,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
     } else out.room = ['he has not looked around in here yet'];
     const items = S.items.filter(it => it.shop === inside.id && !it.sold && it.status !== 'building');
     if (items.length) { out.forSale = items.map(it => ({ id: it.id, what: it.name, look: it.look || '', price: it.price })); for (const it of items) it.seen = true; }
-    { const v = W.visitorAt(inside.id); if (v) out.person = (v.name && v.talks.length ? v.name + ', ' : 'someone: ') + v.who + ', standing behind the counter' + (v.talks.length ? ' (he has talked with them today)' : ' (another living person, the first he has ever met in Mossbrook)'); }
+    { const v = W.visitorAt(inside.id); if (v) out.person = (v.name && v.talks.length ? v.name + ', ' : 'someone: ') + v.who + (v.role ? ', ' + v.role : ', standing behind the counter') + (v.talks.length ? ' (he has talked with them today)' : (S.visitors || []).filter(z => z.day === v.day).length >= 4 ? ' (one of the many people about in Mossbrook today)' : ' (another living person)'); }
     if (inside.inside && inside.inside.shelf && inside.inside.shelf.length) { const sh = inside.inside.shelf, hr = W.dayOf(S.t) * 24 + Math.floor(W.hourOf(S.t)), seed = id => { let h = hr; for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 9973; return h; };
       const marked = sh.filter(b => b.readPos && b.readPos < b.text.length).slice(0, 2), rest = sh.filter(b => !marked.includes(b)).sort((a, b) => seed(a.id) - seed(b.id)).slice(0, 7 - marked.length);
       out.shelf = 'shelves of ' + sh.length + ' books; the spines in front of him: ' + marked.concat(rest).map(b => 'book ' + b.id + ' "' + b.title + '"' + (b.readPos ? (b.readPos >= b.text.length ? ' (read it)' : ' (his bookmark is in it)') : '')).join('; ') + ' (looking along the shelves would show others)'; }
@@ -122,7 +122,9 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
   { const stone = S.town.places.find(p => p.type === 'stone'), waiting = S.notes.filter(n => !n.read).length;
     if (stone && waiting && Math.hypot(stone.x - pos.x, stone.z - pos.z) >= 6) out.stoneCall = (S.inside ? 'faintly, even in here, ' : '') + 'the Humming Stone\'s hum has changed: louder and higher, with a new note in it, the way it sounds when something has been left under it (' + bearing(pos, stone) + ')'; }
   // someone is in the village today: it carries across the whole village (smell of baking, voices, a light)
-  for (const v of S.visitors || []) { const vp = W.placeById(v.place); if (!vp || !W.visitorAt(vp.id) || S.inside === vp.id) continue;
+  const hereToday = (S.visitors || []).filter(v => W.visitorAt(v.place));
+  if (hereToday.length >= 4) out.news = 'The whole village is alive today: doors standing open, lights in every window, voices and footsteps, people in the shops and at the doors of the houses, all of Mossbrook awake at once. He has never seen anything like it.';
+  else for (const v of S.visitors || []) { const vp = W.placeById(v.place); if (!vp || !W.visitorAt(vp.id) || S.inside === vp.id) continue;
     const d = Math.hypot(vp.door.x - pos.x, vp.door.z - pos.z); if (d > 90) continue;
     out.news = (out.news ? out.news + ' ' : '') + (vp.type === 'bakery' ? 'The smell of fresh baking, warm and new, is drifting across the village from ' + vp.name : 'There are lights and movement at ' + vp.name) + ' (' + bearing(pos, vp.door) + '); someone seems to be in there today, which has never happened before.'; }
   // things that happened since he last took stock, that he could have seen or heard

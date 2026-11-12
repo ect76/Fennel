@@ -141,6 +141,27 @@ async function wikiText(title) {
   t = t.replace(/\n={2,}\s*(.+?)\s*={2,}\n/g, (m, h) => '\n\n' + h.toUpperCase() + '\n').replace(/\n{3,}/g, '\n\n').trim();
   return { title: p.title, text: t.slice(0, 120000) };
 }
+// a day when everyone in Mossbrook is back: one person in every building, gone again the next day
+const PEOPLE_TYPES = ['home', 'house', 'bakery', 'library', 'market', 'cafe', 'post', 'station', 'tower', 'shop', 'workshop', 'museum', 'hall'];
+let crowding = false;
+async function bringEveryoneBack(day) {
+  if (crowding) return { error: 'Already arranging it.' }; crowding = true;
+  try {
+    const places = S.town.places.filter(p => PEOPLE_TYPES.includes(p.type) && p.type !== 'home' && p.door && !S.visitors.some(v => v.day === day && v.place === p.id));
+    let n = 0;
+    // anyone he has already met comes back to the same place
+    for (const p of places) { const old = S.visitors.filter(v => v.place === p.id && v.talks.length).slice(-1)[0]; if (old) { if (!W.addVisitor({ day, place: p.id, who: old.who, name: old.name, role: old.role }).error) n++; } }
+    const rest = places.filter(p => !S.visitors.some(v => v.day === day && v.place === p.id));
+    for (let i = 0; i < rest.length; i += 20) {
+      const batch = rest.slice(i, i + 20); let got = [];
+      for (let k = 0; k < 2 && !got.length; k++) { try { got = await C.townsfolk(batch); } catch (e) { console.warn('[percy] townsfolk: ' + e.message); } }
+      for (const p of batch) { const x = got.find(g => g.id === p.id); if (!W.addVisitor({ day, place: p.id, who: x ? x.who : 'someone who belongs here', name: x ? x.name : '', role: x ? x.role : '' }).error) n++; }
+    }
+    S.crowdDays = [...new Set([...(S.crowdDays || []), day])];
+    W.wlog('the keeper brought everyone in Mossbrook back for day ' + day + ' (' + n + ' people)'); save(); W.bump();
+    return { people: n };
+  } finally { crowding = false; }
+}
 let shelving = false;
 async function fillShelves(titles) {
   if (shelving) return; shelving = true;
@@ -257,6 +278,8 @@ async function stockNext(all = false) {
   if (all) setTimeout(() => stockNext(true), 2000); // keep going until every shop is done
 }
 W.setOutOfThought(() => !!config.apiKey && !canCall());
+// the keeper asked for everyone to be back on day 61
+setTimeout(() => { if (!S.crowdSeed61 && W.dayOf(S.t) <= 61 && canCall()) bringEveryoneBack(61).then(r => { if (r && r.people) { S.crowdSeed61 = true; save(); } }); }, 15000);
 setTimeout(stockNext, Number(process.env.STOCK_DELAY) || 20000); setInterval(stockNext, 3 * 60 * 1000);
 setInterval(() => { const msg = 'data: ' + JSON.stringify(live()) + '\n\n'; for (const r of streams) r.write(msg); }, 1000);
 
@@ -455,6 +478,7 @@ async function keeper(req, res, what) {
     case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
     case 'visitor-add': { const r = W.addVisitor(b); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.visitor.id }); }
     case 'visitor-remove': { S.visitors = (S.visitors || []).filter(v => v.id !== b.id); W.bump(); return ok(); }
+    case 'crowd': { const d = Math.round(Number(b.day)); if (!(d >= W.dayOf(S.t))) return send(res, 400, { error: 'Pick today or a day still to come.' }); bringEveryoneBack(d); return ok({ day: d }); }
     case 'shelves': { const list = String(b.titles || '').split('\n').map(t => t.trim()).filter(Boolean).slice(0, 200); fillShelves(list.length ? list : SHELF); return ok({ queued: (list.length || SHELF.length) }); }
     case 'fill-shops': { const more = !!b.more; let n = 0; for (const p of S.town.places) if (W.STOCKED_TYPES.includes(p.type) && (more || !p.stocked)) { p.stocked = false; p.stockTries = 0; n++; } stockNext(true); return ok({ shops: n }); }
     case 'scatter': { const k = Math.round(Number(b.coins) || 0); if (k < 1 || k > 50) return send(res, 400, { error: 'Between 1 and 50.' }); W.scatterCoins(k); return ok({ lying: S.looseCoins.length }); }

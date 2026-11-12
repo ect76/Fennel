@@ -78,14 +78,24 @@ export async function tryOut(item, how) {
   return str(r && r.use, 400);
 }
 // Someone the keeper put in the village for a day, talking with Percy. They know the village as it really is.
-export async function personReply({ visitor, place, said, questions, facts }) {
-  const prompt = `You are ${visitor.name ? visitor.name + ', ' : ''}${visitor.who}, behind the counter of ${place.name} in Mossbrook, a small village. You are only here today; tomorrow you will be gone (say so if he asks, or as you say goodbye). Percy, a curious, playful penguin who lives alone in the village and has never met anyone here, is talking to you.
+// Everyone who belongs in Mossbrook, for a day: one person per building. Asked a batch at a time.
+export async function townsfolk(places) {
+  const prompt = `Mossbrook is a small, old-fashioned village. For one day, everyone who belongs there is back. For each building below, invent the one person found there today: the shopkeeper, worker, keeper or resident who belongs to it.
+Buildings (id: name, kind):
+${places.map(p => p.id + ': ' + p.name + ', ' + W.TYPES[p.type].label).join('\n')}
+For each give "id", "name" (an ordinary village name, e.g. "Mrs Ada Pell" or "Old Tom Rudd"; varied ages, men and women, no famous people), "who" (how they look and something of their manner, 12 to 25 words) and "role" (what they are here, e.g. "the clockmaker at his bench", "the lady who lives here, at her front door").
+Reply with only JSON: {"people": [{"id": "", "name": "", "who": "", "role": ""}]}`;
+  const r = await ask({ model: modelFor('world'), system: 'You populate a simulated village. Reply with JSON only.', prompt, maxTokens: 4000, purpose: 'world' });
+  return (r && Array.isArray(r.people) ? r.people : []).map(x => ({ id: str(x && x.id, 20), name: str(x && x.name, 40), who: str(x && x.who, 220), role: str(x && x.role, 80) })).filter(x => x.id && x.who);
+}
+export async function personReply({ visitor, place, said, questions, facts, others = [] }) {
+  const prompt = `You are ${visitor.name ? visitor.name + ', ' : ''}${visitor.who}${visitor.role ? ', ' + visitor.role : ', behind the counter'} at ${place.name} in Mossbrook, a small village. You are only here today; tomorrow you will be gone again (say so if he asks, or as you say goodbye).${others.length ? ' Today, for one day only, everyone in Mossbrook is back: ' + others.slice(0, 60).join('; ') + '. If he asks where everyone has been, or why, be warm but vague: you can\'t quite say; it is just the way of Mossbrook.' : ''} Percy, a curious, playful penguin who lives in the village and has hardly ever met anyone here, is talking to you.
 What you know about Mossbrook, as it really is (use it; it is true):
 ${facts}
 Questions that have been on Percy's mind (id: question):
 ${questions.map(q => q.id + ': ' + q.text).join('\n') || '(none)'}
 ${visitor.talks.length ? 'Your conversation so far today:\n' + visitor.talks.slice(-6).map(t => 'Percy: ' + t.said + '\nYou: ' + t.reply).join('\n') + '\n' : ''}Percy says: "${said}"
-Reply as yourself, warmly and naturally, in 40 to 130 words of speech. Answer what he says. Then, if you can, answer one or two of the questions on his mind as well (as if you guessed what he was wondering), from what you know above or plain common knowledge. If you don't know something, say so honestly. Don't invent other villagers, histories or secrets. Never mention keepers, games, simulations or AI. Don't mention any place outside Mossbrook.
+Reply as yourself, warmly and naturally, in 40 to 130 words of speech. Answer what he says. Then, if you can, answer one or two of the questions on his mind as well (as if you guessed what he was wondering), from what you know above or plain common knowledge. If you don't know something, say so honestly. You may have small personal touches of your own (your trade, what you like), but don't invent big histories or secrets, and don't invent villagers beyond the people named here. Never mention keepers, games, simulations or AI. Don't mention any place outside Mossbrook.
 Reply with only JSON: {"reply": "", "answered": ["ids of questions your reply answers"]}`;
   const r = await ask({ model: modelFor('person'), system: 'You play one person in a simulated village, speaking in their own voice. Reply with JSON only.', prompt, maxTokens: 700, purpose: 'world' });
   return { reply: str(r && r.reply, 1200), answered: Array.isArray(r && r.answered) ? r.answered.map(String).slice(0, 4) : [] };

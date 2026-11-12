@@ -510,7 +510,8 @@ function plan(type, args, minutes) {
       const said = String(args.say || args.text || args.message || 'Hello.').slice(0, 500);
       if (!hooks.personReply || !canCall()) return fail(null, 'they smile but say nothing just now');
       const qs = S.mind.questions.filter(q => q.status === 'open' && !NOT_AGAIN.test(q.text)).slice(-12);
-      return { minutes: 15, caption: 'talking with the person behind the counter', work: async () => { const r = await hooks.personReply({ visitor: v, place: W.placeById(v.place), said, questions: qs, facts: villageFacts() }); return { ...r, said, visitor: v.id }; } };
+      return { minutes: 15, caption: 'talking with the person behind the counter', work: async () => { const today = (S.visitors || []).filter(z => z.day === W.dayOf(S.t) && z !== v), others = today.length >= 3 ? today.map(z => (z.name || 'someone') + ' (' + ((W.placeById(z.place) || {}).name || '?') + ')') : [];
+        const r = await hooks.personReply({ visitor: v, place: W.placeById(v.place), said, questions: qs, facts: villageFacts(), others }); return { ...r, said, visitor: v.id }; } };
     }
     case 'use': {
       const it = S.inventory.find(i => i.id === args.thing); if (!it) return fail(null, 'he does not own anything like that');
@@ -747,8 +748,8 @@ function interpret(a, outcome, facts) {
       if (!r || !r.visitor) break; // he only stepped inside
       const v = (S.visitors || []).find(z => z.id === r.visitor); if (!v || !r.reply) { facts.push('they did not answer'); break; }
       v.talks.push({ said: r.said, reply: r.reply, t: S.t }); const pl = W.placeById(v.place);
-      facts.push('he said: "' + r.said + '"; the person behind the counter answered: "' + r.reply + '"');
-      const c = Mem.claim({ text: 'The person behind the counter at ' + (pl ? pl.name : 'a shop') + ' on day ' + W.dayOf(S.t) + ' told him: "' + r.reply + '"', provenance: 'told', confidence: 0.85 }); x.learning.push(c.id);
+      facts.push('he said: "' + r.said + '"; ' + (v.name || 'the person here') + ' answered: "' + r.reply + '"');
+      const c = Mem.claim({ text: (v.name || 'The person') + ' at ' + (pl ? pl.name : 'a shop') + ' on day ' + W.dayOf(S.t) + ' told him: "' + r.reply + '"', provenance: 'told', confidence: 0.85 }); x.learning.push(c.id);
       for (const id of r.answered || []) { const q = S.mind.questions.find(z => z.id === id && z.status === 'open'); if (q) { Mem.setQuestion(q.id, 'answered', 'answered by the person at ' + (pl ? pl.name : 'a shop')); facts.push('that answered something he had wondered: "' + q.text.slice(0, 140) + '"'); } }
       x.importance = 5; break;
     }
