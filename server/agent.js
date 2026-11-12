@@ -57,6 +57,8 @@ export function capabilities() {
   add('paint_wall', 'subject; tag (a few words, optional)', paint ? 'he has paint' : 'needs paint (he has none)');
   add('buy', 'item: an item id seen for sale', '');
   if (S.inside && W.visitorAt(S.inside)) add('talk', 'say: what he says or asks them, in his own words', 'talk with the person here');
+  else { const vp = nearVisitor(); if (vp) add('talk', 'say: what he says or asks them, in his own words', 'go into ' + vp.name + ' and talk with the person there (the door is open; anyone may walk in)'); }
+  add('knock', 'place: a building id near him', 'knock on a door and see if anyone answers');
   if (S.inventory.some(i => !/paint/i.test(i.name))) add('use', 'thing: one of his belongings (id); how: what he does with it, in a few words (optional)', 'try out, play with, wear, read, grow or enjoy something he owns');
   if (known('post').length) add('check_post', '', 'collect any letters or parcels waiting for him at the post office (' + known('post').map(p => W.isOpen(p, h) ? 'open now' : 'shut now').join('') + ')');
   if (known('market').length) add('stall', '', 'the market stall: drawings he offered at the stall are left out, and the honesty tin is emptied');
@@ -89,6 +91,8 @@ const WHIMS = [
 const NOT_AGAIN = /hollow\s*field|inkberrow|bradbrook|hanbury|\bdyson\b/i;
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const sameChoice = (a, b) => { const k = c => JSON.stringify({ t: c.type, a: Object.fromEntries(Object.entries(c.args || {}).filter(([x]) => !x.startsWith('_'))) }); return k(a) === k(b); };
+// a building close by with someone in it today
+function nearVisitor() { if (S.inside) return null; return S.town.places.find(p => p.door && W.visitorAt(p.id) && Math.hypot(p.door.x - S.pos.x, p.door.z - S.pos.z) < 12 && S.mind.knownPlaces[p.id]) || null; }
 // the village as it really is, for someone who lives there (a keeper's visitor) to draw on
 function villageFacts() {
   const L = ['Mossbrook is a small village; fog lies around its edges. Hardly anyone is ever about; the shops are stocked and people pay by leaving coins.'];
@@ -479,7 +483,14 @@ function plan(type, args, minutes) {
     case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (!g.place && g.dest && Math.hypot(g.dest.x - S.pos.x, g.dest.z - S.pos.z) < 2) return fail(null, 'he is already there' + (/fog/i.test(String(args.to)) || Town.endNodes(S.town).some(id => { const n = S.town.nodes[id]; return Math.hypot(n.x - S.pos.x, n.z - S.pos.z) < 3; }) ? '; past here the road runs into fog that cannot be walked into' : '')); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
     case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
+    case 'knock': {
+      const p = W.placeById(args.place) || (S.inside ? null : S.town.places.filter(x => x.door).sort((a, b) => Math.hypot(a.door.x - S.pos.x, a.door.z - S.pos.z) - Math.hypot(b.door.x - S.pos.x, b.door.z - S.pos.z))[0]);
+      if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'there is no door like that near him');
+      const v = W.visitorAt(p.id);
+      return { place: p.id, minutes: 2, caption: 'knocking at ' + p.name, instant: { facts: [v ? 'knocked at ' + p.name + '; a voice from inside called "Come in, it\'s open!"' : W.isOpen(p) && p.type !== 'home' && p.type !== 'house' ? 'knocked at ' + p.name + '; nobody answered, though the door is open and anyone may walk in' : 'knocked at ' + p.name + '; nobody answered'] } };
+    }
     case 'talk': {
+      if (!S.inside) { const vp = nearVisitor(); if (vp) { const said = String(args.say || args.text || args.message || 'Hello.').slice(0, 500); return { place: vp.id, enter: true, minutes: 1, caption: 'going into ' + vp.name, instant: { facts: ['went into ' + vp.name + ' to talk with the person there; he can talk with them now (talk)'] } }; } }
       const v = S.inside && W.visitorAt(S.inside); if (!v) return fail(null, 'there is nobody here to talk to');
       const said = String(args.say || args.text || args.message || 'Hello.').slice(0, 500);
       if (!hooks.personReply || !canCall()) return fail(null, 'they smile but say nothing just now');

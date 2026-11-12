@@ -80,7 +80,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       if (fresh) out.newly.push('place:' + p.id);
       const o = W.TYPES[p.type].open, near = Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 12;
       const lit = o ? (W.isOpen(p, h) ? 'lights on, door open' : 'dark, door locked') + (near ? '; a sign on the door: open ' + o[0] + ':00 to ' + o[1] + ':00' : '') : '';
-      const vis = W.visitorAt(p.id) && Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 26 ? 'someone is moving about inside' : '';
+      const vis = W.visitorAt(p.id) && Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 26 ? 'someone is moving about inside; the door is open and anyone may walk in' : '';
       const wares = near ? S.items.filter(it => it.shop === p.id && !it.sold && it.status !== 'building').slice(0, 4) : [];
       const window = wares.length ? wares.map(it => it.name + ' (' + it.price + (it.price === 1 ? ' coin' : ' coins') + ')').join(', ') : '';
       out.places.push({ window, vis, looks: ((k => k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
