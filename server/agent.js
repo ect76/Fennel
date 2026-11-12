@@ -98,6 +98,7 @@ function villageFacts() {
 }
 // what he can see right now that might set him wondering
 function pickWhim(percept) {
+  if (percept.stoneCall && Math.random() < 0.6) return 'he keeps listening to the changed hum of the standing stone and wondering what has been left there';
   if (percept.news && Math.random() < 0.7) return 'he can\'t stop thinking about ' + (/baking/.test(percept.news) ? 'that smell of fresh baking and who might be making it' : 'the lights and movement, and who might be there');
   const seen = [];
   for (const t of percept.things || []) if ((t.looks || 0) < 2) seen.push({ w: 3, d: t.what });

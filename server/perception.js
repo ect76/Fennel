@@ -115,6 +115,9 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
   // a cue, not an analytic: the stone hums while people outside are watching
   const stone = S.town.places.find(p => p.type === 'stone');
   if (watchers > 0 && stone && Math.hypot(stone.x - pos.x, stone.z - pos.z) < HEAR) out.hum = 'the standing stone is humming';
+  // a note waiting under the stone changes its hum, and the change carries across the whole village (even indoors, faintly)
+  { const stone = S.town.places.find(p => p.type === 'stone'), waiting = S.notes.filter(n => !n.read).length;
+    if (stone && waiting && Math.hypot(stone.x - pos.x, stone.z - pos.z) >= 6) out.stoneCall = (S.inside ? 'faintly, even in here, ' : '') + 'the Humming Stone\'s hum has changed: louder and higher, with a new note in it, the way it sounds when something has been left under it (' + bearing(pos, stone) + ')'; }
   // someone is in the village today: it carries across the whole village (smell of baking, voices, a light)
   for (const v of S.visitors || []) { const vp = W.placeById(v.place); if (!vp || !W.visitorAt(vp.id) || S.inside === vp.id) continue;
     const d = Math.hypot(vp.door.x - pos.x, vp.door.z - pos.z); if (d > 90) continue;
@@ -145,6 +148,7 @@ export function describe(p) {
   if (p.postLamp) L.push(p.postLamp + '.');
   if (p.absences) L.push('Missing: ' + p.absences.join('; ') + '.');
   if (p.hum) L.push('Sound: ' + p.hum + '.');
+  if (p.stoneCall) L.push('Sound: ' + p.stoneCall + '.');
   if (p.news) L.push('Something new: ' + p.news);
   if (p.events && p.events.length) L.push('Since he last took stock: ' + p.events.join('; ') + '.');
   return L.join('\n');
