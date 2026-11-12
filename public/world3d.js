@@ -644,7 +644,7 @@ export function createWorld({ canvas, stage, onTap }) {
     for (const t of list) {
       const k = t.id + ':' + t.status; if (thingMeshes.has(k)) continue;
       const m = t.status === 'ready' && t.model ? buildModel(t.model) : placeholder(t.status === 'failed');
-      m.position.set(t.x, 0, t.z); m.rotation.y = t.rot || 0; thingGroup.add(m); thingMeshes.set(k, m);
+      m.position.set(t.x, 0, t.z); m.rotation.y = t.rot || 0; if (t.companion) m.userData.companion = true; thingGroup.add(m); thingMeshes.set(k, m);
     }
   }
   const texLoader = new THREE.TextureLoader(); const texCache = new Map();
@@ -798,6 +798,13 @@ export function createWorld({ canvas, stage, onTap }) {
     const blink = (Math.floor(now / 3400) % 3 === 0 && now % 3400 < 130) ? 0.1 : 1; ud.eyes.forEach((e, i) => { if (i % 2 === 0) e.scale.y = blink; });
     easel.visible = !!(act && act.phase === 'do' && act.id === 'draw' && !asleep && !inside); if (easel.visible) { easel.position.set(percyPos.x + Math.sin(percyFace) * 0.8, gy, percyPos.z + Math.cos(percyFace) * 0.8); easel.rotation.y = percyFace + Math.PI; }
     spray.visible = !!(act && act.phase === 'do' && act.id === 'graffiti'); if (spray.visible) spray.position.set(percyPos.x + Math.sin(percyFace + 0.6) * 0.45, gy + 0.9 + Math.sin(tt * 6) * 0.1, percyPos.z + Math.cos(percyFace + 0.6) * 0.45);
+    // his companion trots along behind him, and waits where he left it
+    for (const m of thingMeshes.values()) if (m.userData.companion) {
+      if (percy.visible) { const bx = percyPos.x - Math.sin(percyFace) * 1.3 + Math.cos(percyFace) * 0.5, bz = percyPos.z - Math.cos(percyFace) * 1.3 - Math.sin(percyFace) * 0.5;
+        const dx = bx - m.position.x, dz = bz - m.position.z, dist = Math.hypot(dx, dz), k2 = 1 - Math.exp(-dt * (dist > 3 ? 4 : 2.2));
+        m.position.x += dx * k2; m.position.z += dz * k2; if (dist > 0.05) m.rotation.y = Math.atan2(dx, dz);
+        m.position.y = groundHeight(m.position.x, m.position.z) + (dist > 0.2 && !REDUCED ? Math.abs(Math.sin(now * 0.012)) * 0.06 : 0); }
+    }
     // made things in progress shimmer
     for (const m of thingMeshes.values()) if (m.userData.spin) m.userData.spin.rotation.y += dt;
     // camera

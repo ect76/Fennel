@@ -170,6 +170,14 @@
           <div class="row"><label class="fld" style="flex:1;min-width:150px">Signed (optional)<input type="text" id="letterFrom" maxlength="40"></label></div>
           <div class="row"><button type="submit" class="btn">Post the letter</button><span class="hint" id="letterStatus" role="status"></span></div>
         </form>
+        <form class="card" data-g="make" id="workshopForm">
+          <h2 style="margin:0">Workshop and companion</h2>
+          <p class="hint">Tools that let him make real things, and an animal to keep him company. He can also buy a printer, filament and paint at the hardware shop, or ask you for things.</p>
+          <p class="hint" id="workshopStatus"></p>
+          <div class="row"><button type="button" class="btn small" id="givePrinter">Give him a 3D printer (with 10 prints of filament)</button><button type="button" class="btn small" id="givePaint">Give him six cans of paint</button></div>
+          <label class="fld">A companion: what kind of animal, and what it looks like<input type="text" id="petDesc" maxlength="200" placeholder="a small scruffy ginger cat with a white bib"></label>
+          <div class="row"><button type="submit" class="btn small">Send him a companion</button><span class="hint" id="petStatus" role="status"></span></div>
+        </form>
         <form class="card" data-g="make" id="shelfForm">
           <h2 style="margin:0">Library shelves</h2>
           <p class="hint">Books on all sorts of subjects (clean text from Wikipedia) on the library shelves. He sees a few spines each visit, can look along the shelves for more, and reads a part at a time with a bookmark.</p>

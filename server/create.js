@@ -71,6 +71,15 @@ Reply with only JSON: {"items": [{"name": "", "look": "", "price": 1, "use": "",
   if (!r || !Array.isArray(r.items) || !r.items.length) throw new Error('no stock');
   return r.items.slice(0, 4).map(i => ({ name: str(i && i.name, 60), look: str(i && i.look, 240), price: Math.max(1, Math.min(9, Math.round(Number(i && i.price) || 2))), use: str(i && i.use, 400), food: Math.max(0, Math.min(30, Math.round(Number(i && i.food) || 0))), uses: Math.max(0, Math.min(20, Math.round(Number(i && i.uses) || 0))), restock: !!(i && i.restock) })).filter(i => i.name && i.look);
 }
+// How a companion animal behaves, as a list of small moments to draw on. Asked once when it arrives.
+export async function companionWays(desc) {
+  const prompt = `A small animal companion has come to live with Percy, a penguin in a quiet village: ${desc}.
+Write 30 short, specific, charming things it does through the days (8 to 20 words each), in the present tense and without its name: on walks, at home, when curious, when sleepy, when hungry, when playing, odd little habits that make it itself. Real animal behaviour, nothing magical.
+Also 12 things that happen when Percy plays with it or makes a fuss of it.
+Reply with only JSON: {"moments": [""], "play": [""]}`;
+  const r = await ask({ model: modelFor('world'), system: 'You describe an animal in a simulated world. Reply with JSON only.', prompt, maxTokens: 1800, purpose: 'world' });
+  return { moments: (r && Array.isArray(r.moments) ? r.moments : []).map(x => str(x, 160)).filter(Boolean).slice(0, 40), play: (r && Array.isArray(r.play) ? r.play : []).map(x => str(x, 160)).filter(Boolean).slice(0, 20) };
+}
 // What happens when he tries out something he owns that came with no instructions. Asked once per thing.
 export async function tryOut(item, how) {
   const prompt = `Someone in a small village tries out a thing they own: ${item.name} (it looks like: ${item.look || 'an object'}${item.desc ? '; ' + item.desc : ''}). ${how ? 'What they do: ' + how + '. ' : ''}Say plainly what happens when it is used, tried or played with, in 15 to 45 words: what it does, how it feels, anything surprising. Real and ordinary, nothing magical.\nReply {"use": ""}`;

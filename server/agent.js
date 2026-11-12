@@ -59,6 +59,8 @@ export function capabilities() {
   if (S.inside && W.visitorAt(S.inside)) add('talk', 'say: what he says or asks them, in his own words', 'talk with the person here');
   else { const vp = nearVisitor(); if (vp) add('talk', 'say: what he says or asks them, in his own words', 'go into ' + vp.name + ' and talk with the person there (the door is open; anyone may walk in)'); }
   add('knock', 'place: a building id near him', 'knock on a door and see if anyone answers');
+  if (S.tools.includes('printer')) add('print', 'what: the object to design and print, described properly (shape, size, colours, what it is for); size: small | medium', 'design and 3D-print a real object on the printer at home; afterwards it stands outside his cottage for anyone to see (filament for ' + S.filament + ' small print' + (S.filament === 1 ? '' : 's') + ' left; medium takes two; more filament is sold at the hardware shop)');
+  { const pet = S.things.find(t => t.companion && t.status === 'ready'); if (pet) { const nm = P.petName(pet) || 'his companion'; add('play', 'how (optional)', 'spend time with ' + nm + ': play, a walk, a fuss'); add('feed_companion', '', 'give ' + nm + ' something to eat from the cupboard (' + S.pantry + ' in it)'); } }
   if (S.inventory.some(i => !/paint/i.test(i.name))) add('use', 'thing: one of his belongings (id); how: what he does with it, in a few words (optional)', 'try out, play with, wear, read, grow or enjoy something he owns');
   if (known('post').length) add('check_post', '', 'collect any letters or parcels waiting for him at the post office (' + known('post').map(p => W.isOpen(p, h) ? 'open now' : 'shut now').join('') + ')');
   if (known('market').length) add('stall', '', 'the market stall: drawings he offered at the stall are left out, and the honesty tin is emptied');
@@ -67,7 +69,7 @@ export function capabilities() {
   add('list_for_sale', 'ref: a drawing, page, project or belonging id; price (coins); blurb; title (optional: the name it has in the shop; listing it again changes the title, price or blurb)', 'people outside can buy from his shop' + (config.kofiUrl ? ' with real money (about ' + config.coinsPerPound + ' coins to a pound)' : ''));
   add('unlist', 'ref', '');
   if (known('stone').length) add('leave_note', 'text; to (optional)', 'tucked under the standing stone');
-  add('request', 'kind: object | tool | permission | space | capability | other; what; why; missing (what stops him now); alternatives (what else he considered); dependencies; interest: low | medium | high', 'goes to whoever keeps the village; they may agree, refuse, change it, or take a long time');
+  add('request', 'kind: object | tool | companion | permission | space | capability | other; what; why; missing (what stops him now); alternatives (what else he considered); dependencies; interest: low | medium | high', 'goes to whoever keeps the village; they may agree, refuse, change it, or take a long time');
   add('withdraw_request', 'id', ''); add('update_request', 'id; interest; note', '');
   add('propose', 'idea', 'for when nothing above fits: the idea is recorded');
   return C1;
@@ -159,6 +161,7 @@ const DECIDE_TOOL = {
     expectation: { type: 'string', description: 'what he thinks will happen' },
     thought: { type: 'string', description: 'what goes through his head, in his own words, first person; never ids, tool names or talk about options' },
     feeling: { type: 'object', properties: { word: { type: 'string' }, valence: { type: 'number', description: '-1 to 1' } } },
+    done_with: { type: 'string', description: 'only if he has just decided he is finished with something for good (e.g. "staring at the bell tower clock", "rereading the Concorde book"): what, in a few words. He will remember it and hold himself to it.' },
     notes: { type: 'array', description: 'changes to his mind, only if warranted: a question he has; a belief he now holds (say how he knows); a preference, opinion, association or view of himself (with what led to it); a skill he has learned; an idea; or a name he gives a thing (about = thing id)', items: { type: 'object', properties: { kind: { type: 'string', enum: ['question', 'belief', 'preference', 'opinion', 'association', 'self', 'skill', 'idea', 'name', 'answered', 'drop_question'] }, text: { type: 'string' }, about: { type: 'string' }, confidence: { type: 'number' } } } },
   }, required: ['action'] },
 };
@@ -221,6 +224,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p, percept = {} }) {
   if (/sleep|wak|woke|slept|morning/i.test(lastTrigger) && dayPlanned !== W.dayOf(S.t) && W.hourOf(S.t) >= 4 && W.hourOf(S.t) < 12) { dayPlanned = W.dayOf(S.t); L.push('A NEW DAY: as he wakes, he usually settles on one thing he will make or work on today (a website or a page on one, a drawing, a piece of writing, anything) and one thing he would like to find out, and holds them as intentions. What they are is entirely up to him.'); }
   if (lastOutcome) L.push('LAST ACTION: ' + lastOutcome.text);
   if (loopNote) { L.push('NOTE: ' + loopNote); loopNote = ''; }
+  { const dw = (S.mind.doneWith || []).filter(d => W.dayOf(S.t) - d.day <= 14); if (dw.length) L.push('THINGS HE HAS DECIDED HE IS DONE WITH (his own resolutions; he keeps them unless something genuinely new turns up): ' + dw.map(d => d.text + ' (day ' + d.day + ')').join('; ') + '.'); }
   { const v = S.inside && W.visitorAt(S.inside); if (v) { const qs = S.mind.questions.filter(q => q.status === 'open' && !NOT_AGAIN.test(q.text)).slice(-6).map(q => '"' + q.text.slice(0, 140) + '"');
     const crowd = (S.visitors || []).filter(z => z.day === W.dayOf(S.t)).length;
     L.push('SOMEONE TO ASK: ' + (v.name || 'the person here') + ' is here today only and will be gone tomorrow' + (v.knows ? ', and knows a great deal about ' + v.knows : '') + (crowd >= 4 ? '; ' + (crowd - 1) + ' other people are about in the village today, each in their own building, each knowing about something different' : '') + (v.talks.length ? ' (he has talked with them ' + v.talks.length + ' time' + (v.talks.length === 1 ? '' : 's') + ' so far)' : '') + '. Things he has been wondering, which he could ask about if he wants: ' + (qs.join('; ') || 'nothing in particular') + '.'); } }
@@ -291,6 +295,7 @@ function applyMind(r, j) {
     }
     if (m) j.learning.push(m.id);
   }
+  if (str(r.done_with, 120)) { S.mind.doneWith = (S.mind.doneWith || []).filter(d => d.text.toLowerCase() !== str(r.done_with, 120).toLowerCase()).concat({ text: str(r.done_with, 120), day: W.dayOf(S.t) }).slice(-15); }
   if (r.feeling && str(r.feeling.word, 40)) {
     S.feeling = { word: str(r.feeling.word, 40), valence: clamp(Number(r.feeling.valence) || 0, -1, 1), t: S.t };
     // a record for watchers only: it is never shown back to him
@@ -500,6 +505,20 @@ function plan(type, args, minutes) {
     case 'go': { const g = resolveGo(args.to); if (!g) return fail(null, 'nothing he has seen matches "' + str(args.to, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (!g.place && g.dest && Math.hypot(g.dest.x - S.pos.x, g.dest.z - S.pos.z) < 2) return fail(null, 'he is already there' + (/fog/i.test(String(args.to)) || Town.endNodes(S.town).some(id => { const n = S.town.nodes[id]; return Math.hypot(n.x - S.pos.x, n.z - S.pos.z) < 3; }) ? '; past here the road runs into fog that cannot be walked into' : '')); return { place: g.place, dest: g.dest, caption: 'walking to ' + g.label, minutes: 0 }; }
     case 'enter': { const p = W.placeById(args.place); if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'nothing he has seen matches "' + str(args.said_place || args.place, 40) + '" (places he knows: ' + knownPlacesList() + ')'); if (p.h <= 0) return fail(null, 'there is no inside to ' + p.name); return { place: p.id, needOpen: !!W.TYPES[p.type].open, enter: true, caption: 'going into ' + p.name, work: lookInsideWork(p.id) }; }
     case 'look': return planLook(args);
+    case 'print': {
+      if (!S.tools.includes('printer')) return fail(null, 'he has no printer');
+      const what = String(args.what || args.design || '').slice(0, 220); if (what.length < 4) return fail(null, 'a print needs a design: say what it is');
+      const size = /medium|big|large/i.test(String(args.size || '')) ? 2 : 1; if (S.filament < size) return fail(null, 'not enough filament (' + S.filament + ' left; ' + (size === 2 ? 'a medium print takes two' : 'it takes one') + '); more is sold at the hardware shop');
+      if (!hooks.printObject || !canCall()) return fail(null, 'the printer will not start just now');
+      const home = S.town.places.find(p => p.type === 'home');
+      args._size = size; return { place: home.id, enter: true, minutes: 90, caption: 'printing ' + what.slice(0, 50), work: async () => { const th = await hooks.printObject(what, size === 2 ? 2.2 : 1.2); return { thing: th.id, name: th.name, look: th.look }; } };
+    }
+    case 'play': { const pet = S.things.find(t => t.companion && t.status === 'ready'); if (!pet) return fail(null, 'he has no companion');
+      const w = (pet.ways && pet.ways.play) || []; const nm = P.petName(pet) || 'his companion';
+      return { minutes: 30, caption: 'playing with ' + nm, instant: { facts: [(args.how ? String(args.how).slice(0, 60) + ': ' : '') + (w.length ? pick(w) : nm + ' seems pleased to have him to itself') + ((pet.fed ?? 100) < 30 ? '; it keeps nosing at him as if it is hungry' : '')] } }; }
+    case 'feed_companion': { const pet = S.things.find(t => t.companion && t.status === 'ready'); if (!pet) return fail(null, 'he has no companion');
+      if (S.pantry <= 0) return fail(null, 'the cupboard is empty; he will need to fetch food first');
+      S.pantry--; pet.fed = 100; return { minutes: 10, caption: 'feeding ' + (P.petName(pet) || 'his companion'), instant: { facts: ['fed ' + (P.petName(pet) || 'his companion') + ' from the cupboard (' + S.pantry + ' left); it ate everything and looks content'] } }; }
     case 'knock': {
       const p = W.placeById(args.place) || (S.inside ? null : S.town.places.filter(x => x.door).sort((a, b) => Math.hypot(a.door.x - S.pos.x, a.door.z - S.pos.z) - Math.hypot(b.door.x - S.pos.x, b.door.z - S.pos.z))[0]);
       if (!p || !S.mind.knownPlaces[p.id]) return fail(null, 'there is no door like that near him');
@@ -580,7 +599,7 @@ function planLook(args) {
   const closer = (o, where, building = false) => o.detail || !hooks.closerLook || !canCall() ? null : async () => { try { o.detail = await hooks.closerLook(where, { name: o.name, look: o.look || (W.TYPES[o.type] && W.TYPES[o.type].label) || '', text: o.label || o.signText || '' }, building); } catch {} return {}; };
   if (th) { const k = S.mind.knownThings[th.id]; if (!k) return fail(null, 'he has not seen that'); return again(k.looks || 0) || { dest: nearSpot(th), minutes, caption: 'looking closely at something', target: th.id, work: closer(th, { name: W.whereWords() }) }; }
   const p = W.placeById(at);
-  if (p) { const k = S.mind.knownPlaces[p.id]; if (!k) return fail(null, 'he has not seen that place'); return again(k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0) || { place: p.id, minutes, work: closer(p, { name: 'Mossbrook' }, true) }; }
+  if (p) { const k = S.mind.knownPlaces[p.id]; if (!k) return fail(null, 'he has not seen that place'); return again(k.looksDay && W.dayOf(S.t) - k.looksDay <= 7 ? k.looks || 0 : 0) || { place: p.id, minutes, work: closer(p, { name: 'Mossbrook' }, true) }; }
   const inside = S.inside && W.placeById(S.inside);
   const item = inside && inside.inside && inside.inside.items.find(i => i.id === at);
   if (item) return again(item.looks || 0) || { minutes, work: item.detail || !hooks.closerLook || !canCall() ? null : async () => { try { item.detail = await hooks.closerLook(inside, item); } catch {} return {}; } };
@@ -731,7 +750,7 @@ function interpret(a, outcome, facts) {
       else if (/^sky$/i.test(at)) facts.push('the sky: ' + S.weather.kind + (W.isDark(W.hourOf(S.t)) ? ', dark' : ''));
       else if (/^fog$/i.test(at)) facts.push('the fog is thick and grey and seems to swallow the road a few steps in; nothing can be seen beyond it');
       else { const pl = W.placeById(at);
-        if (pl && S.mind.knownPlaces[pl.id]) { const k = S.mind.knownPlaces[pl.id], today = W.dayOf(S.t); if (k.looksDay !== today) { k.looks = 0; k.looksDay = today; } k.looks = (k.looks || 0) + 1; facts.push('took a long look at ' + pl.name + (pl.detail ? ': ' + pl.detail : '') + (k.looks > 1 ? ' (looked ' + k.looks + ' times now; looking again shows nothing he had not already seen)' : '')); x.refs.place = [pl.id]; }
+        if (pl && S.mind.knownPlaces[pl.id]) { const k = S.mind.knownPlaces[pl.id], today = W.dayOf(S.t); if (!k.looksDay || today - k.looksDay > 7) { k.looks = 0; k.looksDay = today; } k.looks = (k.looks || 0) + 1; facts.push('took a long look at ' + pl.name + (pl.detail ? ': ' + pl.detail : '') + (k.looks > 1 ? ' (looked ' + k.looks + ' times now; looking again shows nothing he had not already seen)' : '')); x.refs.place = [pl.id]; }
         else facts.push('took a long look around ' + W.whereWords()); }
       break;
     }
@@ -746,6 +765,12 @@ function interpret(a, outcome, facts) {
       break;
     }
     case 'take': { x.importance = 3; break; }
+    case 'print': {
+      if (!r || !r.thing) { facts.push('the print failed partway; the filament was not used'); break; }
+      S.filament = Math.max(0, S.filament - (a.args._size || 1));
+      facts.push('designed and printed ' + r.name + (r.look ? ': ' + r.look : '') + '; it now stands on the grass outside his cottage (filament left for ' + S.filament + ' small prints)');
+      x.importance = 4; x.refs.thing = [r.thing]; break;
+    }
     case 'talk': {
       if (!r || !r.visitor) break; // he only stepped inside
       const v = (S.visitors || []).find(z => z.id === r.visitor); if (!v || !r.reply) { facts.push('they did not answer'); break; }
@@ -797,6 +822,7 @@ async function consolidate() {
   const r = await ask({ model: modelFor('decide'), system: 'You consolidate memories faithfully. Never add events that are not in the records.', prompt, maxTokens: 700, purpose: 'reflect' });
   if (!r || !str(r.summary, 900)) return;
   S.mind.summaries.push({ day, text: str(r.summary, 900), episodes: eps.map(e => e.id) }); if (S.mind.summaries.length > 400) S.mind.summaries.shift();
+  try { if (hooks.diary) hooks.diary(day); } catch (e) { console.warn('[percy] diary:', e.message); }
   for (const v of (Array.isArray(r.views) ? r.views : []).slice(0, 2)) Mem.personal({ kind: v.kind, text: v.text, replaces: v.replaces || '', evidence: eps.slice(-5).map(e => e.id) });
   for (const l of (Array.isArray(r.lessons) ? r.lessons : []).slice(0, 2)) Mem.procedure({ skill: l.skill, text: l.text, worked: l.worked !== false });
   S.journal.push({ id: 'j' + uid(), t: S.t, day: W.dayOf(S.t), time: W.hhmm(S.t), trigger: 'sleep', choice: { type: 'consolidate' }, src: 'claude', outcome: { ok: true, facts: ['summarised day ' + day] } });

@@ -38,6 +38,7 @@ export function seeAlong(path) {
   }
   return seen.slice(0, 12);
 }
+export const petName = pet => ((W.S.mind.knownThings || {})[pet.id] || {}).name || '';
 export function knowsPlace(id) { return !!mind().knownPlaces[id]; }
 export function thingName(th) { const k = mind().knownThings[th.id]; return (k && k.name) || null; }
 export function thingWords(th) { const n = thingName(th); return n ? n + ' (' + (th.look || 'an object') + ')' : (th.look || 'an object about ' + (th.size || 2) + ' units tall'); }
@@ -58,7 +59,7 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
     noteSeen(inside, 'knownPlaces', inside.id, { name: inside.name }); inside.known = true;
     const km = mind().knownPlaces[inside.id]; km.entered = (km.entered || 0) + (km.lastInT === S.t ? 0 : 1); km.lastInT = S.t;
     if (inside.type === 'home') {
-      out.room = [S.initial.cottage, 'food in the cupboard: ' + S.pantry + (S.pantry === 1 ? ' thing' : ' things') + ' to eat (tins, loaves or fish he has kept)', ...(S.inventory.length ? ['things he keeps here: ' + S.inventory.map(i => i.name).join(', ')] : []),
+      out.room = [S.initial.cottage, 'food in the cupboard: ' + S.pantry + (S.pantry === 1 ? ' thing' : ' things') + ' to eat (tins, loaves or fish he has kept)', ...(S.tools.includes('printer') ? ['his 3D printer on the desk, with filament for ' + S.filament + ' small print' + (S.filament === 1 ? '' : 's')] : []), ...(S.inventory.length ? ['things he keeps here: ' + S.inventory.map(i => i.name).join(', ')] : []),
         ...(S.drawings.filter(d => !d.sold).length ? [S.drawings.filter(d => !d.sold).length + ' of his drawings lying about'] : []),
         ...(W.postWaiting() ? ['a card on the doormat: "There is post waiting for you at the post office."'] : [])];
     } else if (inside.inside && inside.inside.items) {
@@ -86,15 +87,15 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
       const vis = W.visitorAt(p.id) && Math.hypot(p.door.x - pos.x, p.door.z - pos.z) < 26 ? 'someone is moving about inside; the door is open and anyone may walk in' : '';
       const wares = near ? S.items.filter(it => it.shop === p.id && !it.sold && it.status !== 'building').slice(0, 4) : [];
       const window = wares.length ? wares.map(it => it.name + ' (' + it.price + (it.price === 1 ? ' coin' : ' coins') + ')').join(', ') : '';
-      out.places.push({ window, vis, looks: ((k => k.looksDay === W.dayOf(S.t) ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
+      out.places.push({ window, vis, looks: ((k => k.looksDay && W.dayOf(S.t) - k.looksDay <= 7 ? k.looks || 0 : 0)(mind().knownPlaces[p.id] || {})), id: p.id, sign: SIGN[p.type] === '' ? '' : (p.signText || p.name), look: LOOK[p.type] || W.TYPES[p.type].label, where: bearing(pos, p.door), lit, firstTime: fresh });
     }
     if (!inside) {
       out.things = [];
       for (const th of S.things) {
-        if (th.status !== 'ready') continue;
+        if (th.status !== 'ready' || th.companion) continue;
         const d = Math.hypot(th.x - pos.x, th.z - pos.z); if (d > (dark ? NEAR_THING * 0.6 : NEAR_THING)) continue;
         const fresh = noteSeen(th, 'knownThings', th.id, { stage: 'noticed' }); if (fresh) out.newly.push('thing:' + th.id);
-        out.things.push({ looks: (mind().knownThings[th.id] || {}).looks || 0, id: th.id, what: thingWords(th), where: bearing(pos, th), firstTime: fresh, label: th.label && d < 6 ? th.label : '' });
+        out.things.push({ looks: (mind().knownThings[th.id] || {}).looks || 0, id: th.id, what: thingWords(th) + (th.by === 'percy' ? ' (he designed and printed this himself, on day ' + th.day + ')' : ''), where: bearing(pos, th), firstTime: fresh, label: th.label && d < 6 ? th.label : '' });
       }
       out.graffiti = S.graffiti.filter(g => Math.hypot(g.x - pos.x, g.z - pos.z) < 12).map(g => ({ id: g.id, where: g.where, by: g.by === 'percy' ? 'he painted this himself' + (g.day ? ' on day ' + g.day : '') : 'someone else painted this, not him', what: g.look || (g.by === 'percy' ? g.subject : 'paint on the wall: shapes and colours') }));
       // roads by their signs, and where they run into the fog
@@ -118,6 +119,11 @@ export function perceive({ sinceT = 0, watchers = 0 } = {}) {
   // a cue, not an analytic: the stone hums while people outside are watching
   const stone = S.town.places.find(p => p.type === 'stone');
   if (watchers > 0 && stone && Math.hypot(stone.x - pos.x, stone.z - pos.z) < HEAR) out.hum = 'the standing stone is humming';
+  { const pet = S.things.find(t => t.companion && t.status === 'ready');
+    if (pet && !mind().knownThings[pet.id]) mind().knownThings[pet.id] = { firstSeen: W.dayOf(S.t), stage: 'noticed' };
+    if (pet) { const nm = petName(pet) ? petName(pet) + ' (thing ' + pet.id + ')' : 'his companion, thing ' + pet.id + ' (' + (pet.look || pet.name) + '; it has no name yet, he could give it one)', w = (pet.ways && pet.ways.moments) || [], fed = pet.fed ?? 100;
+      const where = S.act && ['sleep', 'nap'].includes(S.act.type) && S.act.phase === 'do' ? 'curled up beside him' : S.inside && S.inside !== (S.town.places.find(p => p.type === 'home') || {}).id ? 'waiting for him just outside the door' : 'with him';
+      out.pet = nm + ' is ' + where + (w.length ? '; ' + w[Math.floor(Math.random() * w.length)] : '') + (fed < 15 ? '; it looks thin and very hungry' : fed < 40 ? '; it seems hungry' : ''); } }
   // a note waiting under the stone changes its hum, and the change carries across the whole village (even indoors, faintly)
   { const stone = S.town.places.find(p => p.type === 'stone'), waiting = S.notes.filter(n => !n.read).length;
     if (stone && waiting && Math.hypot(stone.x - pos.x, stone.z - pos.z) >= 6) out.stoneCall = (S.inside ? 'faintly, even in here, ' : '') + 'the Humming Stone\'s hum has changed: louder and higher, with a new note in it, the way it sounds when something has been left under it (' + bearing(pos, stone) + ')'; }
@@ -144,7 +150,7 @@ export function describe(p) {
   if (p.person) L.push('A person here: ' + p.person + '.');
   if (p.forSale) L.push('For sale here (nobody serves; anyone may buy by leaving the coins and taking it): ' + p.forSale.map(f => 'item ' + f.id + ': ' + f.what + (f.look ? ' (' + f.look + ')' : '') + ', ' + f.price + ' coins').join('; ') + '.');
   if (p.post) L.push(p.post + '.');
-  if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.window ? ' [in the window: ' + x.window + ']' : '') + (x.vis ? ' [' + x.vis + ']' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times today already]' : '')).join('; ') + '.');
+  if (p.places && p.places.length) L.push('Buildings in view: ' + p.places.map(x => 'place ' + x.id + ': ' + x.look + (x.sign ? ' with a sign reading "' + x.sign + '"' : '') + ' (' + x.where + (x.lit ? ', ' + x.lit : '') + ')' + (x.window ? ' [in the window: ' + x.window + ']' : '') + (x.vis ? ' [' + x.vis + ']' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [he has taken a long look at it ' + x.looks + ' times this week already]' : '')).join('; ') + '.');
   if (p.things && p.things.length) L.push('Objects in view: ' + p.things.map(x => 'thing ' + x.id + ': ' + x.what + ' (' + x.where + ')' + (x.label ? ' with lettering: "' + x.label + '"' : '') + (x.firstTime ? ' [first time seeing it]' : '') + (x.looks >= 2 ? ' [looked at closely ' + x.looks + ' times already; looking again shows nothing new]' : '')).join('; ') + '.');
   if (p.graffiti && p.graffiti.length) L.push('Painted walls: ' + p.graffiti.map(g => g.where + ' (' + g.by + '): ' + g.what).join('; ') + '.');
   if (p.roads && p.roads.length) L.push('Street signs nearby: ' + p.roads.map(r => r.name + (r.walked ? '' : ' (not walked yet)')).join(', ') + '.');
@@ -154,6 +160,7 @@ export function describe(p) {
   if (p.postLamp) L.push(p.postLamp + '.');
   if (p.absences) L.push('Missing: ' + p.absences.join('; ') + '.');
   if (p.hum) L.push('Sound: ' + p.hum + '.');
+  if (p.pet) L.push('Companion: ' + p.pet + '.');
   if (p.stoneCall) L.push('Sound: ' + p.stoneCall + '.');
   if (p.news) L.push('Something new: ' + p.news);
   if (p.events && p.events.length) L.push('Since he last took stock: ' + p.events.join('; ') + '.');

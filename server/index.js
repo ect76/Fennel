@@ -162,6 +162,22 @@ async function bringEveryoneBack(day) {
     return { people: n };
   } finally { crowding = false; }
 }
+// his diary: each night, what he did and what he learned that day, on his website
+function writeDiary(day) {
+  const sum = S.mind.summaries.find(s => s.day === day); if (!sum) return;
+  const learned = S.mind.semantic.filter(s => s.day === day && !s.superseded && ['read', 'told', 'worked it out', 'inferred', 'observed', 'source'].some(p => String(s.provenance).includes(p.split(' ')[0]))).sort((a, b) => (b.confidence || 0) - (a.confidence || 0)).slice(0, 8).map(s => s.text);
+  const drawings = S.drawings.filter(d => d.day === day).map(d => ({ id: d.id, title: d.title }));
+  const made = S.things.filter(t => t.by === 'percy' && t.day === day && t.status === 'ready').map(t => t.name);
+  const met = (S.visitors || []).filter(v => v.day === day && v.talks.length).map(v => (v.name || 'someone') + ' at ' + ((W.placeById(v.place) || {}).name || 'a shop'));
+  S.diary = (S.diary || []).filter(e => e.day !== day).concat({ day, text: sum.text, learned, drawings, made, met }).sort((a, b) => a.day - b.day).slice(-400);
+  save();
+  if (!Pub.enabled() || !permissions().publish_site) return;
+  for (const d of drawings) { try { Pub.queueFile('diary/img/' + d.id + '.svg', fs.readFileSync(path.join(MEDIA, 'drawings', d.id + '.svg'), 'utf8'), 'a drawing for the diary'); } catch {} }
+  const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const entries = S.diary.slice().reverse().map(x => `<article><h2>Day ${x.day}</h2><p>${e(x.text)}</p>${x.met.length ? '<p class="meta">Met: ' + e(x.met.join('; ')) + '</p>' : ''}${x.learned.length ? '<h3>What I learned</h3><ul>' + x.learned.map(l => '<li>' + e(l) + '</li>').join('') + '</ul>' : ''}${x.made.length ? '<h3>What I made</h3><ul>' + x.made.map(m => '<li>' + e(m) + '</li>').join('') + '</ul>' : ''}${x.drawings.length ? '<div class="grid">' + x.drawings.map(d => `<figure><img src="img/${d.id}.svg" alt="${e(d.title)}" loading="lazy"><figcaption>${e(d.title)}</figcaption></figure>`).join('') + '</div>' : ''}</article>`).join('');
+  Pub.queueFile('diary/index.html', `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Percy's diary</title><style>:root{--bg:#f7f3ea;--fg:#2a2620;--muted:#7a7266;--line:#e3dccd;--accent:#b5562b}@media (prefers-color-scheme:dark){:root{--bg:#1d1b18;--fg:#ece6da;--muted:#a59d8f;--line:#3a352e;--accent:#e08a5c}}body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 Georgia,serif;padding:24px max(16px,env(safe-area-inset-left))}main{max-width:720px;margin:0 auto}h1{font-size:2.2rem;margin:0 0 4px}h2{border-top:1px solid var(--line);padding-top:24px;margin-top:32px;color:var(--accent)}h3{font-size:1rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.meta{color:var(--muted);font-size:.95rem}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}figure{margin:0}img{width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}figcaption{font-size:.85rem;color:var(--muted)}a{color:var(--accent)}</style></head><body><main><p><a href="../">← Percy's site</a></p><h1>Percy's diary</h1><p class="meta">What I did, and what I learned, each day in Mossbrook. Written each night.</p>${entries}</main></body></html>`, 'diary: day ' + day);
+  siteIndex();
+}
 let shelving = false;
 async function fillShelves(titles) {
   if (shelving) return; shelving = true;
@@ -204,6 +220,17 @@ Agent.init(S, {
   closerLook: (p, it, building) => C.closerLook(p, it, building),
   tryOut: (it, how) => C.tryOut(it, how),
   personReply: o => C.personReply(o),
+  // design and print a real object at home: it becomes a thing in the village, on the grass by his cottage
+  printObject: async (what, size) => {
+    const home = S.town.places.find(p => p.type === 'home'); let x = home.door.x, z = home.door.z, spot = null;
+    for (let r = 2.5; r < 14 && !spot; r += 1.5) for (let a = 0; a < 12 && !spot; a++) { const tx = home.door.x + Math.cos(a * 0.52 + r) * r, tz = home.door.z + Math.sin(a * 0.52 + r) * r; if (!W.spotProblem(tx, tz, size * 0.5)) spot = [tx, tz]; }
+    if (spot) [x, z] = spot;
+    const th = W.addThing({ name: what, desc: what, x, z, size, by: 'percy' });
+    try { const mm = await C.buildModel(what + ' (designed and 3D-printed by a penguin at home, in printed plastic filament)', null, size); th.model = mm.parts; th.look = mm.look; th.label = mm.label; th.status = 'ready'; }
+    catch (e) { th.status = 'failed'; S.things = S.things.filter(t => t !== th); W.bump(); throw e; }
+    S.mind.knownThings[th.id] = { firstSeen: W.dayOf(S.t), made: true }; W.bump(); save(); return th;
+  },
+  diary: day => writeDiary(day),
 });
 W.setHooks({ onComplete: Agent.onComplete, onArrive: Agent.onArrive });
 B.setOwnPort(config.port);
@@ -234,7 +261,7 @@ function publicState() {
     t: S.t, day, time: W.hhmm(S.t), hour: W.hourOf(S.t), weather: S.weather.kind, season: W.seasonOf(day), scale: W.timeScale(), waiting: W.villageWaiting(), rev: S.rev,
     pos: S.pos, face: S.face, inside: S.inside, act: S.act ? { type: S.act.type, id: actId(S.act), phase: S.act.phase, caption: S.act.caption, place: S.act.place, inside: S.act.phase === 'do' && S.inside ? S.inside : null } : null,
     doing: doingText(), thought: S.thought, feeling: S.feeling, feelings: (S.feelings || []).slice(-80), body: S.body, coins: S.coins, pantry: S.pantry,
-    town: W.publicTown(), things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, size: t.size, model: t.model, status: t.status, day: t.day, known: !!m.knownThings[t.id], hisName: (m.knownThings[t.id] || {}).name || '' })),
+    town: W.publicTown(), things: S.things.map(t => ({ id: t.id, name: t.name, x: t.x, z: t.z, size: t.size, model: t.model, status: t.status, day: t.day, companion: !!t.companion, by: t.by || 'keeper', known: !!m.knownThings[t.id], hisName: (m.knownThings[t.id] || {}).name || '' })),
     graffiti: S.graffiti, items: S.items.filter(i => !i.sold).map(i => ({ id: i.id, shop: i.shop, name: i.name, price: i.price, model: i.model, img: i.img || '', status: i.status })), inventory: S.inventory,
     drawings: S.drawings.slice(-120).map(d => ({ id: d.id, day: d.day, title: d.title, onStall: !!d.onStall, sold: !!d.sold, price: d.price || 0, listed: !!d.listed, forOrder: d.forOrder })),
     pages: S.pages.slice(-80).map(p => p.kind === 'notes' ? { id: p.id, day: p.day, title: p.title, kind: 'notes', private: true } : p),
@@ -278,6 +305,13 @@ async function stockNext(all = false) {
   if (all) setTimeout(() => stockNext(true), 2000); // keep going until every shop is done
 }
 W.setOutOfThought(() => !!config.apiKey && !canCall());
+// a printer, filament and boxes of paint for sale (Pim's Hardware, or the post office if there's no hardware shop)
+{ const shopP = S.town.places.find(p => /pim|hardware/i.test(p.name)) || S.town.places.find(p => p.type === 'post');
+  if (shopP && !S.items.some(i => i.tool === 'printer')) {
+    S.items.push({ id: uid(), shop: shopP.id, name: '3D printer', look: 'a squat metal box with a glass front, a nozzle on a little gantry and a reel holder on the side', desc: 'Prints small objects from a design, layer by layer, in coloured plastic filament. Comes with filament for three small prints.', price: 30, tool: 'printer', filament: 3, day: W.dayOf(S.t), seen: false, sold: false, status: 'ready', restock: false, stocked: true });
+    S.items.push({ id: uid(), shop: shopP.id, name: 'spool of printing filament', look: 'a reel of thin coloured plastic thread', desc: 'Enough for five small prints, or two bigger ones.', price: 3, filament: 5, day: W.dayOf(S.t), seen: false, sold: false, status: 'ready', restock: true, stocked: true });
+    S.items.push({ id: uid(), shop: shopP.id, name: 'box of spray paint, four colours', look: 'a cardboard box holding four spray cans with coloured caps', desc: 'Four cans of spray paint in different colours, one wall each.', price: 4, cans: 4, day: W.dayOf(S.t), seen: false, sold: false, status: 'ready', restock: true, stocked: true });
+  } }
 // the keeper asked for everyone to be back on day 61
 setTimeout(() => { if (!S.crowdSeed61 && W.dayOf(S.t) <= 61 && canCall()) bringEveryoneBack(61).then(r => { if (r && r.people) { S.crowdSeed61 = true; save(); } }); }, 15000);
 setTimeout(stockNext, Number(process.env.STOCK_DELAY) || 20000); setInterval(stockNext, 3 * 60 * 1000);
@@ -375,7 +409,7 @@ async function keeper(req, res, what) {
     case 'check': return send(res, 200, { ok: true });
     case 'private': // the keeper's view: budget, journal, world log, permissions
       return send(res, 200, { budget: budget(), usage: claudeStatus(), settings: S.settings, permissions: permissions(), betterUsed: S.betterUse && S.betterUse.day === new Date().toISOString().slice(0, 10) ? S.betterUse.n : 0, build: (process.env.BUILD_REF || 'dev').slice(0, 7), publishing: Pub.enabled(), timeScale: Number.isFinite(S.settings.timeScale) ? S.settings.timeScale : config.timeScale, fastSleep: S.settings.fastSleep === true, searchHealth: Search.searchHealth(), rooms: S.town.places.filter(p => p.inside && p.inside.items && p.inside.items.length).map(p => ({ id: p.id, name: p.name, items: p.inside.items.map(i => ({ id: i.id, name: i.name, text: (i.text || '').slice(0, 160), taken: !!i.taken, book: !!i.book })) })), searchVia: searchVia(), searxng: !!config.searxngUrl, browser: B.available(), freeSearch: Search.local,
-        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), shelf: ((S.town.places.find(p => p.type === 'library') || {}).inside || {}).shelf ? S.town.places.find(p => p.type === 'library').inside.shelf.map(b => ({ title: b.title, read: !!b.readPos })) : [], shelving, visitors: (S.visitors || []).map(v => ({ ...v, placeName: (W.placeById(v.place) || {}).name || '?' })), coins: { lying: (S.looseCoins || []).length, found: S.earned.found || 0, perDay: Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3 }, defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
+        journal: S.journal.slice(-120), worldLog: S.worldLog, agent: Agent.state(), tools: S.tools, filament: S.filament, companion: (pet => pet ? { name: pet.name, hisName: (S.mind.knownThings[pet.id] || {}).name || '', status: pet.status, fed: pet.fed, look: pet.look } : null)(S.things.find(t => t.companion)), shelf: ((S.town.places.find(p => p.type === 'library') || {}).inside || {}).shelf ? S.town.places.find(p => p.type === 'library').inside.shelf.map(b => ({ title: b.title, read: !!b.readPos })) : [], shelving, visitors: (S.visitors || []).map(v => ({ ...v, placeName: (W.placeById(v.place) || {}).name || '?' })), coins: { lying: (S.looseCoins || []).length, found: S.earned.found || 0, perDay: Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3 }, defaults: { callsPerDay: config.maxCallsPerDay, searchesPerDay: config.maxSearchesPerDay, spendPerDay: config.maxSpendPerDay } });
     case 'settings': {
       const s = S.settings, n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : undefined; };
       if ('callsPerDay' in b) s.callsPerDay = n(b.callsPerDay, 0, 5000);
@@ -478,6 +512,21 @@ async function keeper(req, res, what) {
     case 'give': { const coins = Math.round(Number(b.coins) || 0); if (coins < 1 || coins > 1000) return send(res, 400, { error: 'Between 1 and 1000 coins.' }); payIn({ coins, from: str(b.from, 40), message: str(b.message, 500), source: 'keeper', code: str(b.code, 10) }); return send(res, 200, { ok: true }); }
     case 'visitor-add': { const r = W.addVisitor(b); if (r.error) return send(res, 400, { error: r.error }); return ok({ id: r.visitor.id }); }
     case 'visitor-remove': { S.visitors = (S.visitors || []).filter(v => v.id !== b.id); W.bump(); return ok(); }
+    case 'give-tool': { const t = str(b.tool, 30); if (t === 'printer') { if (!S.tools.includes('printer')) S.tools.push('printer'); S.filament += Math.max(0, Math.min(50, Number(b.filament) || 10)); }
+      else if (t === 'paint') { for (let k = 0; k < 6; k++) S.inventory.push({ id: uid(), name: 'can of spray paint (' + ['red', 'blue', 'yellow', 'green', 'white', 'black'][k] + ')', look: 'a spray can', desc: '', price: 1, day: W.dayOf(S.t) }); }
+      else return send(res, 400, { error: 'Unknown tool.' });
+      W.keeperLetter(t === 'printer' ? 'A 3D printer has been set up in your cottage, with filament for ' + S.filament + ' small prints. Describe a design and it will print it; what you print will stand outside your cottage. More filament is at Pim\'s Hardware.' : 'A box of six spray cans in different colours is waiting for you. There are plenty of walls in Mossbrook.', 'tool');
+      W.wlog('the keeper gave Percy ' + (t === 'printer' ? 'a 3D printer' : 'six cans of spray paint')); save(); W.bump(); return ok(); }
+    case 'companion': {
+      const desc = str(b.description, 200); if (!desc) return send(res, 400, { error: 'Describe the companion.' });
+      if (S.things.some(t => t.companion)) return send(res, 400, { error: 'He already has a companion.' });
+      const home = S.town.places.find(p => p.type === 'home');
+      const th = W.addThing({ name: desc, desc, x: home.door.x + 1.5, z: home.door.z + 1.5, size: 1, companion: true }); th.fed = 100; th.ways = { moments: [], play: [] };
+      save(); ok({ id: th.id });
+      C.buildModel(desc + ' (a small living animal companion, standing on all fours, about the height of a penguin\'s knee; friendly, cute, simple shapes)', null, 1).then(mm => { th.model = mm.parts; th.look = mm.look; th.status = 'ready'; }).catch(e => { th.status = 'failed'; th.error = String(e.message || e).slice(0, 200); }).finally(() => { W.bump(); save(); });
+      C.companionWays(desc).then(w => { th.ways = w; save(); }).catch(() => {});
+      return;
+    }
     case 'crowd': { const d = Math.round(Number(b.day)); if (!(d >= W.dayOf(S.t))) return send(res, 400, { error: 'Pick today or a day still to come.' }); bringEveryoneBack(d); return ok({ day: d }); }
     case 'shelves': { const list = String(b.titles || '').split('\n').map(t => t.trim()).filter(Boolean).slice(0, 200); fillShelves(list.length ? list : SHELF); return ok({ queued: (list.length || SHELF.length) }); }
     case 'fill-shops': { const more = !!b.more; let n = 0; for (const p of S.town.places) if (W.STOCKED_TYPES.includes(p.type) && (more || !p.stocked)) { p.stocked = false; p.stockTries = 0; n++; } stockNext(true); return ok({ shops: n }); }

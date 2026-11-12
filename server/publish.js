@@ -50,7 +50,7 @@ export function indexHTML(S, { asArchive = false } = {}) {
   const pages = S.pages.filter(p => p.published).slice().reverse().map(p => `<li><a href="pages/${slug(p.title)}.html">${esc(p.title)}</a> <span class="meta">· day ${p.day}</span></li>`).join('');
   const drawings = S.drawings.filter(d => d.published).slice().reverse().slice(0, 60).map(d => `<figure><img src="drawings/${d.id}.svg" alt="${esc(d.title)}" loading="lazy"><figcaption>${esc(d.title)} · day ${d.day}</figcaption></figure>`).join('');
   const forSale = (S.shop || []).filter(x => !x.sold && !x.withdrawn).length;
-  const links = [config.publicUrl ? `<a href="${esc(config.publicUrl.replace(/\/$/, ''))}/shop">his shop and orders${forSale ? ' (' + forSale + ' for sale)' : ''}</a>` : '', config.kofiUrl ? `<a href="${esc(config.kofiUrl)}">support him on Ko-fi</a>` : ''].filter(Boolean).join(' · ');
+  const links = [config.publicUrl ? `<a href="${esc(config.publicUrl.replace(/\/$/, ''))}/shop">his shop and orders${forSale ? ' (' + forSale + ' for sale)' : ''}</a>` : '', config.kofiUrl ? `<a href="${esc(config.kofiUrl)}">support him on Ko-fi</a>` : '', (S.diary || []).length ? '<a href="diary/">his daily diary</a>' : ''].filter(Boolean).join(' · ');
   return wrap(asArchive ? 'Everything Percy has published' : 'Percy', `${asArchive ? '<p><a href="./">← his front page</a></p><h1>Everything he has published</h1>' : '<h1>Percy</h1>'}${links ? '<p>' + links + '</p>' : ''}
 <h2>Projects</h2>${projects ? '<ul>' + projects + '</ul>' : '<p class="meta">None published yet.</p>'}
 <h2>Writing</h2>${pages ? '<ul>' + pages + '</ul>' : '<p class="meta">None published yet.</p>'}

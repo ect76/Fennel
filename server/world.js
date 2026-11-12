@@ -51,7 +51,7 @@ export function newWorld() {
     mind: emptyMind(), journal: [], life: [],
     requests: [], projects: [], researchLog: [], ideas: [],
     drawings: [], pages: [], notes: [], percyNotes: [], things: [], graffiti: [], items, inventory: [],
-    commissions: [], shop: [], post: [], payments: [], letters: [], earned: { work: 0, real: 0, stall: 0, found: 0 }, looseCoins: [], visitors: [],
+    commissions: [], shop: [], post: [], payments: [], letters: [], earned: { work: 0, real: 0, stall: 0, found: 0 }, looseCoins: [], visitors: [], tools: [], filament: 0, diary: [],
     worldLog: { 1: [] }, events: [], vanished: [], weather: { kind: 'clear', until: 12 * 60 },
     settings: {}, permissions: {}, lastSeenReal: Date.now(),
     // explicit initial conditions, tagged as such in his memory (see agent.initialConditions)
@@ -248,6 +248,9 @@ function finish(a) {
       if (S.coins < it.price) { ok = false; f.push('could not pay: it costs ' + it.price + ', had ' + S.coins); break; }
       S.coins -= it.price;
       if (it.food) { S.body.fullness = clamp(S.body.fullness + it.food, 0, 100); f.push('paid ' + it.price + ' coins for the ' + it.name + ' and ate it'); }
+      else if (it.tool) { if (!S.tools.includes(it.tool)) S.tools.push(it.tool); S.filament += it.filament || 0; f.push('paid ' + it.price + ' coins for the ' + it.name + ' and carried it home; it is set up in his cottage now' + (it.filament ? ' (with enough filament for ' + it.filament + ' small prints)' : '')); wlog('Percy bought a ' + it.name); }
+      else if (it.filament) { S.filament += it.filament; f.push('paid ' + it.price + ' coins for the ' + it.name + ' (enough for ' + it.filament + ' more small prints; ' + S.filament + ' in all)'); }
+      else if (it.cans) { for (let k = 0; k < it.cans; k++) S.inventory.push({ id: uid(), name: 'can of spray paint (' + (['red', 'blue', 'yellow', 'green', 'white', 'black'][k % 6]) + ')', look: 'a spray can', desc: '', price: 1, day: dayOf(S.t) }); f.push('paid ' + it.price + ' coins for the ' + it.name + ': ' + it.cans + ' cans of spray paint in different colours'); }
       else { S.inventory.push({ id: uid(), name: it.name, look: it.look || '', desc: it.desc || '', use: it.use || '', uses: it.uses || 0, price: it.price, day: dayOf(S.t), img: it.img || '', model: it.model || null }); f.push('paid ' + it.price + ' coins for the ' + it.name + ' and took it'); }
       if (it.restock) { it.seen = true; } else { it.sold = true; it.boughtDay = dayOf(S.t); }
       data.item = it.name; break;
@@ -346,6 +349,7 @@ function newDay(d) {
   while (keys.length > 10) delete S.worldLog[keys.shift()];
   if (d > 1 && (d - 1) % 7 === 0) wlog('the season turned to ' + seasonOf(d));
   S.looseCoins = (S.looseCoins || []).filter(c => d - c.day <= 10); // dropped coins don't lie about for ever
+  const pet = S.things.find(t => t.companion); if (pet) pet.fed = Math.max(0, (pet.fed ?? 100) - 45); // a companion gets hungry each day
   const each = Number.isFinite(S.settings.coinsPerDay) ? S.settings.coinsPerDay : 3;
   if (each > 0) scatterCoins(each);
 }
@@ -379,9 +383,9 @@ export function spotProblem(x, z, size = 1.6) {
   for (const t of S.things) if (Math.hypot(t.x - x, t.z - z) < (t.size || 3) * 0.4 + size) return 'That spot is too close to something already there.';
   return null;
 }
-export function addThing({ name, desc, x, z, size = 3, forRequest = '' }) {
-  const th = { id: uid(), name: str(name, 60) || 'something', desc: str(desc, 200), look: '', label: '', x, z, size, day: dayOf(S.t), status: 'building', model: null, forRequest };
-  S.things.push(th); wlog('the keeper placed ' + th.name + ' near ' + nearestKnownName(x, z, true)); bump(); return th;
+export function addThing({ name, desc, x, z, size = 3, forRequest = '', by = 'keeper', companion = false }) {
+  const th = { id: uid(), name: str(name, 60) || 'something', desc: str(desc, 200), look: '', label: '', x, z, size, day: dayOf(S.t), status: 'building', model: null, forRequest, by, companion };
+  S.things.push(th); wlog((by === 'percy' ? 'Percy printed ' : companion ? 'a companion arrived for Percy: ' : 'the keeper placed ') + th.name + ' near ' + nearestKnownName(x, z, true)); bump(); return th;
 }
 export function removeThing(id) {
   const th = thingById(id); if (!th) return;
