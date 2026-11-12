@@ -218,7 +218,7 @@ function buildPrompt({ pdesc, mem, active, caps, pace: p, percept = {} }) {
   const reqs = S.requests.filter(r => !['withdrawn'].includes(r.status) && (r.status === 'open' || W.dayOf(S.t) - (r.updatedDay || r.day) < 7)).slice(-8);
   const L = [];
   L.push('TRIGGER: ' + lastTrigger);
-  if (/wak|woke|slept/i.test(lastTrigger) && dayPlanned !== W.dayOf(S.t)) { dayPlanned = W.dayOf(S.t); L.push('A NEW DAY: as he wakes, he usually settles on one thing he will make or work on today (a website or a page on one, a drawing, a piece of writing, anything) and one thing he would like to find out, and holds them as intentions. What they are is entirely up to him.'); }
+  if (/sleep|wak|woke|slept|morning/i.test(lastTrigger) && dayPlanned !== W.dayOf(S.t) && W.hourOf(S.t) >= 4 && W.hourOf(S.t) < 12) { dayPlanned = W.dayOf(S.t); L.push('A NEW DAY: as he wakes, he usually settles on one thing he will make or work on today (a website or a page on one, a drawing, a piece of writing, anything) and one thing he would like to find out, and holds them as intentions. What they are is entirely up to him.'); }
   if (lastOutcome) L.push('LAST ACTION: ' + lastOutcome.text);
   if (loopNote) { L.push('NOTE: ' + loopNote); loopNote = ''; }
   { const v = S.inside && W.visitorAt(S.inside); if (v) { const qs = S.mind.questions.filter(q => q.status === 'open' && !NOT_AGAIN.test(q.text)).slice(-6).map(q => '"' + q.text.slice(0, 140) + '"');
