@@ -722,7 +722,8 @@ function interpret(a, outcome, facts) {
     }
     case 'take': { x.importance = 3; break; }
     case 'talk': {
-      const v = r && (S.visitors || []).find(z => z.id === r.visitor); if (!v || !r.reply) { facts.push('they did not answer'); break; }
+      if (!r || !r.visitor) break; // he only stepped inside
+      const v = (S.visitors || []).find(z => z.id === r.visitor); if (!v || !r.reply) { facts.push('they did not answer'); break; }
       v.talks.push({ said: r.said, reply: r.reply, t: S.t }); const pl = W.placeById(v.place);
       facts.push('he said: "' + r.said + '"; the person behind the counter answered: "' + r.reply + '"');
       const c = Mem.claim({ text: 'The person behind the counter at ' + (pl ? pl.name : 'a shop') + ' on day ' + W.dayOf(S.t) + ' told him: "' + r.reply + '"', provenance: 'told', confidence: 0.85 }); x.learning.push(c.id);
